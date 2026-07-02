@@ -267,6 +267,16 @@ Elke plugin (POS, boekhouding, betalingen, reservering, loyalty) krijgt een eige
 - Niet-functionele vereisten toegevoegd: back-up/herstel, beveiliging (2FA, encryptie, rate limiting)
 - Status: GEEN verdere architectuurwijzigingen vóór Fase 1 opgeleverd is
 
+**v1.1** — Implementatie-update (geen architectuurwijziging, alleen voortgang):
+- Auth-flow gebouwd: login, middleware-bescherming, uitloggen, wachtwoord-vergeten
+- Live omgeving opgezet: GitHub (`stuctech-eng/polder`) → Vercel → Supabase, volledig gekoppeld
+- Bedrijvenbeheer: eerste module deels werkend (API + overzicht, aanmaken nog niet)
+- **Openstaand besluit:** Resend als SMTP-provider koppelen (i.p.v. Supabase's ingebouwde mail) —
+  nodig voor betrouwbare wachtwoord-reset én later voor Facturatie/Notification Engine.
+  Overweging Resend vs. Google-inlog: Resend lost het e-mailprobleem op én is sowieso vereist
+  voor het versturen van facturen (sectie "Facturatie"); Google-inlog lost alleen het inloggen op
+  en vervangt de noodzaak voor een e-mailprovider niet. Gepland voor eerstvolgende sessie.
+
 ## 9. STATUS
 
-**BEVROREN — v1.0.** Dit document is nu `docs/architecture.md` en staat per sectie 3 boven aannames. Implementatie van Fase 1 start hierna.
+**Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

@@ -5,12 +5,37 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 
 ## Status
 
-**Fase 1 in opbouw:**
-- ✅ Projectstructuur, database-schema, Event Bus-skeleton
-- ✅ Bedrijvenbeheer: API-route + eerste UI (lijst)
-- ⏳ Nog te bouwen: bedrijf aanmaken/bewerken UI, Afdelingen/Kostenplaatsen/Projecten,
-  Open Rekeningen, Receipt Manager (handmatig), Workflow Engine basis, Facturatie,
-  Notification Engine, Dashboard, Auth-flow (login/registratie)
+**Live omgeving:**
+- Productie-URL: `https://polder.vercel.app`
+- Supabase-project: `polder` (regio Europe)
+- GitHub-repo: `stuctech-eng/polder`
+
+**Fase 1 voortgang:**
+- ✅ Projectstructuur, database-schema (20 tabellen), Event Bus-skeleton
+- ✅ Supabase volledig opgezet: schema gedraaid, RLS + automatic RLS aan, eerste gebruiker (owner) gekoppeld aan restaurant "Café Restaurant Polder"
+- ✅ Vercel-deploy werkend, environment variables ingesteld
+- ✅ Auth-flow volledig werkend: login, middleware route-bescherming, uitloggen
+- ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) — **werkt technisch correct** (bevestigd in Supabase Auth Logs: `/recover` + `mail.send` succesvol), maar de e-mail komt niet betrouwbaar aan bij Ziggo/KPN-achtige providers. Oorzaak: Supabase's gratis ingebouwde e-mailservice, geen codefout.
+- ✅ Bedrijvenbeheer: API-route + overzichtspagina (leeg, want "Nieuw bedrijf"-formulier nog niet gebouwd)
+
+**Bekend openstaand punt (gepland voor morgen):**
+- **Resend koppelen** als eigen SMTP-provider in Supabase (Authentication → Settings → SMTP Settings). Dit lost het mailbezorgingsprobleem op én is sowieso nodig voor de latere Facturatie/Notification Engine (facturen e-mailen naar klanten). Zie `docs/architecture.md` sectie 8 voor de overweging Resend vs. Google-inlog.
+
+**Nog te bouwen in Fase 1:**
+- Bedrijf aanmaken/bewerken UI (de knop "+ Nieuw bedrijf" doet nog niets)
+- Afdelingen/Kostenplaatsen/Projecten
+- Open Rekeningen
+- Receipt Manager (handmatige invoer)
+- Workflow Engine basis
+- Facturatie (afhankelijk van Resend-koppeling voor het mailen)
+- Dashboard met cijfers
+
+**Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
+```sql
+update auth.users
+set encrypted_password = crypt('NieuwWachtwoord', gen_salt('bf'))
+where email = 'GEBRUIKER-EMAIL';
+```
 
 ## Setup (iPhone-first, geen desktop nodig)
 
