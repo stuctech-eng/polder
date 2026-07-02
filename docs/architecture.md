@@ -90,8 +90,17 @@ Engine (Next.js app + Supabase backend)
 │
 ├── Module: Notification Engine (luistert op de Event Bus, geen directe aanroepen)
 │   ├── Service: notification-dispatch (mail/in-app/push)
-│   └── Luistert naar: InvoiceGenerated, PaymentReceived, ImportFailed,
-│                       OcrCompleted (bij lage zekerheid), ConnectorError
+│   ├── Luistert naar: InvoiceGenerated, PaymentReceived, ImportFailed,
+│   │                   OcrCompleted (bij lage zekerheid), ConnectorError
+│   │
+│   └── Email Engine (sub-module, provider-onafhankelijk — governance 6.4)
+│       │
+│       ├── Email Provider Interface  → enige contract dat Notification Engine kent
+│       │   └── Resend Provider       → standaardimplementatie (uitwisselbaar)
+│       │       └── Toekomstige providers: SMTP, Microsoft 365, enz.
+│       │
+│       └── Per-restaurant instellingen: afzendernaam, afzendadres, reply-to,
+│           eigen domein / platformdomein (fallback)
 │
 ├── Module: Betalingen & Boekhouding
 │   ├── Service: payments, accounting-export
@@ -151,6 +160,8 @@ restaurants (SaaS tenant root)
 │   documenttemplates, notificatie-instellingen — per restaurant/bedrijf)
 ├── payments
 ├── notifications (type, ontvanger, status, trigger-event)
+├── email_settings (per restaurant: provider (default 'resend'), sender_name,
+│   sender_email, reply_to, custom_domain, gebruikt platformdomein als fallback)
 ├── domain_events (event-log: type, payload, gepubliceerd_door, timestamp
 │   — dient ook als audit-trail voor de Event Bus zelf)
 ├── audit_log (alle wijzigingen, verplicht per projectvisie)
@@ -231,6 +242,9 @@ PostgreSQL (Supabase) is de enige bron van waarheid. `domain_events`, caches en 
 **6.3 Versiebeheer van integraties**
 Elke plugin (POS, boekhouding, betalingen, reservering, loyalty) krijgt een eigen versie + compatibiliteitsinformatie (`plugin_version`, `min_core_version`). Oude en nieuwe connectorversies mogen tijdelijk naast elkaar bestaan wanneer een leverancier zijn API wijzigt — geen gedwongen big-bang migratie.
 
+**6.4 E-mailprovider-onafhankelijkheid**
+De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde principe als kassa-onafhankelijkheid (projectvisie, "Belangrijk ontwerpprincipe"). De Notification Engine kent uitsluitend de **Email Provider Interface**; Resend is de standaardimplementatie daarachter. Een andere provider (SMTP, Microsoft 365) toevoegen betekent alleen een nieuwe implementatie van die interface schrijven — geen wijziging aan de Notification Engine zelf.
+
 ## 7. NIET-FUNCTIONELE VEREISTEN (vanaf Fase 1, geen latere toevoeging)
 
 **7.1 Back-up & herstel**
@@ -276,6 +290,15 @@ Elke plugin (POS, boekhouding, betalingen, reservering, loyalty) krijgt een eige
   Overweging Resend vs. Google-inlog: Resend lost het e-mailprobleem op én is sowieso vereist
   voor het versturen van facturen (sectie "Facturatie"); Google-inlog lost alleen het inloggen op
   en vervangt de noodzaak voor een e-mailprovider niet. Gepland voor eerstvolgende sessie.
+
+**v1.2** — Email Engine toegevoegd (architectuurwijziging):
+- Notification Engine uitgebreid met Email Provider Interface + Resend als standaardimplementatie
+- Governance-principe 6.4: e-mailprovider-onafhankelijkheid (zelfde patroon als kassa-onafhankelijkheid)
+- Per-restaurant e-mailinstellingen (afzender, reply-to, eigen domein) — `email_settings`-tabel
+- Ondersteunt vanaf nu: facturen, creditfacturen, offertes, betalingsherinneringen,
+  wachtwoord-reset, gebruikersuitnodigingen, PDF-bijlagen, HTML/React Email templates,
+  webhooks, delivery tracking, bounce handling, SPF/DKIM/DMARC
+- Directe aanleiding: onbetrouwbare mailbezorging via Supabase's ingebouwde e-mail (zie v1.1)
 
 ## 9. STATUS
 
