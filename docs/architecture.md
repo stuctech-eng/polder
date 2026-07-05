@@ -300,6 +300,15 @@ De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde 
   webhooks, delivery tracking, bounce handling, SPF/DKIM/DMARC
 - Directe aanleiding: onbetrouwbare mailbezorging via Supabase's ingebouwde e-mail (zie v1.1)
 
+**v1.3** — Implementatie-update: Resend gekoppeld en gediagnosticeerd (geen architectuurwijziging):
+- Resend SMTP gekoppeld aan Supabase Authentication (host/port/username/API key ingesteld)
+- Volledige diagnose van mailbezorgingsprobleem uit v1.1: bevestigd dat Supabase + Resend
+  technisch correct samenwerken (test geslaagd naar eigen Resend-accountadres)
+- Resterende beperking: Resend-testmodus (`onboarding@resend.dev`) verstuurt alleen naar het
+  eigen accountadres — een geverifieerd eigen domein is nodig voor verzending naar klanten/
+  personeel/Ziggo-achtige adressen. Zie README voor de handmatige SQL-noodprocedure zolang
+  dat domein er nog niet is.
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

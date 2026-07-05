@@ -15,11 +15,16 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 - ✅ Supabase volledig opgezet: schema gedraaid, RLS + automatic RLS aan, eerste gebruiker (owner) gekoppeld aan restaurant "Café Restaurant Polder"
 - ✅ Vercel-deploy werkend, environment variables ingesteld
 - ✅ Auth-flow volledig werkend: login, middleware route-bescherming, uitloggen
-- ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) — **werkt technisch correct** (bevestigd in Supabase Auth Logs: `/recover` + `mail.send` succesvol), maar de e-mail komt niet betrouwbaar aan bij Ziggo/KPN-achtige providers. Oorzaak: Supabase's gratis ingebouwde e-mailservice, geen codefout.
+- ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) én **volledig gediagnosticeerd**: Supabase + Resend SMTP-koppeling werkt technisch correct (bevestigd: mail komt aan bij `stuctech@gmail.com`). Beperking: Resend's testmodus staat alleen verzending toe naar het eigen Resend-accountadres — dus nog niet bruikbaar voor Ziggo-adressen, personeel of klanten totdat een eigen domein geverifieerd is bij Resend.
 - ✅ Bedrijvenbeheer: API-route + overzichtspagina (leeg, want "Nieuw bedrijf"-formulier nog niet gebouwd)
 
-**Bekend openstaand punt (gepland voor morgen):**
-- **Resend koppelen** als eigen SMTP-provider in Supabase (Authentication → Settings → SMTP Settings). Dit lost het mailbezorgingsprobleem op én is sowieso nodig voor de latere Facturatie/Notification Engine (facturen e-mailen naar klanten). Zie `docs/architecture.md` sectie 8 voor de overweging Resend vs. Google-inlog.
+**Resend SMTP-configuratie (vastgelegd):**
+- Host: `smtp.resend.com`, Port: `465`, Username: `resend`
+- Sender: `Polder <onboarding@resend.dev>` (testdomein — tijdelijk)
+- API key aangemaakt in Resend, ingevuld in Supabase → Authentication → Emails → SMTP Settings
+
+**Bekend openstaand punt (gepland, geen datum):**
+- **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
 **Nog te bouwen in Fase 1:**
 - Bedrijf aanmaken/bewerken UI (de knop "+ Nieuw bedrijf" doet nog niets)
