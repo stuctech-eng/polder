@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  status: z.literal("closed").optional(), // 'invoiced' gebeurt alleen via generate-invoice
+  status: z.enum(["open", "closed", "invoiced"]).optional(),
   tableNumber: z.string().optional(),
   guestCount: z.number().int().positive().optional(),
 });
@@ -24,69 +24,6 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 404 });
   }
   return NextResponse.json({ openTab: data });
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
-
-  const { data: tab } = await supabase
-    .from("open_tabs")
-    .select("status")
-    .eq("id", params.id)
-    .single();
-
-  if (!tab) {
-    return NextResponse.json({ error: "Rekening niet gevonden" }, { status: 404 });
-  }
-  if (tab.status !== "open") {
-    return NextResponse.json(
-      { error: "Alleen open (nog niet gesloten) rekeningen kunnen verwijderd worden" },
-      { status: 400 }
-    );
-  }
-
-  const { count } = await supabase
-    .from("receipts")
-    .select("id", { count: "exact", head: true })
-    .eq("open_tab_id", params.id);
-
-  if ((count ?? 0) > 0) {
-    return NextResponse.json(
-      { error: "Rekening heeft gekoppelde bonnen, kan niet verwijderd worden" },
-      { status: 400 }
-    );
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  const { error } = await supabase.from("open_tabs").delete().eq("id", params.id);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  if (profile) {
-    await supabase.from("activity_log").insert({
-      restaurant_id: profile.restaurant_id,
-      user_id: userData.user.id,
-      action: "verwijderde een lege open rekening",
-      target_table: "open_tabs",
-      target_id: params.id,
-    });
-  }
-
-  return NextResponse.json({ success: true });
 }
 
 export async function PATCH(
@@ -114,22 +51,6 @@ export async function PATCH(
     .select("restaurant_id")
     .eq("id", userData.user.id)
     .single();
-
-  // Guardian Mode: impact-analyse — een gefactureerde rekening is onveranderlijk.
-  // Zonder deze check zou de UI-verberging (client-side) de enige bescherming zijn,
-  // en dat is nooit voldoende (zie v1.18-les).
-  const { data: currentTab } = await supabase
-    .from("open_tabs")
-    .select("status")
-    .eq("id", params.id)
-    .single();
-
-  if (currentTab?.status === "invoiced") {
-    return NextResponse.json(
-      { error: "Deze rekening is al gefactureerd en kan niet meer gewijzigd worden" },
-      { status: 400 }
-    );
-  }
 
   const updates: Record<string, unknown> = {};
   if (parsed.data.status) {

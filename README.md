@@ -24,21 +24,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) én **volledig gediagnosticeerd**: Supabase + Resend SMTP-koppeling werkt technisch correct (bevestigd: mail komt aan bij `stuctech@gmail.com`). Beperking: Resend's testmodus staat alleen verzending toe naar het eigen Resend-accountadres — dus nog niet bruikbaar voor Ziggo-adressen, personeel of klanten totdat een eigen domein geverifieerd is bij Resend.
 - ✅ Bedrijvenbeheer: volledig werkend — overzicht, aanmaken (`/companies/new`), en bekijken/bewerken (`/companies/[id]`), met validatie en zichtbare foutmeldingen
 - ✅ Afdelingen, Kostenplaatsen en Projecten: toevoegen + lijst per bedrijf, direct op de bedrijfsdetailpagina
-- ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht met statusfilter (Open/Gesloten/Gefactureerd), sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
-- ✅ Receipt Manager: bonnen handmatig invoeren met productregels (dynamisch toevoegen/verwijderen), automatische BTW/totaalberekening, direct gekoppeld aan de open rekening
-- ✅ Workflow Engine (basis): facturatieregel per bedrijf instelbaar (frequentie: direct/wekelijks/maandelijks/per project, goedkeuring vereist ja/nee) — wordt gebruikt zodra Facturatie gebouwd is
-- ✅ Facturatie: factuur genereren vanuit een gesloten rekening (aggregeert alle gekoppelde bonnen), automatisch factuurnummer, echte PDF-generatie (Document Engine, `pdf-lib`), download via tijdelijke beveiligde link, facturenoverzicht (`/invoices`)
-- ✅ Dashboard: open/gesloten rekeningen, omzet deze maand, top bedrijven, recente activiteit — nu de standaard landingspagina na inloggen
-
-**🎉 FASE 1 (MVP) IS COMPLEET.** Het volledige basispad werkt end-to-end: Bedrijf → Open Rekening → Bon → Factuur (met PDF).
-
-- ✅ **Polijstronde (bewerken/verwijderen)**: bedrijf deactiveren/activeren (nooit hard verwijderd — historische facturen blijven intact), open rekening bewerken (tafel/aantal personen) + verwijderen (alleen lege, open rekeningen), bon bewerken (bonnummer) + verwijderen — **geblokkeerd zodra de rekening al gefactureerd is** (audit trail / factuur-integriteit gewaarborgd)
-
-**Belangrijk — extra actie vereist voor Facturatie:**
-De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
-1. Supabase → **Storage** → **New bucket**
-2. Naam: `documents`, type: **Private**
-3. Draai daarna óók `supabase/migrations/0005_storage_policies.sql` — de bucket alleen is niet genoeg, storage heeft een eigen RLS-systeem (zie v1.15)
+- ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht, sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`
@@ -48,10 +34,11 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 **Bekend openstaand punt (gepland, geen datum):**
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
-**Nog te bouwen (na Fase 1):**
-- Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
-- Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
-- **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner
+**Nog te bouwen in Fase 1:**
+- Receipt Manager (handmatige invoer, koppelen aan open rekening)
+- Workflow Engine basis
+- Facturatie (afhankelijk van eigen domein voor Resend om te kunnen mailen)
+- Dashboard met cijfers
 
 **Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
 ```sql

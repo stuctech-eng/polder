@@ -13,7 +13,6 @@ type Company = {
   invoice_email: string | null;
   payment_term_days: number;
   notes: string | null;
-  is_active: boolean;
 };
 
 export default function CompanyEditForm({ company }: { company: Company }) {
@@ -22,28 +21,6 @@ export default function CompanyEditForm({ company }: { company: Company }) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [toggling, setToggling] = useState(false);
-
-  async function handleToggleActive() {
-    setToggling(true);
-    setError(null);
-
-    const response = await fetch(`/api/companies/${company.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: company.name, isActive: !company.is_active }),
-    });
-
-    setToggling(false);
-
-    if (!response.ok) {
-      const body = await response.json();
-      setError(body.error || "Kon status niet wijzigen.");
-      return;
-    }
-
-    router.refresh();
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -160,36 +137,6 @@ export default function CompanyEditForm({ company }: { company: Company }) {
           </Link>
         </div>
       </form>
-
-      <div className="mt-4 pt-4 border-t border-neutral-200">
-        <details className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-2">
-          <summary className="px-3 py-2 text-xs font-medium text-neutral-700 cursor-pointer">
-            Hoe werkt dit? ℹ️
-          </summary>
-          <div className="px-3 text-xs text-neutral-600">
-            <p>
-              Bedrijven worden nooit permanent verwijderd (historische facturen moeten
-              intact blijven) — je kunt een bedrijf wel deactiveren zodat het niet meer
-              gekozen kan worden bij nieuwe rekeningen.
-            </p>
-          </div>
-        </details>
-        <button
-          onClick={handleToggleActive}
-          disabled={toggling}
-          className={`min-h-touch px-4 rounded-lg text-sm font-medium border ${
-            company.is_active
-              ? "border-red-300 text-red-600"
-              : "border-green-300 text-green-700"
-          } disabled:opacity-50`}
-        >
-          {toggling
-            ? "Bezig..."
-            : company.is_active
-              ? "Bedrijf deactiveren"
-              : "Bedrijf activeren"}
-        </button>
-      </div>
     </main>
   );
 }
