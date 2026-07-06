@@ -96,6 +96,17 @@ export function ReceiptsSection({
         </button>
       </div>
 
+      <details className="mb-3 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-3">
+        <summary className="px-3 py-2 text-sm font-medium text-neutral-700 cursor-pointer">
+          Hoe werkt dit? ℹ️
+        </summary>
+        <div className="px-3 text-sm text-neutral-600 space-y-1">
+          <p>Vul per product een regel in: aantal, prijs per stuk (excl. BTW), en het BTW-tarief.</p>
+          <p>Voorbeeld: 2× Lunch à €12,50, 9% BTW → totaal €27,25.</p>
+          <p>Meerdere producten? Voeg een extra regel toe met "+ Productregel toevoegen".</p>
+        </div>
+      </details>
+
       {receipts.length === 0 && !showForm && (
         <p className="text-sm text-neutral-400 py-2">Nog geen bonnen gekoppeld.</p>
       )}
@@ -128,12 +139,18 @@ export function ReceiptsSection({
           />
 
           <div className="space-y-2">
+            <div className="flex gap-2 text-xs text-neutral-500 px-1">
+              <span className="flex-1">Product</span>
+              <span className="w-14 text-center">Aantal</span>
+              <span className="w-16 text-center">Prijs (€)</span>
+              <span className="w-[76px] text-center">BTW</span>
+            </div>
             {lines.map((line, i) => (
               <div key={i} className="flex gap-2 items-start">
                 <input
                   value={line.description}
                   onChange={(e) => updateLine(i, { description: e.target.value })}
-                  placeholder="Product"
+                  placeholder="bijv. Lunch"
                   className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm min-w-0"
                 />
                 <input
@@ -152,13 +169,13 @@ export function ReceiptsSection({
                   value={line.unitPrice}
                   onChange={(e) => updateLine(i, { unitPrice: Number(e.target.value) })}
                   className="w-16 min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-sm text-center"
-                  aria-label="Prijs"
+                  aria-label="Prijs per stuk in euro's"
                 />
                 <select
                   value={line.vatRate}
                   onChange={(e) => updateLine(i, { vatRate: Number(e.target.value) })}
-                  className="min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-xs"
-                  aria-label="BTW"
+                  className="w-[76px] min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-xs"
+                  aria-label="BTW-tarief"
                 >
                   {VAT_RATES.map((v) => (
                     <option key={v.value} value={v.value}>

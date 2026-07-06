@@ -377,6 +377,11 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
 - Contextuele uitleg (principe 7.3) toegevoegd over het verschil tussen de drie statussen,
   inclusief vooruitverwijzing naar "gefactureerd" (komt bij de Facturatie-module)
 
+**v1.10** — Implementatie-update: duidelijkheid bonformulier (geen architectuurwijziging):
+- Zichtbare kolomlabels (Product/Aantal/Prijs/BTW) toegevoegd boven de productregels —
+  voorheen alleen onzichtbare aria-labels, verwarrend voor de gebruiker
+- Contextuele uitleg (principe 7.3) toegevoegd aan de bonnensectie met een concreet voorbeeld
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
