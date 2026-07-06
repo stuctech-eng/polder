@@ -34,6 +34,29 @@ export async function PATCH(
     .eq("id", userData.user.id)
     .single();
 
+  // Guardian Mode: zelfde bescherming als DELETE — een bon op een gefactureerde
+  // rekening mag ook niet meer bewerkt worden (audit trail / factuur-integriteit).
+  const { data: existingReceipt } = await supabase
+    .from("receipts")
+    .select("open_tab_id")
+    .eq("id", params.id)
+    .single();
+
+  if (existingReceipt?.open_tab_id) {
+    const { data: relatedTab } = await supabase
+      .from("open_tabs")
+      .select("status")
+      .eq("id", existingReceipt.open_tab_id)
+      .single();
+
+    if (relatedTab?.status === "invoiced") {
+      return NextResponse.json(
+        { error: "Bon hoort bij een gefactureerde rekening en kan niet meer bewerkt worden" },
+        { status: 400 }
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("receipts")
     .update({

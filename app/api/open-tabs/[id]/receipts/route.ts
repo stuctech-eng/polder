@@ -63,6 +63,21 @@ export async function POST(
     return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
+  // Guardian Mode: impact-analyse — een gefactureerde rekening mag geen nieuwe bonnen
+  // meer krijgen, anders klopt de al gegenereerde factuur niet meer met de werkelijkheid.
+  const { data: tab } = await supabase
+    .from("open_tabs")
+    .select("status")
+    .eq("id", params.id)
+    .single();
+
+  if (tab?.status === "invoiced") {
+    return NextResponse.json(
+      { error: "Deze rekening is al gefactureerd, er kunnen geen bonnen meer toegevoegd worden" },
+      { status: 400 }
+    );
+  }
+
   // Receipt Validation: totalen berekenen uit de regels (sectie Receipt Engine)
   let subtotal = 0;
   let vatAmount = 0;

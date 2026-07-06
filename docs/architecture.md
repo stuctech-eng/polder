@@ -466,6 +466,32 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   Enige resterende afhankelijkheid: e-mailen van facturen wacht op een bewuste
   domeinbeslissing door de restauranthouder (kostenafweging, niet technisch).
 
+**v1.18** — Bugfix: bon toevoegen aan gefactureerde rekening was nog mogelijk (geen architectuurwijziging):
+- Gevonden tijdens gebruikerstest: de "+ Bon toevoegen"-knop en de onderliggende API-route
+  blokkeerden nog niet op status `invoiced` — alleen bewerken/verwijderen van bestaande
+  bonnen was al beschermd (v1.17), maar een geheel **nieuwe** bon toevoegen aan een
+  gefactureerde rekening kon nog gewoon, wat de al gegenereerde factuur alsnog inconsistent
+  had kunnen maken met de werkelijke rekening.
+- Oplossing: check op zowel UI-niveau (knop/formulier verborgen) als API-niveau (server-side
+  afgedwongen, niet alleen client-side) — les uit eerdere rondes: UI verbergen alleen is nooit
+  voldoende, de daadwerkelijke bescherming moet in de API zitten.
+
+**v1.19** — Bugfix: systematische controle op ontbrekende server-side bescherming (geen architectuurwijziging):
+- Naar aanleiding van v1.18 is elke route systematisch nagelopen op hetzelfde patroon
+  (UI verbergt actie, API blokkeert niet). Twee extra gaten gevonden en gedicht:
+  - **Open rekening bewerken** (tafel/aantal): API accepteerde dit nog op een
+    gefactureerde rekening — nu geblokkeerd
+  - **Bon bewerken** (bonnummer): zelfde gat als bij verwijderen (v1.17), maar dan voor
+    bewerken — nu ook geblokkeerd
+- **Extra verharding**: het `status`-veld op de open-rekening-PATCH-route accepteerde
+  voorheen elke waarde (`open`/`closed`/`invoiced`), waardoor in theorie een gefactureerde
+  rekening handmatig teruggezet had kunnen worden naar `open` — dit had een dubbele
+  factuur-generatie mogelijk gemaakt. Nu beperkt tot alleen `closed` (de enige geldige
+  gebruikersaangestuurde overgang); `invoiced` gebeurt uitsluitend via de aparte
+  generate-invoice-route.
+- Vaste werkwijze vanaf nu: bij elke nieuwe "verbergen in UI zodra X"-regel wordt in
+  dezelfde wijziging ook de bijbehorende API-route gecontroleerd en zo nodig beveiligd.
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** **Implementatie: Fase 1 COMPLEET (v1.16).** Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root. Volgende stap: polijstronde, of doorgaan naar Fase 2 (Integration Engine/plugin-systeem).

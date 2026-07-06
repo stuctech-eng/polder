@@ -108,13 +108,21 @@ export function ReceiptsSection({
     <div className="border-t border-neutral-200 pt-4 mt-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-neutral-700">Bonnen</h2>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-sm font-medium"
-        >
-          {showForm ? "Annuleren" : "+ Bon toevoegen"}
-        </button>
+        {!isInvoiced && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-sm font-medium"
+          >
+            {showForm ? "Annuleren" : "+ Bon toevoegen"}
+          </button>
+        )}
       </div>
+
+      {isInvoiced && (
+        <p className="text-xs text-neutral-400 mb-2">
+          Deze rekening is al gefactureerd — er kunnen geen bonnen meer toegevoegd worden.
+        </p>
+      )}
 
       <details className="mb-3 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-3">
         <summary className="px-3 py-2 text-sm font-medium text-neutral-700 cursor-pointer">

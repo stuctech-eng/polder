@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
 const updateSchema = z.object({
-  status: z.enum(["open", "closed", "invoiced"]).optional(),
+  status: z.literal("closed").optional(), // 'invoiced' gebeurt alleen via generate-invoice
   tableNumber: z.string().optional(),
   guestCount: z.number().int().positive().optional(),
 });
@@ -114,6 +114,22 @@ export async function PATCH(
     .select("restaurant_id")
     .eq("id", userData.user.id)
     .single();
+
+  // Guardian Mode: impact-analyse — een gefactureerde rekening is onveranderlijk.
+  // Zonder deze check zou de UI-verberging (client-side) de enige bescherming zijn,
+  // en dat is nooit voldoende (zie v1.18-les).
+  const { data: currentTab } = await supabase
+    .from("open_tabs")
+    .select("status")
+    .eq("id", params.id)
+    .single();
+
+  if (currentTab?.status === "invoiced") {
+    return NextResponse.json(
+      { error: "Deze rekening is al gefactureerd en kan niet meer gewijzigd worden" },
+      { status: 400 }
+    );
+  }
 
   const updates: Record<string, unknown> = {};
   if (parsed.data.status) {
