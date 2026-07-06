@@ -3,7 +3,8 @@ import Link from "next/link";
 
 export default async function CompaniesPage() {
   const supabase = createSupabaseServerClient();
-  const { data: companies } = await supabase
+
+  const { data: companies, error } = await supabase
     .from("companies")
     .select("id, name, invoice_email, is_active")
     .order("name");
@@ -19,6 +20,12 @@ export default async function CompaniesPage() {
           + Nieuw bedrijf
         </Link>
       </div>
+
+      {error && (
+        <p className="text-sm text-red-600 mb-4" role="alert">
+          Fout bij ophalen bedrijven: {error.message}
+        </p>
+      )}
 
       <ul className="space-y-2">
         {companies?.map((company) => (
@@ -37,7 +44,7 @@ export default async function CompaniesPage() {
             </Link>
           </li>
         ))}
-        {!companies?.length && (
+        {!companies?.length && !error && (
           <p className="text-neutral-500 text-sm py-8 text-center">
             Nog geen bedrijven. Voeg het eerste bedrijf toe.
           </p>

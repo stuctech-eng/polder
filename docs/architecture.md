@@ -324,6 +324,22 @@ De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde 
   policy krijgen — automatic RLS beschermt tegen "vergeten RLS aan te zetten", maar niet
   tegen "vergeten een policy te schrijven".
 
+**v1.5** — Bugfix: GRANT-rechten ontbraken (geen architectuurwijziging):
+- Tweede, onderliggende laag van hetzelfde symptoom als v1.4: na het herstellen van RLS
+  bleef `42501: permission denied for table companies` optreden.
+- Oorzaak: "Automatically expose new tables" stond bewust uit (sectie 7.2 beveiliging),
+  wat naast het voorkomen van ongewenste API-blootstelling ook de standaard GRANT-rechten
+  voor de `authenticated`-rol blokkeerde. RLS bepaalt *welke rijen* zichtbaar zijn; GRANT
+  bepaalt *of* een rol de tabel mag benaderen — twee aparte lagen, allebei nodig.
+- Oplossing: `supabase/migrations/0004_fix_grants.sql` — expliciete GRANT + `alter default
+  privileges` zodat toekomstige tabellen dit automatisch meekrijgen.
+- Diagnosemethode die dit oploste: een tijdelijk debug-paneel direct in de UI (user_id,
+  query_error, rows) — sectie 15 se debugfilosofie ("fouten moeten zichtbaar zijn in de
+  app zelf") bleek doorslaggevend; eerdere aannames over de oorzaak (RLS alleen) waren
+  onvolledig zonder deze zichtbare foutcode.
+- Les voor vervolg: bij elke nieuwe tabel voortaan **zowel** RLS-policy **als** GRANT
+  in dezelfde migratie vastleggen — niet vertrouwen op projectbrede instellingen.
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

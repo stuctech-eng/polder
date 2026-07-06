@@ -10,7 +10,11 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 - Supabase-project: `polder` (regio Europe)
 - GitHub-repo: `stuctech-eng/polder`
 
-**Belangrijk — actie vereist:** draai `supabase/migrations/0003_fix_rls_policies.sql` in de Supabase SQL Editor. Zonder deze migratie toont de app geen data, ook al staat die wel in de database (bekende bug, zie `docs/architecture.md` v1.4).
+**Belangrijk — acties vereist (in volgorde):**
+1. Draai `supabase/migrations/0003_fix_rls_policies.sql` in de Supabase SQL Editor (RLS-fix)
+2. Draai `supabase/migrations/0004_fix_grants.sql` in de Supabase SQL Editor (GRANT-fix)
+
+Zonder deze twee migraties toont de app geen data, ook al staat die wel in de database (bekende, opgeloste bugs — zie `docs/architecture.md` v1.4 en v1.5 voor de volledige diagnose).
 
 **Fase 1 voortgang:**
 - ✅ Projectstructuur, database-schema (20 tabellen), Event Bus-skeleton
