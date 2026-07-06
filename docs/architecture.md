@@ -453,6 +453,19 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
 - Openstaand vóór Fase 2: polijstronde (bewerken/verwijderen), Resend-domein + factuur-mail,
   factuurstatus/betalingen
 
+**v1.17** — Implementatie-update: polijstronde bewerken/verwijderen (geen architectuurwijziging):
+- **Bedrijf**: deactiveren/activeren i.p.v. hard verwijderen — boekhoudprincipe: historische
+  facturen mogen nooit een "kapotte" verwijzing krijgen naar een verdwenen bedrijf
+- **Open rekening**: tafel/aantal personen bewerkbaar; verwijderen alleen toegestaan bij
+  status `open` én geen gekoppelde bonnen (voorkomt verlies van echte gegevens)
+- **Bon**: bonnummer bewerkbaar; verwijderen alleen toegestaan zolang de bijbehorende
+  rekening nog niet `invoiced` is — zodra gefactureerd, is een bon onveranderlijk
+  (Guardian Mode impact-analyse: factuur-integriteit/audit trail zou anders corrupt raken)
+- Alle wijzig-/verwijderacties loggen naar Activity Log
+- **Hiermee is het volledige handmatige basispad (Fase 1 + polijstronde) klaar.**
+  Enige resterende afhankelijkheid: e-mailen van facturen wacht op een bewuste
+  domeinbeslissing door de restauranthouder (kostenafweging, niet technisch).
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** **Implementatie: Fase 1 COMPLEET (v1.16).** Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root. Volgende stap: polijstronde, of doorgaan naar Fase 2 (Integration Engine/plugin-systeem).

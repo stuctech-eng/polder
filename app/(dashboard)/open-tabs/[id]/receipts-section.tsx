@@ -34,9 +34,11 @@ const VAT_RATES = [
 export function ReceiptsSection({
   openTabId,
   initialReceipts,
+  isInvoiced = false,
 }: {
   openTabId: string;
   initialReceipts: Receipt[];
+  isInvoiced?: boolean;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
@@ -131,19 +133,15 @@ export function ReceiptsSection({
 
       <ul className="space-y-2 mb-3">
         {receipts.map((r) => (
-          <li key={r.id} className="px-3 py-2 rounded-lg bg-neutral-50 text-sm">
-            <div className="flex justify-between font-medium">
-              <span>{r.receipt_number || "Bon zonder nummer"}</span>
-              <span>€{r.total.toFixed(2)}</span>
-            </div>
-            <div className="text-neutral-500 text-xs mt-1">
-              {r.receipt_lines.map((l, i) => (
-                <div key={i}>
-                  {l.quantity}× {l.description} — €{l.line_total.toFixed(2)}
-                </div>
-              ))}
-            </div>
-          </li>
+          <ReceiptItem
+            key={r.id}
+            receipt={r}
+            isInvoiced={isInvoiced}
+            onDeleted={() => setReceipts((prev) => prev.filter((x) => x.id !== r.id))}
+            onUpdated={(updated) =>
+              setReceipts((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
+            }
+          />
         ))}
       </ul>
 
@@ -244,5 +242,125 @@ export function ReceiptsSection({
         </form>
       )}
     </div>
+  );
+}
+
+function ReceiptItem({
+  receipt,
+  isInvoiced,
+  onDeleted,
+  onUpdated,
+}: {
+  receipt: Receipt;
+  isInvoiced: boolean;
+  onDeleted: () => void;
+  onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [receiptNumber, setReceiptNumber] = useState(receipt.receipt_number ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setLoading(true);
+    setError(null);
+
+    const response = await fetch(`/api/receipts/${receipt.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receiptNumber: receiptNumber || undefined }),
+    });
+
+    setLoading(false);
+
+    if (!response.ok) {
+      const body = await response.json();
+      setError(body.error || "Kon bon niet bijwerken.");
+      return;
+    }
+
+    onUpdated({ id: receipt.id, receipt_number: receiptNumber || null });
+    setEditing(false);
+  }
+
+  async function handleDelete() {
+    if (!confirm("Deze bon definitief verwijderen?")) return;
+    setLoading(true);
+    setError(null);
+
+    const response = await fetch(`/api/receipts/${receipt.id}`, { method: "DELETE" });
+    setLoading(false);
+
+    if (!response.ok) {
+      const body = await response.json();
+      setError(body.error || "Kon bon niet verwijderen.");
+      return;
+    }
+
+    onDeleted();
+  }
+
+  return (
+    <li className="px-3 py-2 rounded-lg bg-neutral-50 text-sm">
+      <div className="flex justify-between font-medium items-center">
+        {editing ? (
+          <input
+            value={receiptNumber}
+            onChange={(e) => setReceiptNumber(e.target.value)}
+            placeholder="Bonnummer"
+            className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm mr-2"
+          />
+        ) : (
+          <span>{receipt.receipt_number || "Bon zonder nummer"}</span>
+        )}
+        <span>€{receipt.total.toFixed(2)}</span>
+      </div>
+      <div className="text-neutral-500 text-xs mt-1">
+        {receipt.receipt_lines.map((l, i) => (
+          <div key={i}>
+            {l.quantity}× {l.description} — €{l.line_total.toFixed(2)}
+          </div>
+        ))}
+      </div>
+
+      {!isInvoiced && (
+        <div className="flex gap-3 mt-2">
+          {editing ? (
+            <>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="text-xs text-neutral-900 font-medium underline"
+              >
+                Opslaan
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-xs text-neutral-500"
+              >
+                Annuleren
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-neutral-600 underline"
+              >
+                Bewerken
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className="text-xs text-red-600 underline"
+              >
+                Verwijderen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </li>
   );
 }

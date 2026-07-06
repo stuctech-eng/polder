@@ -4,6 +4,7 @@ import CloseTabButton from "./close-button";
 import { ReceiptsSection } from "./receipts-section";
 import GenerateInvoiceButton from "./generate-invoice-button";
 import DownloadInvoiceButton from "./download-invoice-button";
+import TabEditControls from "./tab-edit-controls";
 import Link from "next/link";
 
 export default async function OpenTabDetailPage({
@@ -57,15 +58,32 @@ export default async function OpenTabDetailPage({
         {tab.departments?.name && <Row label="Afdeling" value={tab.departments.name} />}
         {tab.cost_centers?.name && <Row label="Kostenplaats" value={tab.cost_centers.name} />}
         {tab.projects?.name && <Row label="Project" value={tab.projects.name} />}
-        {tab.table_number && <Row label="Tafel" value={tab.table_number} />}
-        {tab.guest_count && <Row label="Aantal personen" value={String(tab.guest_count)} />}
         <Row label="Geopend" value={new Date(tab.opened_at).toLocaleString("nl-NL")} />
         {tab.closed_at && (
           <Row label="Gesloten" value={new Date(tab.closed_at).toLocaleString("nl-NL")} />
         )}
       </div>
 
-      <ReceiptsSection openTabId={params.id} initialReceipts={receipts ?? []} />
+      {tab.status !== "invoiced" && (
+        <TabEditControls
+          tabId={tab.id}
+          initialTableNumber={tab.table_number ?? ""}
+          initialGuestCount={tab.guest_count ? String(tab.guest_count) : ""}
+          canDelete={tab.status === "open" && (receipts?.length ?? 0) === 0}
+        />
+      )}
+      {tab.status === "invoiced" && (
+        <div className="space-y-2 mb-4 text-sm">
+          {tab.table_number && <Row label="Tafel" value={tab.table_number} />}
+          {tab.guest_count && <Row label="Aantal personen" value={String(tab.guest_count)} />}
+        </div>
+      )}
+
+      <ReceiptsSection
+        openTabId={params.id}
+        initialReceipts={receipts ?? []}
+        isInvoiced={tab.status === "invoiced"}
+      />
 
       {tab.status === "open" && (
         <div className="mt-6">

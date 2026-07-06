@@ -32,6 +32,8 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 
 **🎉 FASE 1 (MVP) IS COMPLEET.** Het volledige basispad werkt end-to-end: Bedrijf → Open Rekening → Bon → Factuur (met PDF).
 
+- ✅ **Polijstronde (bewerken/verwijderen)**: bedrijf deactiveren/activeren (nooit hard verwijderd — historische facturen blijven intact), open rekening bewerken (tafel/aantal personen) + verwijderen (alleen lege, open rekeningen), bon bewerken (bonnummer) + verwijderen — **geblokkeerd zodra de rekening al gefactureerd is** (audit trail / factuur-integriteit gewaarborgd)
+
 **Belangrijk — extra actie vereist voor Facturatie:**
 De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
 1. Supabase → **Storage** → **New bucket**
@@ -47,8 +49,7 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
 **Nog te bouwen (na Fase 1):**
-- **Polijstronde**: bewerken/verwijderen van bedrijf/rekening/bon
-- Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein)
+- Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
 - Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
 - **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner
 
