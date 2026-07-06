@@ -3,7 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type ReceiptLine = { description: string; quantity: number; unitPrice: number; vatRate: number };
+type ReceiptLine = {
+  description: string;
+  quantityText: string;
+  unitPriceText: string;
+  vatRate: number;
+};
+
+function parseDecimal(text: string): number {
+  const normalized = text.replace(",", ".").trim();
+  const parsed = parseFloat(normalized);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 type Receipt = {
   id: string;
   receipt_number: string | null;
@@ -32,7 +43,7 @@ export function ReceiptsSection({
   const [showForm, setShowForm] = useState(false);
   const [receiptNumber, setReceiptNumber] = useState("");
   const [lines, setLines] = useState<ReceiptLine[]>([
-    { description: "", quantity: 1, unitPrice: 0, vatRate: 9 },
+    { description: "", quantityText: "1", unitPriceText: "", vatRate: 9 },
   ]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,7 +53,7 @@ export function ReceiptsSection({
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0, vatRate: 9 }]);
+    setLines((prev) => [...prev, { description: "", quantityText: "1", unitPriceText: "", vatRate: 9 }]);
   }
 
   function removeLine(index: number) {
@@ -50,7 +61,9 @@ export function ReceiptsSection({
   }
 
   const estimatedTotal = lines.reduce((sum, l) => {
-    const lineSubtotal = l.quantity * l.unitPrice;
+    const quantity = parseDecimal(l.quantityText);
+    const unitPrice = parseDecimal(l.unitPriceText);
+    const lineSubtotal = quantity * unitPrice;
     return sum + lineSubtotal + lineSubtotal * (l.vatRate / 100);
   }, 0);
 
@@ -64,7 +77,12 @@ export function ReceiptsSection({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         receiptNumber: receiptNumber || undefined,
-        lines,
+        lines: lines.map((l) => ({
+          description: l.description,
+          quantity: parseDecimal(l.quantityText) || 1,
+          unitPrice: parseDecimal(l.unitPriceText),
+          vatRate: l.vatRate,
+        })),
       }),
     });
 
@@ -79,7 +97,7 @@ export function ReceiptsSection({
     const { receipt } = await response.json();
     setReceipts((prev) => [receipt, ...prev]);
     setReceiptNumber("");
-    setLines([{ description: "", quantity: 1, unitPrice: 0, vatRate: 9 }]);
+    setLines([{ description: "", quantityText: "1", unitPriceText: "", vatRate: 9 }]);
     setShowForm(false);
     router.refresh();
   }
@@ -156,12 +174,8 @@ export function ReceiptsSection({
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={line.quantity === 0 ? "" : String(line.quantity).replace(".", ",")}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(",", ".");
-                    const parsed = raw === "" ? 0 : Number(raw);
-                    if (!Number.isNaN(parsed)) updateLine(i, { quantity: parsed });
-                  }}
+                  value={line.quantityText}
+                  onChange={(e) => updateLine(i, { quantityText: e.target.value })}
                   placeholder="1"
                   className="w-14 min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-sm text-center"
                   aria-label="Aantal"
@@ -169,13 +183,9 @@ export function ReceiptsSection({
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={line.unitPrice === 0 ? "" : String(line.unitPrice).replace(".", ",")}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(",", ".");
-                    const parsed = raw === "" ? 0 : Number(raw);
-                    if (!Number.isNaN(parsed)) updateLine(i, { unitPrice: parsed });
-                  }}
-                  placeholder="0,00"
+                  value={line.unitPriceText}
+                  onChange={(e) => updateLine(i, { unitPriceText: e.target.value })}
+                  placeholder="12,50"
                   className="w-16 min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-sm text-center"
                   aria-label="Prijs per stuk in euro's, met komma of punt"
                 />

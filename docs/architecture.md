@@ -391,6 +391,19 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   intern omzetten naar een geldig getal
 - Uitlegtekst bijgewerkt om dit te vermelden
 
+**v1.12** — Bugfix: cursor sprong in prijsveld tijdens typen (geen architectuurwijziging):
+- Root cause van v1.11 se fix was onvolledig: de weergave werd afgeleid van het
+  numerieke getal (0 → toon leeg veld), waardoor het veld zichzelf leegde zodra de
+  waarde tijdens het typen tijdelijk 0 werd (bijv. bij "0,50") — dit veroorzaakte
+  de rare cursorsprong en het "0,|0"-effect.
+- Structurele oplossing: aantal/prijs worden nu als **losse tekstvelden** bijgehouden
+  (`quantityText`, `unitPriceText`), volledig onafhankelijk van de numerieke waarde.
+  Omzetting naar een getal (met komma-of-punt-ondersteuning) gebeurt alleen nog vlak
+  vóór verzending naar de API, nooit meer tijdens het typen zelf.
+- Les: bij elk controlled input dat een getal weergeeft, de weergavestring nooit
+  afleiden uit het getal zelf als "0" een geldige tussenstap kan zijn — altijd een
+  aparte tekststatus bijhouden.
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
