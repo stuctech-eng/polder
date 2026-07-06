@@ -309,6 +309,21 @@ De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde 
   personeel/Ziggo-achtige adressen. Zie README voor de handmatige SQL-noodprocedure zolang
   dat domein er nog niet is.
 
+**v1.4** — Bugfix: RLS-policy-lacune (geen architectuurwijziging, kritieke implementatiefout):
+- Oorzaak: "Enable automatic RLS" (aangezet bij projectaanmaak, sectie 7.2-aanbeveling) schakelde
+  RLS in op **alle** tabellen bij aanmaak — inclusief `users`, waarvoor geen policy bestond.
+  Omdat de tenant-isolatiepolicy van andere tabellen intern `users` raadpleegt om de eigen
+  `restaurant_id` op te zoeken, faalde die lookup altijd → de app zag nergens data, terwijl
+  de SQL Editor (buiten RLS om) alles gewoon toonde. Verwarrend te diagnosticeren omdat
+  "succesvolle" SQL-inserts de indruk gaven dat alles werkte.
+- Oplossing: `supabase/migrations/0003_fix_rls_policies.sql` — voegt de ontbrekende
+  self-select policy op `users` toe, en legt consistente tenant-isolatie vast op alle
+  tabellen (rechtstreeks via `restaurant_id`, of via `company_id` → `companies.restaurant_id`
+  voor afdelingen/kostenplaatsen/projecten/contactpersonen).
+- Les voor vervolg: elke nieuwe tabel moet vanaf nu **in dezelfde migratie** een expliciete
+  policy krijgen — automatic RLS beschermt tegen "vergeten RLS aan te zetten", maar niet
+  tegen "vergeten een policy te schrijven".
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

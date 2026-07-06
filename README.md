@@ -10,6 +10,8 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 - Supabase-project: `polder` (regio Europe)
 - GitHub-repo: `stuctech-eng/polder`
 
+**Belangrijk — actie vereist:** draai `supabase/migrations/0003_fix_rls_policies.sql` in de Supabase SQL Editor. Zonder deze migratie toont de app geen data, ook al staat die wel in de database (bekende bug, zie `docs/architecture.md` v1.4).
+
 **Fase 1 voortgang:**
 - ✅ Projectstructuur, database-schema (20 tabellen), Event Bus-skeleton
 - ✅ Supabase volledig opgezet: schema gedraaid, RLS + automatic RLS aan, eerste gebruiker (owner) gekoppeld aan restaurant "Café Restaurant Polder"
