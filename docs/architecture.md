@@ -258,6 +258,9 @@ De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde 
 - Audit van inlogpogingen (onderdeel van Audit & Activity Engine)
 - Tweefactorauthenticatie verplicht voor beheerdersrollen (owner/manager)
 
+**7.3 Contextuele in-app uitleg**
+Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele velden, volgorde-afhankelijkheden, of koppelingen tussen modules) krijgt een kort, inklapbaar uitlegblok direct in de UI ("Hoe werkt dit?") — geen aparte handleiding die apart opgezocht moet worden. Vaste regel: wanneer de onderliggende logica van een module verandert, wordt dit uitlegblok in dezelfde wijziging bijgewerkt — net zoals `docs/architecture.md` en `README.md` worden bijgehouden. Voorbeeld: de uitleg op de bedrijfsdetailpagina over Afdeling/Kostenplaats/Project in relatie tot Open Rekeningen (toegevoegd bij implementatie, zie sectie 8).
+
 ## 8. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
@@ -340,6 +343,13 @@ De applicatie mag nooit afhankelijk zijn van één e-mailprovider — hetzelfde 
 - Les voor vervolg: bij elke nieuwe tabel voortaan **zowel** RLS-policy **als** GRANT
   in dezelfde migratie vastleggen — niet vertrouwen op projectbrede instellingen.
 
+**v1.6** — Implementatie-update + nieuw UX-principe (geen architectuurwijziging aan modules):
+- Contextueel uitlegblok toegevoegd op de bedrijfsdetailpagina (Afdeling/Kostenplaats/Project
+  in relatie tot de aankomende Open Rekeningen-module)
+- Nieuw vast principe 7.3: contextuele in-app uitleg wordt voortaan bij elke module toegevoegd
+  waar nodig, en verplicht bijgewerkt zodra de onderliggende logica verandert
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
+ 
