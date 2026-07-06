@@ -33,7 +33,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
 1. Supabase → **Storage** → **New bucket**
 2. Naam: `documents`, type: **Private**
-3. Zonder deze bucket wordt de factuur wel aangemaakt, maar krijg je een duidelijke waarschuwing dat de PDF niet opgeslagen kon worden
+3. Draai daarna óók `supabase/migrations/0005_storage_policies.sql` — de bucket alleen is niet genoeg, storage heeft een eigen RLS-systeem (zie v1.15)
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`

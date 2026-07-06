@@ -429,6 +429,17 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
 - Nog niet gebouwd: factuur mailen (wacht op Resend-domein), factuurstatus bijwerken
   (sent/paid), credit-facturen, bewerken/verwijderen van facturen
 
+**v1.15** — Bugfix: storage-RLS ontbrak voor de documents-bucket (geen architectuurwijziging):
+- Zelfde patroon als v1.4/v1.5, nu toegepast op Supabase Storage: `storage.objects` heeft
+  een eigen RLS-systeem, los van de publieke tabellen. Bucket aanmaken alleen was niet
+  genoeg — PDF-upload faalde met "new row violates row-level security policy"
+- Oplossing: `supabase/migrations/0005_storage_policies.sql` — tenant-isolatie op basis
+  van de eerste mapnaam in het bestandspad (`{restaurant_id}/invoices/...`), zelfde
+  patroon als de databasetabellen
+- Les voor vervolg: **elke nieuwe storage bucket** heeft net als elke nieuwe databasetabel
+  een expliciete RLS-policy nodig — dit geldt nu ook voor de nog aan te maken `receipts`-
+  bucket zodra bonscans/OCR gebouwd wordt (Fase 3)
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
