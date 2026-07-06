@@ -18,6 +18,9 @@ export default function DashboardLayout({
             <Link href="/open-tabs" className="min-h-touch flex items-center">
               Rekeningen
             </Link>
+            <Link href="/invoices" className="min-h-touch flex items-center">
+              Facturen
+            </Link>
           </nav>
         </div>
         <LogoutButton />

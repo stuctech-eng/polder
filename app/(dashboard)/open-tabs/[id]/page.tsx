@@ -2,6 +2,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import CloseTabButton from "./close-button";
 import { ReceiptsSection } from "./receipts-section";
+import GenerateInvoiceButton from "./generate-invoice-button";
+import DownloadInvoiceButton from "./download-invoice-button";
 import Link from "next/link";
 
 export default async function OpenTabDetailPage({
@@ -26,6 +28,18 @@ export default async function OpenTabDetailPage({
     .select("*, receipt_lines(*)")
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
+
+  let invoice = null;
+  if (tab.status === "invoiced") {
+    const { data } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("company_id", tab.company_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    invoice = data;
+  }
 
   return (
     <main className="p-4 max-w-2xl mx-auto">
@@ -56,6 +70,34 @@ export default async function OpenTabDetailPage({
       {tab.status === "open" && (
         <div className="mt-6">
           <CloseTabButton tabId={tab.id} />
+        </div>
+      )}
+
+      {tab.status === "closed" && (
+        <div className="mt-6">
+          <details className="mb-3 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-3">
+            <summary className="px-3 py-2 text-sm font-medium text-neutral-700 cursor-pointer">
+              Hoe werkt dit? ℹ️
+            </summary>
+            <div className="px-3 text-sm text-neutral-600">
+              <p>
+                Genereert een factuur op basis van alle gekoppelde bonnen, inclusief PDF.
+                Dit kan niet ongedaan gemaakt worden in deze versie.
+              </p>
+            </div>
+          </details>
+          <GenerateInvoiceButton openTabId={params.id} />
+        </div>
+      )}
+
+      {tab.status === "invoiced" && invoice && (
+        <div className="mt-6 space-y-3">
+          <div className="space-y-2 text-sm">
+            <Row label="Factuurnummer" value={invoice.invoice_number} />
+            <Row label="Totaal" value={`€${Number(invoice.total).toFixed(2)}`} />
+            <Row label="Vervaldatum" value={new Date(invoice.due_at).toLocaleDateString("nl-NL")} />
+          </div>
+          <DownloadInvoiceButton invoiceId={invoice.id} />
         </div>
       )}
     </main>

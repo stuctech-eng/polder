@@ -27,6 +27,13 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht met statusfilter (Open/Gesloten/Gefactureerd), sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
 - ✅ Receipt Manager: bonnen handmatig invoeren met productregels (dynamisch toevoegen/verwijderen), automatische BTW/totaalberekening, direct gekoppeld aan de open rekening
 - ✅ Workflow Engine (basis): facturatieregel per bedrijf instelbaar (frequentie: direct/wekelijks/maandelijks/per project, goedkeuring vereist ja/nee) — wordt gebruikt zodra Facturatie gebouwd is
+- ✅ Facturatie: factuur genereren vanuit een gesloten rekening (aggregeert alle gekoppelde bonnen), automatisch factuurnummer, echte PDF-generatie (Document Engine, `pdf-lib`), download via tijdelijke beveiligde link, facturenoverzicht (`/invoices`)
+
+**Belangrijk — extra actie vereist voor Facturatie:**
+De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
+1. Supabase → **Storage** → **New bucket**
+2. Naam: `documents`, type: **Private**
+3. Zonder deze bucket wordt de factuur wel aangemaakt, maar krijg je een duidelijke waarschuwing dat de PDF niet opgeslagen kon worden
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`
@@ -37,9 +44,10 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
 **Nog te bouwen in Fase 1:**
-- **Bon bewerken** (bonnummer/datum/opmerkingen achteraf aanpasbaar maken — nu alleen aanmaken mogelijk, terechte verwachting bij boekhoudsoftware, bewust uitgesteld naar een latere polijstronde samen met bedrijf/rekening bewerken)
-- Facturatie (afhankelijk van eigen domein voor Resend om te kunnen mailen)
-- Dashboard met cijfers
+- Dashboard met cijfers (laatste onderdeel van Fase 1!)
+- **Bewerken/verwijderen** (bedrijf, rekening, bon) — bewust uitgestelde polijstronde
+- Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein)
+- Factuurstatus bijwerken naar "sent"/"paid" (nu blijft elke factuur op "draft")
 
 **Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
 ```sql

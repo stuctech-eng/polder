@@ -414,6 +414,21 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   die expliciet naar een latere polijstronde is uitgesteld; ongebruikte code in de repo is in
   strijd met sectie 7 ("geen dode code") en zou verwarring kunnen geven over wat al werkt
 
+**v1.14** — Implementatie-update: Facturatie-module (geen architectuurwijziging, grote mijlpaal):
+- **Basispad nu compleet**: Bedrijf → Open Rekening → Bon → Factuur, volledig werkend end-to-end
+- Factuur genereren: aggregeert alle bonnen op een gesloten rekening, berekent subtotaal/BTW/
+  totaal, genereert oplopend factuurnummer (`JAAR-0001`), zet rekening naar status `invoiced`
+- Document Engine eerste echte implementatie: PDF-generatie met `pdf-lib` (pure JS, Vercel-
+  compatibel), opgeslagen in Supabase Storage bucket `documents` (privé), gedownload via
+  tijdelijke signed URL (5 minuten geldig) — niet via publieke links
+- Event Bus: publiceert `InvoiceGenerated`
+- Facturenoverzicht (`/invoices`) toegevoegd aan navigatie
+- Bewuste keuze: bij PDF-opslagfout (bijv. bucket ontbreekt) blokkeert dit de factuur zelf
+  niet — factuur + regels staan vast in de database, alleen de PDF ontbreekt dan met een
+  zichtbare waarschuwing (sectie 15: fouten zichtbaar, actie niet onnodig laten falen)
+- Nog niet gebouwd: factuur mailen (wacht op Resend-domein), factuurstatus bijwerken
+  (sent/paid), credit-facturen, bewerken/verwijderen van facturen
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
