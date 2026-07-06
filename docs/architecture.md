@@ -404,6 +404,16 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   afleiden uit het getal zelf als "0" een geldige tussenstap kan zijn — altijd een
   aparte tekststatus bijhouden.
 
+**v1.13** — Implementatie-update: Workflow Engine basis (geen architectuurwijziging):
+- Facturatieregel per bedrijf: frequentie (direct/wekelijks/maandelijks/per project) +
+  goedkeuring-vereist-vlag, opgeslagen in `workflow_rules` (config-driven, governance 6.1/6.3)
+- UI-sectie op de bedrijfsdetailpagina, met contextuele uitleg (principe 7.3)
+- Wordt nog niet gebruikt — Facturatie-module (volgende bouwstap) leest deze regel uit
+- Opruiming: een niet-gekoppeld wees-bestand (`app/api/receipts/[id]/route.ts`, bon-bewerken
+  functionaliteit zonder UI) werd aangetroffen en verwijderd — dit implementeerde een feature
+  die expliciet naar een latere polijstronde is uitgesteld; ongebruikte code in de repo is in
+  strijd met sectie 7 ("geen dode code") en zou verwarring kunnen geven over wat al werkt
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

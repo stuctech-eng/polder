@@ -26,6 +26,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Afdelingen, Kostenplaatsen en Projecten: toevoegen + lijst per bedrijf, direct op de bedrijfsdetailpagina
 - ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht met statusfilter (Open/Gesloten/Gefactureerd), sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
 - ✅ Receipt Manager: bonnen handmatig invoeren met productregels (dynamisch toevoegen/verwijderen), automatische BTW/totaalberekening, direct gekoppeld aan de open rekening
+- ✅ Workflow Engine (basis): facturatieregel per bedrijf instelbaar (frequentie: direct/wekelijks/maandelijks/per project, goedkeuring vereist ja/nee) — wordt gebruikt zodra Facturatie gebouwd is
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`
@@ -36,7 +37,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
 **Nog te bouwen in Fase 1:**
-- Workflow Engine basis
+- **Bon bewerken** (bonnummer/datum/opmerkingen achteraf aanpasbaar maken — nu alleen aanmaken mogelijk, terechte verwachting bij boekhoudsoftware, bewust uitgesteld naar een latere polijstronde samen met bedrijf/rekening bewerken)
 - Facturatie (afhankelijk van eigen domein voor Resend om te kunnen mailen)
 - Dashboard met cijfers
 

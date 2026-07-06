@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import CompanyEditForm from "./edit-form";
-import { DepartmentsSection, CostCentersSection, ProjectsSection } from "./sub-entities";
+import { DepartmentsSection, CostCentersSection, ProjectsSection, WorkflowRuleSection } from "./sub-entities";
 
 export default async function CompanyDetailPage({
   params,
@@ -20,11 +20,13 @@ export default async function CompanyDetailPage({
     notFound();
   }
 
-  const [{ data: departments }, { data: costCenters }, { data: projects }] = await Promise.all([
-    supabase.from("departments").select("*").eq("company_id", params.id).order("name"),
-    supabase.from("cost_centers").select("*").eq("company_id", params.id).order("name"),
-    supabase.from("projects").select("*").eq("company_id", params.id).order("name"),
-  ]);
+  const [{ data: departments }, { data: costCenters }, { data: projects }, { data: workflowRule }] =
+    await Promise.all([
+      supabase.from("departments").select("*").eq("company_id", params.id).order("name"),
+      supabase.from("cost_centers").select("*").eq("company_id", params.id).order("name"),
+      supabase.from("projects").select("*").eq("company_id", params.id).order("name"),
+      supabase.from("workflow_rules").select("*").eq("company_id", params.id).maybeSingle(),
+    ]);
 
   return (
     <>
@@ -55,6 +57,7 @@ export default async function CompanyDetailPage({
           departments={departments ?? []}
         />
         <ProjectsSection companyId={params.id} initialProjects={projects ?? []} />
+        <WorkflowRuleSection companyId={params.id} initialRule={workflowRule ?? null} />
       </div>
     </>
   );

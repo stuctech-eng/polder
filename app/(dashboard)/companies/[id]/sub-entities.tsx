@@ -6,6 +6,107 @@ type Department = { id: string; name: string };
 type CostCenter = { id: string; name: string; code: string | null; department_id: string | null };
 type Project = { id: string; name: string; code: string | null; is_active: boolean };
 
+type WorkflowRule = {
+  invoice_frequency: "immediate" | "weekly" | "monthly" | "per_project";
+  requires_approval: boolean;
+};
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  immediate: "Direct (elke rekening apart)",
+  weekly: "Wekelijks",
+  monthly: "Maandelijks",
+  per_project: "Per project",
+};
+
+export function WorkflowRuleSection({
+  companyId,
+  initialRule,
+}: {
+  companyId: string;
+  initialRule: WorkflowRule | null;
+}) {
+  const [frequency, setFrequency] = useState(initialRule?.invoice_frequency ?? "immediate");
+  const [requiresApproval, setRequiresApproval] = useState(initialRule?.requires_approval ?? false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSave() {
+    setError(null);
+    setSaved(false);
+    setLoading(true);
+
+    const response = await fetch(`/api/companies/${companyId}/workflow-rule`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceFrequency: frequency, requiresApproval }),
+    });
+
+    setLoading(false);
+
+    if (!response.ok) {
+      const body = await response.json();
+      setError(body.error || "Kon regel niet opslaan.");
+      return;
+    }
+
+    setSaved(true);
+  }
+
+  return (
+    <Section title="Facturatieregel">
+      <details className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-3">
+        <summary className="px-3 py-2 text-xs font-medium text-neutral-700 cursor-pointer">
+          Hoe werkt dit? ℹ️
+        </summary>
+        <div className="px-3 text-xs text-neutral-600 space-y-1">
+          <p>
+            Bepaalt hoe vaak dit bedrijf gefactureerd wordt zodra de Facturatie-module
+            klaar is. "Direct" betekent elke gesloten rekening apart; "Wekelijks"/
+            "Maandelijks" bundelt meerdere rekeningen in één factuur.
+          </p>
+        </div>
+      </details>
+
+      <div>
+        <label className="block text-sm font-medium mb-1">Factureer</label>
+        <select
+          value={frequency}
+          onChange={(e) => setFrequency(e.target.value as WorkflowRule["invoice_frequency"])}
+          className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
+        >
+          {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm py-2">
+        <input
+          type="checkbox"
+          checked={requiresApproval}
+          onChange={(e) => setRequiresApproval(e.target.checked)}
+          className="min-h-touch min-w-touch"
+        />
+        Goedkeuring vereist vóór factureren
+      </label>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {saved && <p className="text-sm text-green-700">Opgeslagen.</p>}
+
+      <button
+        onClick={handleSave}
+        disabled={loading}
+        className="min-h-touch px-4 rounded-lg bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+      >
+        {loading ? "Bezig..." : "Regel opslaan"}
+      </button>
+    </Section>
+  );
+}
+
 export function DepartmentsSection({
   companyId,
   initialDepartments,
