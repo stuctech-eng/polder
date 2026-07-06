@@ -12,6 +12,9 @@ export default function DashboardLayout({
         <div className="flex items-center gap-4">
           <span className="font-semibold">Polder</span>
           <nav className="flex gap-3 text-sm text-neutral-500">
+            <Link href="/dashboard" className="min-h-touch flex items-center">
+              Dashboard
+            </Link>
             <Link href="/companies" className="min-h-touch flex items-center">
               Bedrijven
             </Link>

@@ -440,7 +440,20 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   een expliciete RLS-policy nodig — dit geldt nu ook voor de nog aan te maken `receipts`-
   bucket zodra bonscans/OCR gebouwd wordt (Fase 3)
 
+**v1.16** — Implementatie-update: Dashboard (geen architectuurwijziging) — **FASE 1 COMPLEET**:
+- Kerncijfers: open/gesloten rekeningen (met doorklik naar gefilterd overzicht), omzet
+  deze maand, totaal aantal facturen, top 5 bedrijven op omzet, recente activiteit
+  (laatste 8 Activity Log-regels)
+- Dashboard is nu de standaard landingspagina (`/` redirect hierheen i.p.v. naar `/companies`)
+- **Mijlpaal:** alle Fase 1-onderdelen uit de oorspronkelijke fasering (sectie 4) zijn nu
+  gebouwd en end-to-end getest: Event Bus, Auth/Beheer, Bedrijvenbeheer, Open Rekeningen,
+  Receipt Manager (handmatig), Workflow Engine (basis), Facturatie (incl. PDF), Dashboard,
+  Audit & Activity Engine. Monitoring bleef beperkt tot foutafhandeling in de UI (sectie 15)
+  i.p.v. een aparte monitoring-tool — voldoende voor dit stadium, uit te breiden bij schaal.
+- Openstaand vóór Fase 2: polijstronde (bewerken/verwijderen), Resend-domein + factuur-mail,
+  factuurstatus/betalingen
+
 ## 9. STATUS
 
-**Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
+**Architectuur: BEVROREN — v1.0.** **Implementatie: Fase 1 COMPLEET (v1.16).** Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root. Volgende stap: polijstronde, of doorgaan naar Fase 2 (Integration Engine/plugin-systeem).
  

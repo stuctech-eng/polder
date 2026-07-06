@@ -28,6 +28,9 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Receipt Manager: bonnen handmatig invoeren met productregels (dynamisch toevoegen/verwijderen), automatische BTW/totaalberekening, direct gekoppeld aan de open rekening
 - ✅ Workflow Engine (basis): facturatieregel per bedrijf instelbaar (frequentie: direct/wekelijks/maandelijks/per project, goedkeuring vereist ja/nee) — wordt gebruikt zodra Facturatie gebouwd is
 - ✅ Facturatie: factuur genereren vanuit een gesloten rekening (aggregeert alle gekoppelde bonnen), automatisch factuurnummer, echte PDF-generatie (Document Engine, `pdf-lib`), download via tijdelijke beveiligde link, facturenoverzicht (`/invoices`)
+- ✅ Dashboard: open/gesloten rekeningen, omzet deze maand, top bedrijven, recente activiteit — nu de standaard landingspagina na inloggen
+
+**🎉 FASE 1 (MVP) IS COMPLEET.** Het volledige basispad werkt end-to-end: Bedrijf → Open Rekening → Bon → Factuur (met PDF).
 
 **Belangrijk — extra actie vereist voor Facturatie:**
 De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
@@ -43,11 +46,11 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 **Bekend openstaand punt (gepland, geen datum):**
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
-**Nog te bouwen in Fase 1:**
-- Dashboard met cijfers (laatste onderdeel van Fase 1!)
-- **Bewerken/verwijderen** (bedrijf, rekening, bon) — bewust uitgestelde polijstronde
+**Nog te bouwen (na Fase 1):**
+- **Polijstronde**: bewerken/verwijderen van bedrijf/rekening/bon
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein)
-- Factuurstatus bijwerken naar "sent"/"paid" (nu blijft elke factuur op "draft")
+- Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
+- **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner
 
 **Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
 ```sql
