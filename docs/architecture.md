@@ -349,6 +349,17 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
 - Nieuw vast principe 7.3: contextuele in-app uitleg wordt voortaan bij elke module toegevoegd
   waar nodig, en verplicht bijgewerkt zodra de onderliggende logica verandert
 
+**v1.7** — Implementatie-update: Open Rekeningen module (geen architectuurwijziging):
+- Volledige flow: rekening openen (bedrijf + optioneel afdeling/kostenplaats/project,
+  tafelnummer, aantal personen), overzicht van open rekeningen, detailpagina, sluiten
+- Event Bus in gebruik: publiceert `TabOpened` bij aanmaken en `TabClosed` bij sluiten
+  (conform het diagram uit sectie 2 — eerste module die daadwerkelijk events publiceert)
+- Activity Log: acties gelogd ("opende een nieuwe rekening", "sloot een rekening")
+- Contextuele in-app uitleg toegevoegd (principe 7.3) over de relatie met Bedrijf/Afdeling/
+  Kostenplaats/Project
+- Navigatie in de header uitgebreid (Bedrijven / Rekeningen)
+- Bonnen koppelen aan een open rekening is nog niet gebouwd — volgt bij Receipt Manager
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.
