@@ -10,4 +10,8 @@ export const companySchema = z.object({
   notes: z.string().optional(),
 });
 
+export const companyUpdateSchema = companySchema.partial().extend({
+  name: z.string().min(2, "Naam is verplicht (min. 2 tekens)"),
+});
+
 export type CompanyInput = z.infer<typeof companySchema>;
