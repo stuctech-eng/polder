@@ -371,6 +371,12 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
 - Activity Log: bon-toevoeging gelogd met bedrag
 - Nog niet gebouwd: Receipt Scanner/OCR/Import (volgt in Fase 2/3), bon bewerken/verwijderen
 
+**v1.9** — Implementatie-update: statusfilter Open Rekeningen (geen architectuurwijziging):
+- Tabbladen Open/Gesloten/Gefactureerd toegevoegd aan het rekeningenoverzicht — voorheen
+  verdwenen gesloten rekeningen zonder terugvindbaarheid uit de UI
+- Contextuele uitleg (principe 7.3) toegevoegd over het verschil tussen de drie statussen,
+  inclusief vooruitverwijzing naar "gefactureerd" (komt bij de Facturatie-module)
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

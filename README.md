@@ -24,7 +24,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) én **volledig gediagnosticeerd**: Supabase + Resend SMTP-koppeling werkt technisch correct (bevestigd: mail komt aan bij `stuctech@gmail.com`). Beperking: Resend's testmodus staat alleen verzending toe naar het eigen Resend-accountadres — dus nog niet bruikbaar voor Ziggo-adressen, personeel of klanten totdat een eigen domein geverifieerd is bij Resend.
 - ✅ Bedrijvenbeheer: volledig werkend — overzicht, aanmaken (`/companies/new`), en bekijken/bewerken (`/companies/[id]`), met validatie en zichtbare foutmeldingen
 - ✅ Afdelingen, Kostenplaatsen en Projecten: toevoegen + lijst per bedrijf, direct op de bedrijfsdetailpagina
-- ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht, sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
+- ✅ Open Rekeningen: openen (met bedrijf/afdeling/kostenplaats/project-koppeling), overzicht met statusfilter (Open/Gesloten/Gefactureerd), sluiten. Navigatie tussen Bedrijven/Rekeningen in de header
 - ✅ Receipt Manager: bonnen handmatig invoeren met productregels (dynamisch toevoegen/verwijderen), automatische BTW/totaalberekening, direct gekoppeld aan de open rekening
 
 **Resend SMTP-configuratie (vastgelegd):**
