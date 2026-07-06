@@ -23,6 +23,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ Auth-flow volledig werkend: login, middleware route-bescherming, uitloggen
 - ✅ Wachtwoord-vergeten flow gebouwd (`/forgot-password`, `/reset-password`) én **volledig gediagnosticeerd**: Supabase + Resend SMTP-koppeling werkt technisch correct (bevestigd: mail komt aan bij `stuctech@gmail.com`). Beperking: Resend's testmodus staat alleen verzending toe naar het eigen Resend-accountadres — dus nog niet bruikbaar voor Ziggo-adressen, personeel of klanten totdat een eigen domein geverifieerd is bij Resend.
 - ✅ Bedrijvenbeheer: volledig werkend — overzicht, aanmaken (`/companies/new`), en bekijken/bewerken (`/companies/[id]`), met validatie en zichtbare foutmeldingen
+- ✅ Afdelingen, Kostenplaatsen en Projecten: toevoegen + lijst per bedrijf, direct op de bedrijfsdetailpagina
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`
@@ -33,7 +34,6 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
 **Nog te bouwen in Fase 1:**
-- Afdelingen/Kostenplaatsen/Projecten
 - Open Rekeningen
 - Receipt Manager (handmatige invoer)
 - Workflow Engine basis
