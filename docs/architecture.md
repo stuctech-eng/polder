@@ -382,6 +382,15 @@ Elke module die voor de gebruiker niet vanzelfsprekend is (met name optionele ve
   voorheen alleen onzichtbare aria-labels, verwarrend voor de gebruiker
 - Contextuele uitleg (principe 7.3) toegevoegd aan de bonnensectie met een concreet voorbeeld
 
+**v1.11** — Bugfix: komma als decimaalteken werkte niet (geen architectuurwijziging):
+- HTML `type="number"` velden accepteren alleen een punt als decimaalteken; een
+  Nederlandse gebruiker die "12,50" intikt zag de komma genegeerd worden, met een
+  verkeerd/verwarrend resultaat (bijv. "050") als gevolg
+- Opgelost door aantal/prijs-velden om te zetten naar tekstvelden met numeriek
+  toetsenbord (`inputMode="decimal"`) die zowel komma als punt accepteren en
+  intern omzetten naar een geldig getal
+- Uitlegtekst bijgewerkt om dit te vermelden
+
 ## 9. STATUS
 
 **Architectuur: BEVROREN — v1.0.** Implementatie: in uitvoering (v1.1, zie sectie 8). Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root.

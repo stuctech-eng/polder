@@ -101,7 +101,7 @@ export function ReceiptsSection({
           Hoe werkt dit? ℹ️
         </summary>
         <div className="px-3 text-sm text-neutral-600 space-y-1">
-          <p>Vul per product een regel in: aantal, prijs per stuk (excl. BTW), en het BTW-tarief.</p>
+          <p>Vul per product een regel in: aantal, prijs per stuk (excl. BTW), en het BTW-tarief. Je mag prijzen met komma of punt intikken, bijv. 12,50 of 12.50.</p>
           <p>Voorbeeld: 2× Lunch à €12,50, 9% BTW → totaal €27,25.</p>
           <p>Meerdere producten? Voeg een extra regel toe met "+ Productregel toevoegen".</p>
         </div>
@@ -154,22 +154,30 @@ export function ReceiptsSection({
                   className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm min-w-0"
                 />
                 <input
-                  type="number"
-                  min={0.01}
-                  step="0.01"
-                  value={line.quantity}
-                  onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })}
+                  type="text"
+                  inputMode="decimal"
+                  value={line.quantity === 0 ? "" : String(line.quantity).replace(".", ",")}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(",", ".");
+                    const parsed = raw === "" ? 0 : Number(raw);
+                    if (!Number.isNaN(parsed)) updateLine(i, { quantity: parsed });
+                  }}
+                  placeholder="1"
                   className="w-14 min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-sm text-center"
                   aria-label="Aantal"
                 />
                 <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={line.unitPrice}
-                  onChange={(e) => updateLine(i, { unitPrice: Number(e.target.value) })}
+                  type="text"
+                  inputMode="decimal"
+                  value={line.unitPrice === 0 ? "" : String(line.unitPrice).replace(".", ",")}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(",", ".");
+                    const parsed = raw === "" ? 0 : Number(raw);
+                    if (!Number.isNaN(parsed)) updateLine(i, { unitPrice: parsed });
+                  }}
+                  placeholder="0,00"
                   className="w-16 min-h-touch px-1 rounded-lg border border-neutral-300 bg-white text-sm text-center"
-                  aria-label="Prijs per stuk in euro's"
+                  aria-label="Prijs per stuk in euro's, met komma of punt"
                 />
                 <select
                   value={line.vatRate}
