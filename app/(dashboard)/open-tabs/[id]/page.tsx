@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import CloseTabButton from "./close-button";
+import { ReceiptsSection } from "./receipts-section";
 import Link from "next/link";
 
 export default async function OpenTabDetailPage({
@@ -19,6 +20,12 @@ export default async function OpenTabDetailPage({
   if (error || !tab) {
     notFound();
   }
+
+  const { data: receipts } = await supabase
+    .from("receipts")
+    .select("*, receipt_lines(*)")
+    .eq("open_tab_id", params.id)
+    .order("created_at", { ascending: false });
 
   return (
     <main className="p-4 max-w-2xl mx-auto">
@@ -44,11 +51,13 @@ export default async function OpenTabDetailPage({
         )}
       </div>
 
-      <div className="rounded-lg bg-neutral-100 p-4 mb-6 text-sm text-neutral-500 text-center">
-        Bonnen koppelen komt in de volgende bouwstap (Receipt Manager).
-      </div>
+      <ReceiptsSection openTabId={params.id} initialReceipts={receipts ?? []} />
 
-      {tab.status === "open" && <CloseTabButton tabId={tab.id} />}
+      {tab.status === "open" && (
+        <div className="mt-6">
+          <CloseTabButton tabId={tab.id} />
+        </div>
+      )}
     </main>
   );
 }
