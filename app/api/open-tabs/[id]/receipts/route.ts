@@ -63,15 +63,23 @@ export async function POST(
     return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
-  // Guardian Mode: impact-analyse — een gefactureerde rekening mag geen nieuwe bonnen
-  // meer krijgen, anders klopt de al gegenereerde factuur niet meer met de werkelijkheid.
+  // Guardian Mode: tenant-isolatie — deze select is RLS-gefilterd op eigen restaurant,
+  // dus als 'tab' hier null is, bestaat de rekening niet óf hoort die bij een ander
+  // restaurant. Dit moet expliciet als fout behandeld worden, niet stilzwijgend
+  // doorvallen naar "dus niet invoiced, dus toestaan" (dat was de eerdere bug-klasse).
   const { data: tab } = await supabase
     .from("open_tabs")
     .select("status")
     .eq("id", params.id)
     .single();
 
-  if (tab?.status === "invoiced") {
+  if (!tab) {
+    return NextResponse.json({ error: "Rekening niet gevonden" }, { status: 404 });
+  }
+
+  // Guardian Mode: impact-analyse — een gefactureerde rekening mag geen nieuwe bonnen
+  // meer krijgen, anders klopt de al gegenereerde factuur niet meer met de werkelijkheid.
+  if (tab.status === "invoiced") {
     return NextResponse.json(
       { error: "Deze rekening is al gefactureerd, er kunnen geen bonnen meer toegevoegd worden" },
       { status: 400 }

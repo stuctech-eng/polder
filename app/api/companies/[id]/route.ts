@@ -67,6 +67,7 @@ export async function PATCH(
       invoice_email: parsed.data.invoiceEmail || null,
       payment_term_days: parsed.data.paymentTermDays,
       notes: parsed.data.notes,
+      ...(parsed.data.isActive !== undefined ? { is_active: parsed.data.isActive } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.id)

@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
-const workflowRuleSchema = z.object({
-  invoiceFrequency: z.enum(["immediate", "weekly", "monthly", "per_project"]),
-  requiresApproval: z.boolean(),
+const schema = z.object({
+  receiptFields: z.record(z.boolean()),
 });
 
 export async function GET(
@@ -13,15 +12,16 @@ export async function GET(
 ) {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
-    .from("workflow_rules")
-    .select("*")
+    .from("configurations")
+    .select("value")
     .eq("company_id", params.id)
+    .eq("key", "receipt_fields")
     .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ workflowRule: data });
+  return NextResponse.json({ receiptFields: data?.value ?? {} });
 }
 
 export async function PUT(
@@ -36,7 +36,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const parsed = workflowRuleSchema.safeParse(body);
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Validatiefout", details: parsed.error.flatten() },
@@ -54,9 +54,9 @@ export async function PUT(
     return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
-  // Guardian Mode: tenant-isolatie — verifieer dat dit bedrijf echt bij het eigen
-  // restaurant hoort vóórdat we een workflow_rules-rij eraan koppelen (RLS op
-  // workflow_rules zelf checkt alleen de eigen restaurant_id-kolom, niet company_id).
+  // Tenant-isolatie: bevestig dat dit bedrijf bij het eigen restaurant hoort
+  // (zelfde les als v1.20 — RLS op 'configurations' checkt alleen restaurant_id,
+  // niet de relatie naar companies).
   const { data: company } = await supabase
     .from("companies")
     .select("id")
@@ -66,32 +66,29 @@ export async function PUT(
     return NextResponse.json({ error: "Bedrijf niet gevonden" }, { status: 404 });
   }
 
-  // Config-driven (governance 6.1/6.3): één regel per bedrijf, upsert i.p.v. maatwerkcode
   const { data: existing } = await supabase
-    .from("workflow_rules")
+    .from("configurations")
     .select("id")
     .eq("company_id", params.id)
+    .eq("key", "receipt_fields")
     .maybeSingle();
 
   let result;
   if (existing) {
     result = await supabase
-      .from("workflow_rules")
-      .update({
-        invoice_frequency: parsed.data.invoiceFrequency,
-        requires_approval: parsed.data.requiresApproval,
-      })
+      .from("configurations")
+      .update({ value: parsed.data.receiptFields })
       .eq("id", existing.id)
       .select()
       .single();
   } else {
     result = await supabase
-      .from("workflow_rules")
+      .from("configurations")
       .insert({
         restaurant_id: profile.restaurant_id,
         company_id: params.id,
-        invoice_frequency: parsed.data.invoiceFrequency,
-        requires_approval: parsed.data.requiresApproval,
+        key: "receipt_fields",
+        value: parsed.data.receiptFields,
       })
       .select()
       .single();
@@ -101,13 +98,5 @@ export async function PUT(
     return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 
-  await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
-    action: `stelde facturatieregel in (${parsed.data.invoiceFrequency})`,
-    target_table: "workflow_rules",
-    target_id: result.data.id,
-  });
-
-  return NextResponse.json({ workflowRule: result.data });
+  return NextResponse.json({ receiptFields: result.data.value });
 }

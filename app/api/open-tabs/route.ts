@@ -55,6 +55,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
+  // Guardian Mode: tenant-isolatie handhaven — RLS beschermt hier niet automatisch,
+  // want restaurant_id wordt door de server zelf gezet (op basis van de eigen sessie),
+  // niet afgeleid van het gekoppelde bedrijf. Zonder deze check zou iemand in theorie
+  // een company_id van een ANDER restaurant kunnen invullen en toch laten slagen.
+  if (parsed.data.companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("id", parsed.data.companyId)
+      .single();
+    // RLS filtert deze select al op eigen restaurant — als er niets terugkomt,
+    // bestaat het bedrijf niet of hoort het bij een ander restaurant.
+    if (!company) {
+      return NextResponse.json({ error: "Bedrijf niet gevonden" }, { status: 400 });
+    }
+
+    for (const [field, table] of [
+      ["departmentId", "departments"],
+      ["costCenterId", "cost_centers"],
+      ["projectId", "projects"],
+    ] as const) {
+      const value = parsed.data[field];
+      if (value) {
+        const { data: related } = await supabase
+          .from(table)
+          .select("id")
+          .eq("id", value)
+          .eq("company_id", parsed.data.companyId)
+          .single();
+        if (!related) {
+          return NextResponse.json(
+            { error: `Gekoppeld item (${field}) hoort niet bij dit bedrijf` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from("open_tabs")
     .insert({
