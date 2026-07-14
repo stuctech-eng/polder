@@ -80,6 +80,15 @@ Draai `supabase/migrations/0006_approval_engine_foundation.sql` in de Supabase S
 **Bekend openstaand punt (gepland, geen datum):**
 - **Eigen domein aanschaffen + verifiëren bij Resend** (~€5-15/jaar). Nodig om naar willekeurige e-mailadressen te kunnen versturen — dus vóór personeel/klanten worden toegevoegd, en sowieso vóór de Facturatie-module (facturen e-mailen). Tot die tijd: gebruik de SQL-noodprocedure hieronder voor wachtwoord-resets.
 
+**Zodra de klant akkoord geeft — laatste stappen om écht klaar te zijn:**
+1. Domein registreren (~€5-15/jaar)
+2. Domein toevoegen bij Resend → SPF/DKIM-records bij de domeinregistrar invoeren
+3. Wachten op verificatie (kan enkele uren duren, DNS-propagatie)
+4. Supabase SMTP-instellingen bijwerken: afzenderadres van `onboarding@resend.dev` naar bijv. `facturen@restaurantpolder.nl`
+5. Testen: wachtwoord-reset, teamuitnodiging, en factuur-mail nogmaals proberen naar een willekeurig (niet-test)adres
+
+Na deze 5 stappen werkt alles wat al gebouwd staat voor iedereen, niet alleen voor het testadres.
+
 **Nog te bouwen (na Fase 1):**
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
 - Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
