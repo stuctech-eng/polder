@@ -448,6 +448,30 @@ teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een a
 - **Nu mogelijk**: `approved_by` in de aankomende Approval Engine (Fase B) krijgt betekenis,
   want er kunnen nu losse, herkenbare accounts per medewerker bestaan
 
+**v1.24** — Bevestiging: teamuitnodiging technisch correct, zelfde Resend-limiet als v1.3 (geen architectuurwijziging):
+- Uitnodigingsflow (`inviteUser` → Supabase admin-API) bevestigd correct werkend — faalt
+  alleen op mailverzending naar niet-geverifieerde testadressen, exact zoals bij
+  wachtwoord-reset (v1.3). Geen codefout.
+- **Bijzonderheid ontdekt**: bij een mislukte uitnodiging (mailfout) heeft Supabase het
+  `auth.users`-record al aangemaakt vóórdat de mail faalt — onze code stopt vóór de
+  koppeling in `public.users`, wat een "weeskopie" achterlaat (auth-account zonder profiel).
+  Onschuldig zolang hetzelfde adres niet nogmaals geprobeerd wordt (geeft dan "already
+  registered"). Op te ruimen zodra nodig via Supabase Dashboard → Authentication → Users.
+- Volledige end-to-end bevestiging (mail daadwerkelijk aankomt bij een collega) wacht,
+  net als facturen mailen, op het geverifieerde Resend-domein.
+
+**v1.24a** — Bugfix: RLS-recursie in migratie 0008 (kritiek, geen architectuurwijziging):
+- De nieuwe policy "users can see team members" (migratie 0008) queryde de `users`-tabel
+  vanuit een policy die zelf óp `users` staat → oneindige recursie. Omdat vrijwel elke
+  andere tabel via `users` de eigen `restaurant_id` opzoekt, brak dit **alle** schermen
+  (zelfs Bedrijven), niet alleen Team.
+- Oplossing: `supabase/migrations/0009_fix_rls_recursion.sql` — een `SECURITY DEFINER`-
+  functie (`my_restaurant_id()`) die de RLS-check omzeilt bij het opzoeken van de eigen
+  restaurant_id, het standaard Postgres/Supabase-patroon voor zelfreferentiële policies.
+- Les: een policy op tabel X die tabel X zelf raadpleegt (zelfs onrechtstreeks via een
+  subquery) is een directe recursie-kandidaat — voortaan bij zelfreferentiële RLS-policies
+  altijd een `SECURITY DEFINER`-functie gebruiken i.p.v. een inline subquery.
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:

@@ -67,7 +67,10 @@ Draai `supabase/migrations/0006_approval_engine_foundation.sql` in de Supabase S
 
 **Belangrijk — actie vereist voor Teambeheer:**
 1. Draai `supabase/migrations/0008_team_management.sql` in de Supabase SQL Editor
-2. Controleer of `SUPABASE_SERVICE_ROLE_KEY` als environment variable in Vercel staat (was al nodig sinds het begin, maar wordt nu voor het eerst daadwerkelijk gebruikt in app-code — zie v1.23)
+2. Draai daarna óók `supabase/migrations/0009_fix_rls_recursion.sql` — 0008 bevat een kritieke RLS-recursiebug die **alle** schermen breekt (zie v1.24a), 0009 herstelt dit
+3. Controleer of `SUPABASE_SERVICE_ROLE_KEY` als environment variable in Vercel staat (bevestigd aanwezig en werkend)
+
+**✅ Fase A.5 volledig bevestigd werkend** (v1.24/v1.24a): teamlijst, uitnodigen (technisch correct — mailbezorging wacht op Resend-domein, zelfde beperking als wachtwoord-reset), rol wijzigen, activeren/deactiveren.
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`
