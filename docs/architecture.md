@@ -592,6 +592,17 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.32** — Handleiding toegevoegd + navigatie herbouwd (geen architectuurwijziging):
+- **Handleiding** (`/handleiding`): geen rechten-check op lezen (klant-overleg: bewust voor
+  iedereen beschikbaar, ook voor de developer als geheugensteun) — wel rolafhankelijk
+  gesorteerd: eigen rol-relevante secties staan open bovenaan, de rest staat er ook maar
+  dichtgeklapt, zodat niemand hoeft te zoeken maar ook niets verborgen blijft. Bevat 7
+  functionele secties + een rollen/rechten-overzichtstabel die direct de `PERMISSIONS`-matrix
+  uit `role-helpers.ts` weergeeft (geen dubbele bron van waarheid).
+- **Navigatie herbouwd** als horizontale scrollbare pill-knoppenbalk (`overflow-x-auto`,
+  snap-scroll) — de tekstlink-rij paste niet meer prettig op één regel nu er 6+ items zijn.
+  Handleiding-link zit in dezelfde balk (altijd zichtbaar), geen apart icoon.
+
 **v1.31** — Definitieve rechtenmatrix + volledige migratie van alle bestaande routes (klant-goedgekeurd, grote refactor, geen architectuurwijziging — wel de beloofde eenmalige investering):
 - **Rechtenmatrix vastgelegd** in `role-helpers.ts` als single source of truth (zie tabel
   in de code-comment aldaar): 11 permissies (`VIEW_DASHBOARD`, `VIEW_REVENUE`,

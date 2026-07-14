@@ -27,45 +27,39 @@ export default async function DashboardLayout({
   const can = (permission: Parameters<typeof hasPermission>[1]) =>
     role ? hasPermission(role, permission) : false;
 
+  const navItems: { href: string; label: string; visible: boolean }[] = [
+    { href: "/dashboard", label: "Dashboard", visible: can("VIEW_DASHBOARD") },
+    { href: "/companies", label: "Bedrijven", visible: can("MANAGE_COMPANIES") },
+    { href: "/open-tabs", label: "Rekeningen", visible: can("MANAGE_OPEN_TABS") },
+    { href: "/invoices", label: "Facturen", visible: can("MANAGE_INVOICES") },
+    { href: "/daily-closing", label: "Dagafsluiting", visible: can("VIEW_DAILY_CLOSING") },
+    { href: "/team", label: "Team", visible: can("MANAGE_TEAM") },
+    { href: "/handleiding", label: "? Handleiding", visible: true },
+  ];
+
   return (
     <div>
-      <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 bg-white sticky top-0 z-10">
-        <div className="flex items-center gap-4">
+      <header className="border-b border-neutral-200 bg-white sticky top-0 z-10">
+        <div className="flex items-center justify-between px-4 py-3">
           <span className="font-semibold">Polder</span>
-          <nav className="flex gap-3 text-sm text-neutral-500">
-            {can("VIEW_DASHBOARD") && (
-              <Link href="/dashboard" className="min-h-touch flex items-center">
-                Dashboard
-              </Link>
-            )}
-            {can("MANAGE_COMPANIES") && (
-              <Link href="/companies" className="min-h-touch flex items-center">
-                Bedrijven
-              </Link>
-            )}
-            {can("MANAGE_OPEN_TABS") && (
-              <Link href="/open-tabs" className="min-h-touch flex items-center">
-                Rekeningen
-              </Link>
-            )}
-            {can("MANAGE_INVOICES") && (
-              <Link href="/invoices" className="min-h-touch flex items-center">
-                Facturen
-              </Link>
-            )}
-            {can("VIEW_DAILY_CLOSING") && (
-              <Link href="/daily-closing" className="min-h-touch flex items-center">
-                Dagafsluiting
-              </Link>
-            )}
-            {can("MANAGE_TEAM") && (
-              <Link href="/team" className="min-h-touch flex items-center">
-                Team
-              </Link>
-            )}
-          </nav>
+          <LogoutButton />
         </div>
-        <LogoutButton />
+        <nav
+          className="flex gap-2 px-4 pb-3 overflow-x-auto snap-x snap-mandatory"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {navItems
+            .filter((item) => item.visible)
+            .map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="min-h-touch px-4 flex items-center justify-center rounded-full border border-neutral-200 bg-neutral-50 text-sm text-neutral-700 whitespace-nowrap snap-start active:bg-neutral-100"
+              >
+                {item.label}
+              </Link>
+            ))}
+        </nav>
       </header>
       {children}
     </div>

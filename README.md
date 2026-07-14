@@ -56,6 +56,8 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ **Fase B gebouwd — Approval Engine core + PIN + Restaurant-bevestigt**: volledige vertical slice werkend end-to-end: bon aanmaken → (indien bedrijf approval vereist) automatisch `pending_approval` → goedkeuren via PIN of "Restaurant bevestigt" → `locked` → geblokkeerd voor wijzigen/verwijderen → factuur weigert bonnen die nog wachten op goedkeuring. Instelbaar per bedrijf op de bedrijfsdetailpagina.
 - ✅ **Daily Closing Engine** (`/daily-closing`): dagelijkse operationele controle, los van het Dashboard (dat blijft managementinformatie). Toont omzet vandaag, zakelijke omzet, openstaande rekeningen, bonnen in afwachting van goedkeuring, met eerlijke "n.v.t."-markering voor controles die nog niet mogelijk zijn (afkeuren, kassa-import, betaalmethode-splitsing). Alleen eigenaar/manager kunnen de dag afsluiten.
 - ✅ **Definitieve rechtenmatrix + volledige rolbeperking**: elke rol (eigenaar/manager/administratie/bediening/keuken) ziet nu alleen wat bij die rol hoort — zowel in de navigatie als in elke API-route. Bediening ziet bijv. geen omzetcijfers of bedrijvenbeheer, alleen rekeningen/bonnen. Zie `lib/user-management/role-helpers.ts` voor de volledige matrix.
+- ✅ **Handleiding** (`/handleiding`): voor iedereen toegankelijk (geen rechten-check op lezen), rolafhankelijk gesorteerd — eigen rol-secties staan open bovenaan, de rest staat er ook maar dichtgeklapt. Bevat ook een rollen/rechten-overzichtstabel.
+- ✅ **Navigatie herbouwd** als horizontale scrollbare knoppenbalk (pill-stijl) — schaalt beter nu er meer secties zijn dan op één regel passen.
 - ⬜ Fase C (E-mail + QR-provider), Fase D (digitale handtekening — nodig zodra de **bedrijfsklant zelf** moet kunnen goedkeuren, i.p.v. alleen intern personeel via PIN)
 
 **Belangrijk — extra actie vereist voor Facturatie:**
@@ -95,6 +97,8 @@ Na deze 5 stappen werkt alles wat al gebouwd staat voor iedereen, niet alleen vo
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
 - Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
 - **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner
+- **Configureerbare rechtenmatrix**: rechten per rol staan nu vast in code (`role-helpers.ts`). Vervolgstap: verplaatsen naar een databasetabel (`role_permissions`) + scherm op de Team-pagina zodat de eigenaar zelf per rol rechten aan/uit kan zetten, zonder codewijziging. Architectuur is er al op voorbereid (`requireRole()` roept nu een hardcoded check aan die later een database-query wordt).
+- **Handleiding** (in-app, alle rollen): stap-voor-stap uitleg per functie, rolbewust — zie aparte planning in `docs/architecture.md` sectie 12.
 
 **Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
 ```sql
