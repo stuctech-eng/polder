@@ -24,7 +24,8 @@ export type DomainEventType =
   | "UserDeactivated"
   | "ApprovalRequested"
   | "ApprovalCompleted"
-  | "ReceiptLocked";
+  | "ReceiptLocked"
+  | "DayClosed";
 
 export interface DomainEvent<TPayload = Record<string, unknown>> {
   restaurantId: string;

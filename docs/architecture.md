@@ -541,7 +541,56 @@ teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een a
   `closed` en `invoiced` in — alleen het toevoegen van *nieuwe* bonnen wordt geblokkeerd
   bij sluiting. Dat behoudt de ruimte om een foutje te corrigeren vóór facturatie.
 
-## 9. WIJZIGINGSHISTORIE
+## 9. UITBREIDING: DAILY CLOSING ENGINE (goedgekeurd, klant-specificatie)
+
+Status: **goedgekeurd, direct geïmplementeerd** (v1.30).
+
+Bewust **geen** Dashboard-uitbreiding — het Dashboard is managementinformatie (omzet,
+trends, activiteit); Daily Closing is een operationele controle die dagelijks vóór
+kassa-afsluiting wordt uitgevoerd. Twee verschillende verantwoordelijkheden, twee modules.
+
+```
+lib/daily-closing/daily-closing-service.ts   → verzamelt data uit andere modules
+supabase/migrations/0010_daily_closing.sql   → daily_closings-tabel
+app/api/daily-closing/route.ts               → GET (status), POST (dag afsluiten)
+app/(dashboard)/daily-closing/page.tsx       → controlepagina
+```
+
+De service **verzamelt** informatie uit Receipt Manager / Open Rekeningen / Approval Engine
+/ Invoice Engine — neemt nooit hun logica over, alleen lezen (governance 6.2: database is
+bron van waarheid, geen dubbele state).
+
+**Bekende, bewust benoemde gaten (geen verzonnen "✓" tonen waar het niet klopt):**
+- Contante/pin-omzet-splitsing: n.v.t. — geen betaalmethode-registratie op bonnen (nog)
+- "Afgekeurde bonnen"-teller: er bestaat geen afkeuren-actie in de Approval Engine (alleen
+  goedkeuren) — deze teller toont altijd 0, geen echte controle totdat dat gebouwd is
+- "Niet gekoppelde/ontbrekende bonnen": hoort bij Fase 2 (Import Engine/kassa-koppeling),
+  n.v.t. in de huidige handmatige flow
+
+**Toegang:** nieuwe permissie `MANAGE_DAILY_CLOSING` (eigenaar/manager), zelfde patroon als
+`APPROVE_RECEIPTS`.
+
+**Bewust uitgesteld** (stond zelf al onder "Later" in de klant-spec): heropenen van een
+afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), UI nog niet.
+
+**v1.30** — Daily Closing Engine geïmplementeerd (klant-goedgekeurd, zelfstandige module, geen Dashboard-uitbreiding):
+- `lib/daily-closing/daily-closing-service.ts`: verzamelt data uit Receipt Manager, Open
+  Rekeningen, Approval Engine en Invoice Engine — leest alleen, neemt geen logica over
+  (governance 6.2)
+- Migratie 0010: `daily_closings`-tabel, met kolommen al klaar voor toekomstige heropening
+  (`reopened_at`/`reopened_by`), UI daarvoor bewust nog niet gebouwd (klant-spec noemde dit
+  zelf al "Later")
+- Nieuwe permissie `MANAGE_DAILY_CLOSING` (eigenaar/manager), zelfde patroon als
+  `APPROVE_RECEIPTS`; bekijken via bestaande `VIEW_REPORTS`
+- Nieuw event: `DayClosed`
+- **Bewust eerlijke "n.v.t."-markeringen** i.p.v. valse ✓: afkeuren van bonnen bestaat nog
+  niet in de Approval Engine (alleen goedkeuren), kassa-import/ontbrekende-bonnen-detectie
+  hoort bij Fase 2, betaalmethode (contant/pin) wordt nog niet per bon vastgelegd — deze
+  controles tonen expliciet "niet van toepassing", niet een misleidende groene vink
+- Onderscheid met Dashboard nu scherp: Dashboard = managementinformatie (maandomzet,
+  trends, top bedrijven), Daily Closing = operationele controle vóór kassa-afsluiting
+
+## 10. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
 - Integration Engine (generiek, i.p.v. Receipt-specifieke sub-engines)
@@ -809,9 +858,9 @@ in sectie 10.7 — codebase-review, vertical slice-aanpak, nieuwe/gewijzigde bes
 Bouwvolgorde per klant-instructie: migraties → interfaces → service → providers → routes →
 UI → lock-enforcement → events → audit → end-to-end test.
 
-## 10. STATUS
+## 11. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET (v1.28).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET, Daily Closing Engine COMPLEET (v1.30).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

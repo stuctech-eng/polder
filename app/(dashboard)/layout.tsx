@@ -24,6 +24,9 @@ export default function DashboardLayout({
             <Link href="/invoices" className="min-h-touch flex items-center">
               Facturen
             </Link>
+            <Link href="/daily-closing" className="min-h-touch flex items-center">
+              Dagafsluiting
+            </Link>
             <Link href="/team" className="min-h-touch flex items-center">
               Team
             </Link>

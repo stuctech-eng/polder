@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   APPROVE_RECEIPTS: ["owner", "manager"],
   MANAGE_INVOICES: ["owner", "administratie"],
   VIEW_REPORTS: ["owner", "administratie", "manager"],
+  MANAGE_DAILY_CLOSING: ["owner", "manager"],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
