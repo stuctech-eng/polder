@@ -3,6 +3,21 @@
 Digitale administratie voor zakelijke "op rekening"-bestellingen bij Café Restaurant Polder.
 Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, sectie 3).
 
+## 🚦 Start hier (nieuwe chatsessie / nieuwe Claude-instantie)
+
+**Lees eerst dit bestand volledig, daarna `docs/architecture.md` (vooral sectie 9 Wijzigingshistorie en sectie 10 Status).** Deze twee bestanden samen bevatten alles om zonder verlies verder te werken.
+
+1. **Waar staan we nu:** Fase 1 (MVP) is compleet en end-to-end getest. Een klant-goedgekeurde uitbreiding (Approval Engine + Bedrijfsreferenties) is in uitvoering: Fase A is gebouwd, **Fase B is volledig gepland maar nog niet geïmplementeerd** — zie `docs/architecture.md` sectie 10.7 voor het exacte, goedgekeurde implementatieplan (nieuwe bestanden, database-wijzigingen, risico's).
+2. **Eerstvolgende actie:** Fase B bouwen volgens het plan in sectie 10.7 — bouwvolgorde: migratie → interfaces → service → providers → routes → UI → lock-enforcement → events → audit → end-to-end test.
+3. **Werkwijze die de hele tijd is aangehouden** (belangrijk om vast te houden):
+   - Elke wijziging: lokaal `npx tsc --noEmit` + `npm run build` testen vóórdat een ZIP wordt aangeboden
+   - Na elke feature: **zowel** README als `docs/architecture.md` bijwerken in dezelfde stap (wijzigingshistorie ophogen, bijv. v1.23)
+   - SQL-migraties altijd **ook als kopieerblok in de chat**, niet alleen in het ZIP-bestand
+   - Eén complete ZIP per keer (heel project, nooit losse bestanden) — zie "Bekende valkuil" hieronder
+   - Nieuwe API-routes die een parent-ID accepteren: altijd ownership/tenant-isolatie verifiëren (zie v1.20 voor waarom)
+   - Nieuwe "vergrendel na actie X"-logica: altijd op **twee niveaus** — UI (verbergen) én API (server-side afdwingen), nooit alleen UI (zie v1.18/v1.19)
+4. **Bekende valkuil:** de gebruiker werkt vanaf een iPhone via Working Copy. Bestanden worden soms niet volledig overschreven bij het kopiëren van een ZIP naar de repo — vraag bij twijfel of de gebruiker de volledige, actuele bestandsinhoud terug kan plakken in de chat ter controle (zie v1.4-discussie rond README-synchronisatie).
+
 ## Status
 
 **Live omgeving:**

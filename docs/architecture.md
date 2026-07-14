@@ -335,6 +335,46 @@ approvals (per bon: method, approved_by, approved_at, status, signature_data,
 | **C** | E-mail-provider (hergebruikt Email Engine), QR-provider | Na B |
 | **D** | Digitale handtekening + uitgebreide audit-logging | Na C, meest hardware-specifiek |
 
+### 10.7 Fase B — Implementatieplan (vastgelegd vóór bouwen, Guardian Mode)
+
+**Bevindingen uit codebase-review (vooraf, conform de gevraagde werkwijze):**
+- De `EventBus`-class in `lib/events/event-bus.ts` wordt nergens aangeroepen. Alle bestaande
+  routes schrijven direct naar `domain_events` via `supabase.from("domain_events").insert(...)`.
+  Fase B volgt dit **daadwerkelijk gebruikte** patroon, niet de ongebruikte class.
+- Er bestaat nog geen gecodeerde Email Provider Interface — alleen gedocumenteerd (governance
+  6.4). Resend loopt via Supabase Auth SMTP, niet via eigen app-code. Er is dus geen bestaand
+  provider-codepatroon om te kopiëren; de Approval Provider Interface is de eerste van dit soort.
+- Fase A (migratie 0006) dekt het meeste schema al: `approval_settings` en `approvals` bestaan,
+  `receipts.status` accepteert al de uitgebreide workflow-waarden. Alleen een kleine uitbreiding
+  nodig: `pin_hash` op `approval_settings`, `requested_at`/`metadata`/`expired` op `approvals`.
+
+**Vertical slice:** `Receipt → Approval Request → PIN/Restaurant Confirmation → Approved → Locked → Audit`,
+volledig werkend end-to-end, niet alleen schema/instellingen.
+
+**Nieuwe bestanden:**
+| Bestand | Doel |
+|---|---|
+| `supabase/migrations/0007_approval_engine_extend.sql` | `pin_hash`, `requested_at`/`metadata`/`expired` |
+| `lib/approval/types.ts` | `ApprovalProvider`-interface, `ApprovalMethod`-type |
+| `lib/approval/providers/pin-provider.ts` | PIN hashen/verifiëren (Node `crypto.scrypt`, geen extra dependency) |
+| `lib/approval/providers/restaurant-confirm-provider.ts` | Triviale provider |
+| `app/api/companies/[id]/approval-settings/route.ts` | GET/PUT — methode + PIN instellen (write-only) |
+| `app/api/receipts/[id]/request-approval/route.ts` | POST — bon naar `pending_approval` |
+| `app/api/receipts/[id]/approve/route.ts` | POST — dispatcht naar provider, bij succes `approved → locked` |
+| `ApprovalSettingsSection` (in `sub-entities.tsx`) | UI: aan/uit, methode, PIN instellen |
+
+**Bestaande bestanden die wijzigen:**
+- `app/api/open-tabs/[id]/receipts/route.ts` — na aanmaken automatisch `request-approval` triggeren indien vereist
+- `app/api/receipts/[id]/route.ts` — bewerken/verwijderen ook blokkeren bij `status = locked`
+- `app/api/open-tabs/[id]/generate-invoice/route.ts` — weigeren bij een gekoppelde bon met `pending_approval`
+- `receipts-section.tsx` — toont status + juiste invoerveld (PIN/bevestigknop), bevat zelf geen providerlogica
+- `open-tabs/[id]/page.tsx` — haalt `approval_settings` op, geeft door aan `ReceiptsSection`
+
+**Risico's:**
+- PIN nooit plat opslaan/teruggeven — alleen hash-vergelijking server-side
+- Bestaande bonnen (`status: linked`) blijven ongemoeid — additief, geen data-migratie
+- Statusovergangen strikt server-side afgedwongen (zelfde patroon als het `invoiced`-lock-mechanisme, v1.17-v1.20)
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
@@ -598,7 +638,14 @@ approvals (per bon: method, approved_by, approved_at, status, signature_data,
   voor bedrijven zonder Approval-configuratie
 - Fasering A-D vastgelegd; **Fase B (welke provider eerst) wacht op klantkeuze**
 
+**v1.22** — Fase B geplant (nog niet geïmplementeerd): volledig implementatieplan vastgelegd
+in sectie 10.7 — codebase-review, vertical slice-aanpak, nieuwe/gewijzigde bestanden, risico's.
+Bouwvolgorde per klant-instructie: migraties → interfaces → service → providers → routes →
+UI → lock-enforcement → events → audit → end-to-end test.
+
 ## 10. STATUS
 
-**Architectuur: BEVROREN — v1.0.** **Implementatie: Fase 1 COMPLEET (v1.16).** Dit document is `docs/architecture.md` en staat per sectie 3 boven aannames. Actuele voortgang en live-omgeving details: zie `README.md` in de repo-root. Volgende stap: polijstronde, of doorgaan naar Fase 2 (Integration Engine/plugin-systeem).
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, zie sectie 8). **Implementatie: Fase 1 COMPLEET + Fase A van de uitbreiding COMPLEET. Fase B VOLLEDIG GEPLAND, NOG NIET GEBOUWD** (sectie 10.7). Dit document staat per sectie 3 boven aannames.
+
+**Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  
