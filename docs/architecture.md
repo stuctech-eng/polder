@@ -529,6 +529,18 @@ teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een a
 - Klant-eis nageleefd: geen directe koppeling Receipt Manager ↔ Approval Providers —
   alle communicatie loopt via `approval-service.ts`
 
+**v1.29** — Bugfix: gesloten rekeningen konden nog nieuwe bonnen krijgen (geen architectuurwijziging):
+- Ontdekt bij een operationele vraag: eerder communiceerde ik dat "gesloten" betekent
+  "gast is klaar, geen bon meer bij" (bij de invoering van de statusfilter, v1.9), maar
+  de server blokkeerde alleen op `status = invoiced`, niet op `status = closed` — een
+  inconsistentie tussen beschreven en afgedwongen gedrag.
+- Oplossing: `/api/open-tabs/[id]/receipts` (POST) staat nu alleen nog bonnen toe bij
+  `status = open`; UI-knop "+ Bon toevoegen" verdwijnt nu ook bij `closed` (voorheen alleen
+  bij `invoiced`), met aparte, duidelijke meldingen per situatie.
+- Bewuste keuze: **bewerken/verwijderen van al bestaande bonnen** blijft mogelijk tussen
+  `closed` en `invoiced` in — alleen het toevoegen van *nieuwe* bonnen wordt geblokkeerd
+  bij sluiting. Dat behoudt de ruimte om een foutje te corrigeren vóór facturatie.
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:

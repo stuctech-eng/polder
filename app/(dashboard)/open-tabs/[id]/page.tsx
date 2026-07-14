@@ -88,6 +88,7 @@ export default async function OpenTabDetailPage({
         openTabId={params.id}
         initialReceipts={receipts ?? []}
         isInvoiced={tab.status === "invoiced"}
+        canAddReceipts={tab.status === "open"}
         approvalMethod={
           approvalSettings?.enabled &&
           (approvalSettings.method === "pin" || approvalSettings.method === "restaurant_confirms")

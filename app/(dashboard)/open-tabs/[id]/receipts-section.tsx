@@ -36,11 +36,13 @@ export function ReceiptsSection({
   openTabId,
   initialReceipts,
   isInvoiced = false,
+  canAddReceipts = true,
   approvalMethod = null,
 }: {
   openTabId: string;
   initialReceipts: Receipt[];
   isInvoiced?: boolean;
+  canAddReceipts?: boolean;
   approvalMethod?: "pin" | "restaurant_confirms" | null;
 }) {
   const router = useRouter();
@@ -111,7 +113,7 @@ export function ReceiptsSection({
     <div className="border-t border-neutral-200 pt-4 mt-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-neutral-700">Bonnen</h2>
-        {!isInvoiced && (
+        {canAddReceipts && (
           <button
             onClick={() => setShowForm((v) => !v)}
             className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-sm font-medium"
@@ -121,9 +123,11 @@ export function ReceiptsSection({
         )}
       </div>
 
-      {isInvoiced && (
+      {!canAddReceipts && (
         <p className="text-xs text-neutral-400 mb-2">
-          Deze rekening is al gefactureerd — er kunnen geen bonnen meer toegevoegd worden.
+          {isInvoiced
+            ? "Deze rekening is al gefactureerd — er kunnen geen bonnen meer toegevoegd worden."
+            : "Deze rekening is gesloten — er kunnen geen bonnen meer toegevoegd worden."}
         </p>
       )}
 

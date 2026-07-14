@@ -78,11 +78,17 @@ export async function POST(
     return NextResponse.json({ error: "Rekening niet gevonden" }, { status: 404 });
   }
 
-  // Guardian Mode: impact-analyse — een gefactureerde rekening mag geen nieuwe bonnen
-  // meer krijgen, anders klopt de al gegenereerde factuur niet meer met de werkelijkheid.
-  if (tab.status === "invoiced") {
+  // Guardian Mode: impact-analyse — zodra een rekening gesloten is, komt de gast niet
+  // meer terug voor extra bestellingen. Alleen een OPEN rekening mag nieuwe bonnen
+  // krijgen — "closed" en "invoiced" zijn beide eindstadia voor nieuwe bonnen.
+  if (tab.status !== "open") {
     return NextResponse.json(
-      { error: "Deze rekening is al gefactureerd, er kunnen geen bonnen meer toegevoegd worden" },
+      {
+        error:
+          tab.status === "invoiced"
+            ? "Deze rekening is al gefactureerd, er kunnen geen bonnen meer toegevoegd worden"
+            : "Deze rekening is gesloten, er kunnen geen bonnen meer toegevoegd worden",
+      },
       { status: 400 }
     );
   }
