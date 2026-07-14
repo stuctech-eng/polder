@@ -17,7 +17,11 @@ export type DomainEventType =
   | "PaymentReceived"
   | "ImportFailed"
   | "ImportCompleted"
-  | "ConnectorError";
+  | "ConnectorError"
+  | "UserInvited"
+  | "UserRoleChanged"
+  | "UserActivated"
+  | "UserDeactivated";
 
 export interface DomainEvent<TPayload = Record<string, unknown>> {
   restaurantId: string;

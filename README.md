@@ -52,7 +52,8 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 
 **🆕 Klant-goedgekeurde uitbreiding: Approval Engine + Bedrijfsreferenties (zie architecture.md sectie 8)**
 - ✅ **Fase A gebouwd**: `company_codes` (generieke routecode/WBS/budgetcode-tabel per bedrijf), verplichte-velden-configuratie per bedrijf (hergebruikt bestaande `configurations`-tabel), schema-voorbereiding voor de uitgebreide statusworkflow (additief, bestaand gedrag ongewijzigd)
-- ⬜ **Fase B (Approval Engine basis: PIN + Restaurant-bevestigt)** — wacht op klantkeuze welke goedkeuringsmethode eerst
+- ✅ **Fase A.5 gebouwd — Teambeheer / User Management Module**: medewerkers uitnodigen met eigen account/rol, rol wijzigen, activeren/deactiveren, verwijderen (met bescherming laatste eigenaar + FK-veilige foutafhandeling), centrale autorisatielaag (`lib/user-management/permission-service.ts` — verplicht voor alle nieuwe routes vanaf nu), Dashboard toont nu wie welke actie deed
+- ⬜ **Fase B (Approval Engine basis: PIN + Restaurant-bevestigt)** — kan nu beginnen, wacht nog op klantkeuze welke methode eerst
 - ⬜ Fase C (E-mail + QR-provider), Fase D (digitale handtekening)
 
 **Belangrijk — extra actie vereist voor Facturatie:**
@@ -63,6 +64,10 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 
 **Belangrijk — actie vereist voor de nieuwe uitbreiding:**
 Draai `supabase/migrations/0006_approval_engine_foundation.sql` in de Supabase SQL Editor vóór je de nieuwe "Bedrijfsreferenties"/"Verplichte velden"-secties gebruikt.
+
+**Belangrijk — actie vereist voor Teambeheer:**
+1. Draai `supabase/migrations/0008_team_management.sql` in de Supabase SQL Editor
+2. Controleer of `SUPABASE_SERVICE_ROLE_KEY` als environment variable in Vercel staat (was al nodig sinds het begin, maar wordt nu voor het eerst daadwerkelijk gebruikt in app-code — zie v1.23)
 
 **Resend SMTP-configuratie (vastgelegd):**
 - Host: `smtp.resend.com`, Port: `465`, Username: `resend`

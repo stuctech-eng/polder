@@ -7,7 +7,7 @@ const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
 const REDIRECT_IF_AUTHENTICATED = ["/login", "/forgot-password"];
 
 export async function middleware(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const { response, user, isActive } = await updateSession(request);
 
   const isPublicPath = PUBLIC_PATHS.some((path) =>
     request.nextUrl.pathname.startsWith(path)
@@ -20,11 +20,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Gedeactiveerd account: wel een geldige sessie, maar geen toegang meer (Fase A.5)
+  if (user && !isActive && !isPublicPath) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("deactivated", "1");
+    return NextResponse.redirect(loginUrl);
+  }
+
   // Al ingelogd + op login/forgot-password → door naar bedrijvenoverzicht
   const isRedirectIfAuthPath = REDIRECT_IF_AUTHENTICATED.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
-  if (user && isRedirectIfAuthPath) {
+  if (user && isActive && isRedirectIfAuthPath) {
     return NextResponse.redirect(new URL("/companies", request.url));
   }
 

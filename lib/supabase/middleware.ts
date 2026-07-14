@@ -37,5 +37,17 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return { response, user };
+  let isActive = true;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("is_active")
+      .eq("id", user.id)
+      .maybeSingle();
+    // Onbekend profiel (bijv. net uitgenodigd, nog niet gekoppeld) blokkeert niet vooraf —
+    // dat wordt al elders afgevangen (bijv. "Geen restaurantprofiel gevonden" in routes).
+    isActive = profile?.is_active !== false;
+  }
+
+  return { response, user, isActive };
 }

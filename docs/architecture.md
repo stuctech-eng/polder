@@ -375,6 +375,79 @@ volledig werkend end-to-end, niet alleen schema/instellingen.
 - Bestaande bonnen (`status: linked`) blijven ongemoeid — additief, geen data-migratie
 - Statusovergangen strikt server-side afgedwongen (zelfde patroon als het `invoiced`-lock-mechanisme, v1.17-v1.20)
 
+### 10.8 Fase A.5 — Teambeheer / User Management Module (vastgelegd, goedgekeurd met aanpassingen)
+
+**Verplicht vóór Fase B**: `approved_by` in de Approval Engine heeft pas waarde met échte,
+losse gebruikersaccounts per medewerker i.p.v. één gedeeld eigenaarsaccount.
+
+**Klant-aanpassingen op het oorspronkelijke plan:**
+1. `permissions.ts` wordt vanaf nu **standaard voor alle nieuwe code** — nooit meer losse
+   `if (user.role === ...)`-checks, altijd `requireRole()`/`hasPermission()`. Bestaande routes
+   worden niet in dezelfde stap omgebouwd (scope-bewaking), maar elke nieuwe route vanaf nu wel.
+2. De Team Service is **generiek gebruikersbeheer**, geen "invite service": `listTeam`,
+   `inviteUser`, `updateRole`, `activateUser`, `deactivateUser`, `removeUser` — zodat
+   `resetPassword`/`resendInvitation`/`enable2FA`/`updateProfile` er later zonder
+   architectuurwijziging bij kunnen.
+3. **Gebouwd als generieke User Management Module**, niet als restaurant-specifieke pagina:
+
+```
+lib/user-management/
+├── role-helpers.ts        → roldefinities + permissie-matrix
+├── permission-service.ts  → requireRole()/hasPermission() — centrale autorisatielaag
+├── user-repository.ts     → data-access (rechtstreekse Supabase-queries)
+├── invitation-service.ts  → uitnodigen via Supabase admin-API
+├── team-service.ts        → orchestreert repository + invitation + permissions + events
+└── events.ts              → publiceert UserInvited/UserRoleChanged/UserActivated/UserDeactivated
+```
+De UI heet "Team", de architectuur eronder is generiek en herbruikbaar voor andere modules.
+
+**Nieuwe migratie:** `0008_team_management.sql` — `is_active` op `users`, RLS-policy zodat
+teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een ander restaurant).
+
+**Nieuwe bestanden (naast de module hierboven):**
+- `lib/supabase/admin.ts` — service-role client, uitsluitend server-side
+- `app/api/team/route.ts` (GET/POST), `app/api/team/[id]/route.ts` (PATCH/DELETE)
+- `app/(dashboard)/team/page.tsx` + formulieren
+
+**Bestaande bestanden die wijzigen:**
+- `lib/events/types.ts` — 4 nieuwe events
+- `middleware.ts` — gedeactiveerde gebruikers blokkeren
+- `dashboard/page.tsx` — Activity Log toont naam i.p.v. alleen actie
+- `layout.tsx` — "Team"-navigatielink
+
+**Risico's/guards:**
+- Service-role key: eerste gebruik in app-code, nooit richting client
+- Eigenaar kan zichzelf niet deactiveren/verwijderen; laatste eigenaar van een restaurant
+  is altijd beschermd (expliciete guard in `team-service.ts`, niet database-afgedwongen)
+- FK-constraints (`activity_log.user_id`, `audit_log.changed_by`) voorkomen al hard
+  verwijderen van gebruikers met historie — nette foutafhandeling i.p.v. 500-fout
+- Uitnodigingsmail deelt de Resend-testlimiet met wachtwoord-reset (bekend, v1.3)
+
+**Status: goedgekeurd, bouwen.**
+
+**v1.23** — Fase A.5 geïmplementeerd: Teambeheer / User Management Module (klant-goedgekeurd, met aanpassingen):
+- **User Management Module** gebouwd als generieke architectuur (`lib/user-management/`):
+  `role-helpers.ts` (permissie-matrix), `permission-service.ts` (`requireRole`/`hasPermission`
+  — centrale autorisatielaag, verplicht voor alle nieuwe routes vanaf nu), `user-repository.ts`
+  (data-access), `invitation-service.ts` (Supabase admin-API), `team-service.ts` (orchestratie:
+  listTeam/inviteUser/updateRole/activateUser/deactivateUser/removeUser — bewust generiek
+  genoemd, niet "invite-service", zodat resetPassword/2FA er later bij kunnen), `events.ts`
+- 4 nieuwe events: `UserInvited`, `UserRoleChanged`, `UserActivated`, `UserDeactivated`
+- **Guards**: eigenaar kan zichzelf niet deactiveren/verwijderen; laatste actieve eigenaar van
+  een restaurant is altijd beschermd tegen degraderen/deactiveren/verwijderen; FK-constraints
+  (bestonden al) voorkomen hard verwijderen van gebruikers met historie — nu netjes vertaald
+  naar een begrijpelijke foutmelding i.p.v. ruwe database-error
+- `lib/supabase/admin.ts`: **eerste gebruik van de service-role key in app-code**, strikt
+  server-side, nooit richting client
+- Middleware uitgebreid: gedeactiveerde gebruikers worden uitgelogd met duidelijke melding
+- Dashboard Activity Log toont nu de naam van de gebruiker, niet alleen de actie
+- Team-pagina (`/team`) met uitnodigen, rol wijzigen, activeren/deactiveren, verwijderen
+- **Bewuste scope-afbakening**: bestaande routes (bedrijven/rekeningen/bonnen/facturen)
+  zijn niet omgebouwd naar `requireRole()` — dat is een aparte, latere stap. Alleen nieuwe
+  code (Team-routes) gebruikt vanaf nu de centrale autorisatielaag.
+- **Nu mogelijk**: `approved_by` in de aankomende Approval Engine (Fase B) krijgt betekenis,
+  want er kunnen nu losse, herkenbare accounts per medewerker bestaan
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
@@ -645,7 +718,7 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 ## 10. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, zie sectie 8). **Implementatie: Fase 1 COMPLEET + Fase A van de uitbreiding COMPLEET. Fase B VOLLEDIG GEPLAND, NOG NIET GEBOUWD** (sectie 10.7). Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET (v1.23). Fase B (Approval Engine) VOLLEDIG GEPLAND, NOG NIET GEBOUWD** (sectie 10.7 — kan nu beginnen, `approved_by` heeft nu betekenis dankzij Fase A.5). Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

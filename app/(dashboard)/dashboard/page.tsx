@@ -24,7 +24,7 @@ export default async function DashboardPage() {
     supabase.from("invoices").select("total, companies(name)"),
     supabase
       .from("activity_log")
-      .select("action, created_at")
+      .select("action, created_at, users(full_name)")
       .order("created_at", { ascending: false })
       .limit(8),
   ]);
@@ -80,12 +80,12 @@ export default async function DashboardPage() {
           <p className="text-sm text-neutral-400">Nog geen activiteit.</p>
         ) : (
           <ul className="space-y-1">
-            {recentActivity.map((a, i) => (
+            {recentActivity.map((a: any, i) => (
               <li key={i} className="px-3 py-2 rounded-lg bg-neutral-50 text-xs text-neutral-600">
                 <span className="text-neutral-400">
                   {new Date(a.created_at).toLocaleString("nl-NL")}
                 </span>{" "}
-                — {a.action}
+                — <strong>{a.users?.full_name ?? "Onbekende gebruiker"}</strong> {a.action}
               </li>
             ))}
           </ul>

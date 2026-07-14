@@ -8,6 +8,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/companies";
+  const isDeactivated = searchParams.get("deactivated") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +45,12 @@ function LoginForm() {
         <p className="text-neutral-500 text-sm mb-8">
           Log in om verder te gaan
         </p>
+
+        {isDeactivated && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4" role="alert">
+            Dit account is gedeactiveerd. Neem contact op met de eigenaar.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
