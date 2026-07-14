@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getApprovalSettings } from "@/lib/approval/approval-service";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_RECEIPTS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   // Tenant-isolatie via RLS-gefilterde select (zie v1.20-les): geen rij
   // terug = bon bestaat niet of hoort bij een ander restaurant.
@@ -29,15 +35,6 @@ export async function POST(
       { error: `Bon heeft status '${receipt.status}', kan geen goedkeuring aanvragen` },
       { status: 400 }
     );
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
   const companyId = (receipt.open_tabs as any)?.company_id;
@@ -75,15 +72,15 @@ export async function POST(
   }
 
   await supabase.from("domain_events").insert({
-    restaurant_id: profile.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     event_type: "ApprovalRequested",
     payload: { receipt_id: params.id, company_id: companyId, method: settings.method },
-    published_by: userData.user.id,
+    published_by: ctx.userId,
   });
 
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: "vroeg goedkeuring aan voor een bon",
     target_table: "receipts",
     target_id: params.id,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -12,12 +13,17 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_RECEIPTS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = updateSchema.safeParse(body);
@@ -27,12 +33,6 @@ export async function PATCH(
       { status: 400 }
     );
   }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
 
   // Guardian Mode: zelfde bescherming als DELETE — een bon op een gefactureerde
   // rekening mag ook niet meer bewerkt worden (audit trail / factuur-integriteit).
@@ -79,15 +79,13 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (profile) {
-    await supabase.from("activity_log").insert({
-      restaurant_id: profile.restaurant_id,
-      user_id: userData.user.id,
-      action: "wijzigde een bon",
-      target_table: "receipts",
-      target_id: data.id,
-    });
-  }
+  await supabase.from("activity_log").insert({
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
+    action: "wijzigde een bon",
+    target_table: "receipts",
+    target_id: data.id,
+  });
 
   return NextResponse.json({ receipt: data });
 }
@@ -96,12 +94,17 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_RECEIPTS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   // Guardian Mode: impact-analyse — een bon mag nooit verwijderd worden zodra
   // de rekening al gefactureerd is (audit trail / factuur-integriteit).
@@ -137,27 +140,18 @@ export async function DELETE(
     }
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
   const { error } = await supabase.from("receipts").delete().eq("id", params.id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (profile) {
-    await supabase.from("activity_log").insert({
-      restaurant_id: profile.restaurant_id,
-      user_id: userData.user.id,
-      action: "verwijderde een bon",
-      target_table: "receipts",
-      target_id: params.id,
-    });
-  }
+  await supabase.from("activity_log").insert({
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
+    action: "verwijderde een bon",
+    target_table: "receipts",
+    target_id: params.id,
+  });
 
   return NextResponse.json({ success: true });
 }
- 

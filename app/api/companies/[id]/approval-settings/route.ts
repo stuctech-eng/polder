@@ -43,7 +43,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await requireRole("MANAGE_COMPANIES");
+    await requireRole("MANAGE_SETTINGS");
   } catch (err) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

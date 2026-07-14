@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { companySchema } from "@/lib/validation/company";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 
 /**
  * API-first ontwerp (sectie 1): deze route is de enige plek waar
@@ -9,12 +10,16 @@ import { companySchema } from "@/lib/validation/company";
  */
 
 export async function GET() {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  try {
+    await requireRole("MANAGE_COMPANIES");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const { data, error } = await supabase
     .from("companies")
@@ -29,12 +34,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_COMPANIES");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = companySchema.safeParse(body);
@@ -46,20 +56,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
-  }
-
   const { data, error } = await supabase
     .from("companies")
     .insert({
-      restaurant_id: profile.restaurant_id,
+      restaurant_id: ctx.restaurantId,
       name: parsed.data.name,
       address: parsed.data.address,
       vat_number: parsed.data.vatNumber,
@@ -77,8 +77,8 @@ export async function POST(request: Request) {
 
   // Activity Log: vanaf dag 1 verplicht (blueprint sectie "Audit & Activity Engine")
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: `maakte bedrijf "${data.name}" aan`,
     target_table: "companies",
     target_id: data.id,

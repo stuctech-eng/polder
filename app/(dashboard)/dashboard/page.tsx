@@ -1,7 +1,21 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import Link from "next/link";
 
 export default async function DashboardPage() {
+  try {
+    await requireRole("VIEW_DASHBOARD");
+  } catch (err) {
+    return (
+      <main className="p-4 max-w-2xl mx-auto">
+        <h1 className="text-xl font-semibold mb-4">Dashboard</h1>
+        <p className="text-sm text-red-600" role="alert">
+          {err instanceof PermissionError ? err.message : "Onbekende fout"}
+        </p>
+      </main>
+    );
+  }
+
   const supabase = createSupabaseServerClient();
 
   const startOfMonth = new Date();

@@ -27,12 +27,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Al ingelogd + op login/forgot-password → door naar bedrijvenoverzicht
+  // Al ingelogd + op login/forgot-password → door naar root, die op basis van
+  // rol bepaalt waar iemand moet landen (niet iedereen mag /companies zien)
   const isRedirectIfAuthPath = REDIRECT_IF_AUTHENTICATED.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
   if (user && isActive && isRedirectIfAuthPath) {
-    return NextResponse.redirect(new URL("/companies", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return response;

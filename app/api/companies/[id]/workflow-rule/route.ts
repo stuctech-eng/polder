@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
 const workflowRuleSchema = z.object({
@@ -28,12 +29,17 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_SETTINGS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = workflowRuleSchema.safeParse(body);
@@ -42,16 +48,6 @@ export async function PUT(
       { error: "Validatiefout", details: parsed.error.flatten() },
       { status: 400 }
     );
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
   // Guardian Mode: tenant-isolatie — verifieer dat dit bedrijf echt bij het eigen
@@ -88,7 +84,7 @@ export async function PUT(
     result = await supabase
       .from("workflow_rules")
       .insert({
-        restaurant_id: profile.restaurant_id,
+        restaurant_id: ctx.restaurantId,
         company_id: params.id,
         invoice_frequency: parsed.data.invoiceFrequency,
         requires_approval: parsed.data.requiresApproval,
@@ -102,8 +98,8 @@ export async function PUT(
   }
 
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: `stelde facturatieregel in (${parsed.data.invoiceFrequency})`,
     target_table: "workflow_rules",
     target_id: result.data.id,

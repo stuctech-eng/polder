@@ -5,7 +5,7 @@ import { buildDailyClosingReport } from "@/lib/daily-closing/daily-closing-servi
 
 export async function GET(request: Request) {
   try {
-    const ctx = await requireRole("VIEW_REPORTS");
+    const ctx = await requireRole("VIEW_DAILY_CLOSING");
     const supabase = createSupabaseServerClient();
 
     const { searchParams } = new URL(request.url);
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ctx = await requireRole("MANAGE_DAILY_CLOSING");
+    const ctx = await requireRole("EXECUTE_DAILY_CLOSING");
     const supabase = createSupabaseServerClient();
 
     const body = await request.json().catch(() => ({}));

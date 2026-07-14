@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getApprovalSettings } from "@/lib/approval/approval-service";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
 const receiptLineSchema = z.object({
@@ -21,6 +22,15 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  try {
+    await requireRole("MANAGE_RECEIPTS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from("receipts")
@@ -38,12 +48,17 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_RECEIPTS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = receiptSchema.safeParse(body);
@@ -52,16 +67,6 @@ export async function POST(
       { error: "Validatiefout", details: parsed.error.flatten() },
       { status: 400 }
     );
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
   // Guardian Mode: tenant-isolatie — deze select is RLS-gefilterd op eigen restaurant,
@@ -118,7 +123,7 @@ export async function POST(
   const { data: receipt, error: receiptError } = await supabase
     .from("receipts")
     .insert({
-      restaurant_id: profile.restaurant_id,
+      restaurant_id: ctx.restaurantId,
       open_tab_id: params.id,
       receipt_number: parsed.data.receiptNumber || null,
       source: "manual",
@@ -128,7 +133,7 @@ export async function POST(
       total,
       receipt_date: parsed.data.receiptDate || new Date().toISOString().slice(0, 10),
       notes: parsed.data.notes || null,
-      created_by: userData.user.id,
+      created_by: ctx.userId,
     })
     .select()
     .single();
@@ -166,18 +171,18 @@ export async function POST(
           status: "pending",
         });
         await supabase.from("domain_events").insert({
-          restaurant_id: profile.restaurant_id,
+          restaurant_id: ctx.restaurantId,
           event_type: "ApprovalRequested",
           payload: { receipt_id: receipt.id, company_id: tab.company_id, method: settings.method },
-          published_by: userData.user.id,
+          published_by: ctx.userId,
         });
       }
     }
   }
 
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: `koppelde een bon (€${total.toFixed(2)}) aan een open rekening`,
     target_table: "receipts",
     target_id: receipt.id,
@@ -185,10 +190,10 @@ export async function POST(
 
   // Event Bus: ReceiptLinked (conform sectie 2 diagram)
   await supabase.from("domain_events").insert({
-    restaurant_id: profile.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     event_type: "ReceiptLinked",
     payload: { receipt_id: receipt.id, open_tab_id: params.id, total },
-    published_by: userData.user.id,
+    published_by: ctx.userId,
   });
 
   return NextResponse.json(

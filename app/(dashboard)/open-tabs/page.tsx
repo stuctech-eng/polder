@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import Link from "next/link";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -12,6 +13,19 @@ export default async function OpenTabsPage({
 }: {
   searchParams: { status?: string };
 }) {
+  try {
+    await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    return (
+      <main className="p-4 max-w-2xl mx-auto">
+        <h1 className="text-xl font-semibold mb-4">Rekeningen</h1>
+        <p className="text-sm text-red-600" role="alert">
+          {err instanceof PermissionError ? err.message : "Onbekende fout"}
+        </p>
+      </main>
+    );
+  }
+
   const status = searchParams.status ?? "open";
   const supabase = createSupabaseServerClient();
   const { data: openTabs, error } = await supabase

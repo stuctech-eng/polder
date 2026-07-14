@@ -1,7 +1,21 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import DownloadInvoiceButton from "../open-tabs/[id]/download-invoice-button";
 
 export default async function InvoicesPage() {
+  try {
+    await requireRole("MANAGE_INVOICES");
+  } catch (err) {
+    return (
+      <main className="p-4 max-w-2xl mx-auto">
+        <h1 className="text-xl font-semibold mb-4">Facturen</h1>
+        <p className="text-sm text-red-600" role="alert">
+          {err instanceof PermissionError ? err.message : "Onbekende fout"}
+        </p>
+      </main>
+    );
+  }
+
   const supabase = createSupabaseServerClient();
   const { data: invoices, error } = await supabase
     .from("invoices")

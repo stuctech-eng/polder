@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  try {
+    await requireRole("MANAGE_INVOICES");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
 
   const { data: userData } = await supabase.auth.getUser();

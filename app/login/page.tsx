@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/companies";
+  const redirectTo = searchParams.get("redirectTo") || "/";
   const isDeactivated = searchParams.get("deactivated") === "1";
 
   const [email, setEmail] = useState("");

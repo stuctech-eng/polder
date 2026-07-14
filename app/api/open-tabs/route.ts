@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
 const openTabSchema = z.object({
@@ -12,6 +13,15 @@ const openTabSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  try {
+    await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status") || "open";
@@ -29,12 +39,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = openTabSchema.safeParse(body);
@@ -43,16 +58,6 @@ export async function POST(request: Request) {
       { error: "Validatiefout", details: parsed.error.flatten() },
       { status: 400 }
     );
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
   }
 
   // Guardian Mode: tenant-isolatie handhaven — RLS beschermt hier niet automatisch,
@@ -97,7 +102,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("open_tabs")
     .insert({
-      restaurant_id: profile.restaurant_id,
+      restaurant_id: ctx.restaurantId,
       company_id: parsed.data.companyId || null,
       department_id: parsed.data.departmentId || null,
       cost_center_id: parsed.data.costCenterId || null,
@@ -114,8 +119,8 @@ export async function POST(request: Request) {
   }
 
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: "opende een nieuwe rekening",
     target_table: "open_tabs",
     target_id: data.id,
@@ -123,10 +128,10 @@ export async function POST(request: Request) {
 
   // Event Bus: TabOpened (governance 6.1 — stabiel event-contract)
   await supabase.from("domain_events").insert({
-    restaurant_id: profile.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     event_type: "TabOpened",
     payload: { open_tab_id: data.id, company_id: data.company_id },
-    published_by: userData.user.id,
+    published_by: ctx.userId,
   });
 
   return NextResponse.json({ openTab: data }, { status: 201 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -12,6 +13,15 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  try {
+    await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
 
   const { data, error } = await supabase
@@ -30,12 +40,17 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const { data: tab } = await supabase
     .from("open_tabs")
@@ -65,26 +80,18 @@ export async function DELETE(
     );
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
   const { error } = await supabase.from("open_tabs").delete().eq("id", params.id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (profile) {
-    await supabase.from("activity_log").insert({
-      restaurant_id: profile.restaurant_id,
-      user_id: userData.user.id,
-      action: "verwijderde een lege open rekening",
-      target_table: "open_tabs",
-      target_id: params.id,
-    });
-  }
+  await supabase.from("activity_log").insert({
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
+    action: "verwijderde een lege open rekening",
+    target_table: "open_tabs",
+    target_id: params.id,
+  });
 
   return NextResponse.json({ success: true });
 }
@@ -93,12 +100,17 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const body = await request.json();
   const parsed = updateSchema.safeParse(body);
@@ -108,12 +120,6 @@ export async function PATCH(
       { status: 400 }
     );
   }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
 
   // Guardian Mode: impact-analyse — een gefactureerde rekening is onveranderlijk.
   // Zonder deze check zou de UI-verberging (client-side) de enige bescherming zijn,
@@ -152,10 +158,10 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (profile && parsed.data.status === "closed") {
+  if (parsed.data.status === "closed") {
     await supabase.from("activity_log").insert({
-      restaurant_id: profile.restaurant_id,
-      user_id: userData.user.id,
+      restaurant_id: ctx.restaurantId,
+      user_id: ctx.userId,
       action: "sloot een rekening",
       target_table: "open_tabs",
       target_id: data.id,
@@ -163,13 +169,12 @@ export async function PATCH(
 
     // Event Bus: TabClosed
     await supabase.from("domain_events").insert({
-      restaurant_id: profile.restaurant_id,
+      restaurant_id: ctx.restaurantId,
       event_type: "TabClosed",
       payload: { open_tab_id: data.id },
-      published_by: userData.user.id,
+      published_by: ctx.userId,
     });
   }
 
   return NextResponse.json({ openTab: data });
 }
- 

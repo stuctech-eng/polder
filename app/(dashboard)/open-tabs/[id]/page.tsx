@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getApprovalSettings } from "@/lib/approval/approval-service";
+import { requireRole, hasPermission, PermissionError } from "@/lib/user-management/permission-service";
 import { notFound } from "next/navigation";
 import CloseTabButton from "./close-button";
 import { ReceiptsSection } from "./receipts-section";
@@ -13,6 +14,20 @@ export default async function OpenTabDetailPage({
 }: {
   params: { id: string };
 }) {
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_OPEN_TABS");
+  } catch (err) {
+    return (
+      <main className="p-4 max-w-2xl mx-auto">
+        <p className="text-sm text-red-600" role="alert">
+          {err instanceof PermissionError ? err.message : "Onbekende fout"}
+        </p>
+      </main>
+    );
+  }
+  const canManageInvoices = hasPermission(ctx.role, "MANAGE_INVOICES");
+
   const supabase = createSupabaseServerClient();
 
   const { data: tab, error } = await supabase
@@ -103,7 +118,7 @@ export default async function OpenTabDetailPage({
         </div>
       )}
 
-      {tab.status === "closed" && (
+      {tab.status === "closed" && canManageInvoices && (
         <div className="mt-6">
           <details className="mb-3 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-3">
             <summary className="px-3 py-2 text-sm font-medium text-neutral-700 cursor-pointer">
@@ -119,8 +134,14 @@ export default async function OpenTabDetailPage({
           <GenerateInvoiceButton openTabId={params.id} />
         </div>
       )}
+      {tab.status === "closed" && !canManageInvoices && (
+        <p className="mt-6 text-sm text-neutral-400">
+          Deze rekening is klaar om gefactureerd te worden — vraag een collega met
+          facturatierechten om dit af te ronden.
+        </p>
+      )}
 
-      {tab.status === "invoiced" && invoice && (
+      {tab.status === "invoiced" && invoice && canManageInvoices && (
         <div className="mt-6 space-y-3">
           <div className="space-y-2 text-sm">
             <Row label="Factuurnummer" value={invoice.invoice_number} />

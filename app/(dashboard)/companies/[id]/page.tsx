@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { notFound } from "next/navigation";
 import CompanyEditForm from "./edit-form";
 import {
@@ -16,6 +17,18 @@ export default async function CompanyDetailPage({
 }: {
   params: { id: string };
 }) {
+  try {
+    await requireRole("MANAGE_COMPANIES");
+  } catch (err) {
+    return (
+      <main className="p-4 max-w-2xl mx-auto">
+        <p className="text-sm text-red-600" role="alert">
+          {err instanceof PermissionError ? err.message : "Onbekende fout"}
+        </p>
+      </main>
+    );
+  }
+
   const supabase = createSupabaseServerClient();
 
   const { data: company, error } = await supabase

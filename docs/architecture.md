@@ -592,6 +592,38 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.31** — Definitieve rechtenmatrix + volledige migratie van alle bestaande routes (klant-goedgekeurd, grote refactor, geen architectuurwijziging — wel de beloofde eenmalige investering):
+- **Rechtenmatrix vastgelegd** in `role-helpers.ts` als single source of truth (zie tabel
+  in de code-comment aldaar): 11 permissies (`VIEW_DASHBOARD`, `VIEW_REVENUE`,
+  `MANAGE_COMPANIES`, `MANAGE_OPEN_TABS`, `MANAGE_RECEIPTS`, `APPROVE_RECEIPTS`,
+  `MANAGE_INVOICES`, `VIEW_DAILY_CLOSING`, `EXECUTE_DAILY_CLOSING`, `MANAGE_TEAM`,
+  `MANAGE_SETTINGS`) i.p.v. losse rolchecks — nieuwe rollen toevoegen vereist alleen een
+  kolom in de matrix, geen codewijziging elders
+- **Alle bestaande API-routes gemigreerd** naar `requireRole()`: companies (+ sub-entiteiten:
+  departments/cost-centers/projects/codes — GET blijft open voor dropdown-gebruik door
+  Bediening, alleen POST/PUT beveiligd), workflow-rule + required-fields + approval-settings
+  (→ `MANAGE_SETTINGS`, was eerder ten onrechte `MANAGE_COMPANIES`), open-tabs, receipts,
+  request-approval, generate-invoice, invoices/pdf-url, daily-closing
+- **Alle server-component pagina's gemigreerd**: dashboard, companies (+ detail), open-tabs
+  (lijst/nieuw/detail — met conditionele facturatie-knoppen op basis van `MANAGE_INVOICES`),
+  invoices
+- **Navigatie is nu rolbewust** (`layout.tsx`): toont alleen links waar de ingelogde rol
+  daadwerkelijk toegang toe heeft — voorkomt dode links naar foutmeldingen
+- **Root-redirect rolbewust gemaakt**: `/` stuurde altijd naar `/dashboard`, wat Bediening/
+  Keuken niet mogen zien — landt nu op de eerste toegankelijke pagina volgens de matrix
+  (Dashboard-rechten → dashboard, anders open-tabs-rechten → rekeningen). Middleware en
+  login-scherm stonden nog hardcoded op `/companies` als post-login-bestemming; hersteld
+  naar `/` zodat de rolbewuste logica bepaalt waar iemand landt.
+- **Tussenoplossing vermeden**: bij het beveiligen van `generate-invoice` bleek een sloppy
+  shim nodig geweest te zijn (nep `profile`/`userData`-objecten) om de rest van een groot
+  bestand niet te hoeven herzien — dit is expliciet **niet** geaccepteerd (klant-instructie:
+  geen tijdelijke hacks) en direct hersteld door alle verwijzingen consequent naar `ctx.*`
+  te hernoemen.
+- **Bewust nog niet aangepakt**: `companies/new`-formulier (client component) checkt zelf
+  geen rol vooraf — de API zelf blokkeert wél (`MANAGE_COMPANIES`), dus geen echt
+  beveiligingsgat, alleen een UX-polijstpunt (zou een lege knop tonen die bij versturen een
+  foutmelding geeft i.p.v. de knop meteen te verbergen). Genoteerd voor een latere ronde.
+
 **v0.2** — Toegevoegd na review:
 - Integration Engine (generiek, i.p.v. Receipt-specifieke sub-engines)
 - Workflow Engine (facturatieregels/goedkeuring per bedrijf)
@@ -860,7 +892,7 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 ## 11. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET, Daily Closing Engine COMPLEET (v1.30).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET (v1.31).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

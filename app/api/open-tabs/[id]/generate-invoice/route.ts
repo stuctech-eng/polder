@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateInvoicePdf } from "@/lib/documents/invoice-pdf";
+import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 
 /**
  * Facturatie — genereert een factuur voor een gesloten open rekening.
@@ -14,22 +15,17 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  let ctx;
+  try {
+    ctx = await requireRole("MANAGE_INVOICES");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("restaurant_id")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Geen restaurantprofiel gevonden" }, { status: 400 });
-  }
 
   const { data: tab, error: tabError } = await supabase
     .from("open_tabs")
@@ -83,7 +79,7 @@ export async function POST(
   const { data: restaurant } = await supabase
     .from("restaurants")
     .select("name")
-    .eq("id", profile.restaurant_id)
+    .eq("id", ctx.restaurantId)
     .single();
 
   const subtotal = Math.round(receipts.reduce((s, r) => s + Number(r.subtotal ?? 0), 0) * 100) / 100;
@@ -95,7 +91,7 @@ export async function POST(
   const { count } = await supabase
     .from("invoices")
     .select("id", { count: "exact", head: true })
-    .eq("restaurant_id", profile.restaurant_id);
+    .eq("restaurant_id", ctx.restaurantId);
   const invoiceNumber = `${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
 
   const issuedAt = new Date();
@@ -105,7 +101,7 @@ export async function POST(
   const { data: invoice, error: invoiceError } = await supabase
     .from("invoices")
     .insert({
-      restaurant_id: profile.restaurant_id,
+      restaurant_id: ctx.restaurantId,
       company_id: tab.company_id,
       invoice_number: invoiceNumber,
       status: "draft",
@@ -149,7 +145,7 @@ export async function POST(
     total,
   });
 
-  const storagePath = `${profile.restaurant_id}/invoices/${invoice.id}.pdf`;
+  const storagePath = `${ctx.restaurantId}/invoices/${invoice.id}.pdf`;
   const { error: uploadError } = await supabase.storage
     .from("documents")
     .upload(storagePath, pdfBytes, { contentType: "application/pdf", upsert: true });
@@ -167,7 +163,7 @@ export async function POST(
   }
 
   await supabase.from("documents").insert({
-    restaurant_id: profile.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     type: "invoice",
     related_table: "invoices",
     related_id: invoice.id,
@@ -180,8 +176,8 @@ export async function POST(
     .eq("id", params.id);
 
   await supabase.from("activity_log").insert({
-    restaurant_id: profile.restaurant_id,
-    user_id: userData.user.id,
+    restaurant_id: ctx.restaurantId,
+    user_id: ctx.userId,
     action: `genereerde factuur ${invoiceNumber} (€${total.toFixed(2)})`,
     target_table: "invoices",
     target_id: invoice.id,
@@ -189,10 +185,10 @@ export async function POST(
 
   // Event Bus: InvoiceGenerated
   await supabase.from("domain_events").insert({
-    restaurant_id: profile.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     event_type: "InvoiceGenerated",
     payload: { invoice_id: invoice.id, open_tab_id: params.id, total },
-    published_by: userData.user.id,
+    published_by: ctx.userId,
   });
 
   return NextResponse.json({ invoice }, { status: 201 });

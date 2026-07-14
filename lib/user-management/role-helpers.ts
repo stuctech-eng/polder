@@ -1,18 +1,36 @@
 export type UserRole = "owner" | "manager" | "administratie" | "bediening" | "keuken";
 
 /**
- * Permissie-matrix — centraal gedefinieerd, niet verspreid over de app.
- * Nieuwe permissies hier toevoegen, nooit losse role-checks in routes.
+ * Definitieve rechtenmatrix — single source of truth (klant-goedgekeurd, v1.31).
+ * Rollen krijgen een set rechten; er wordt nooit op rolnaam gecodeerd (`if role === owner`),
+ * altijd op permissie. Nieuwe rollen toevoegen = alleen hier een kolom uitbreiden.
+ *
+ * | Permissie                | Owner | Manager | Administratie | Bediening | Keuken |
+ * |---------------------------|-------|---------|----------------|-----------|--------|
+ * | VIEW_DASHBOARD            | ✅    | ✅      | ✅             | ❌        | ❌     |
+ * | VIEW_REVENUE              | ✅    | ✅      | ✅             | ❌        | ❌     |
+ * | MANAGE_COMPANIES          | ✅    | ❌      | ✅             | ❌        | ❌     |
+ * | MANAGE_OPEN_TABS          | ✅    | ✅      | ✅             | ✅        | ❌     |
+ * | MANAGE_RECEIPTS           | ✅    | ✅      | ✅             | ✅        | ❌     |
+ * | APPROVE_RECEIPTS          | ✅    | ✅      | ❌             | ❌        | ❌     |
+ * | MANAGE_INVOICES           | ✅    | ❌      | ✅             | ❌        | ❌     |
+ * | VIEW_DAILY_CLOSING        | ✅    | ✅      | ✅             | ❌        | ❌     |
+ * | EXECUTE_DAILY_CLOSING     | ✅    | ✅      | ❌             | ❌        | ❌     |
+ * | MANAGE_TEAM               | ✅    | ❌      | ❌             | ❌        | ❌     |
+ * | MANAGE_SETTINGS           | ✅    | ❌      | ✅             | ❌        | ❌     |
  */
 export const PERMISSIONS = {
-  MANAGE_TEAM: ["owner"],
+  VIEW_DASHBOARD: ["owner", "manager", "administratie"],
+  VIEW_REVENUE: ["owner", "manager", "administratie"],
   MANAGE_COMPANIES: ["owner", "administratie"],
-  MANAGE_OPEN_TABS: ["owner", "manager", "bediening"],
-  MANAGE_RECEIPTS: ["owner", "manager", "bediening"],
+  MANAGE_OPEN_TABS: ["owner", "manager", "administratie", "bediening"],
+  MANAGE_RECEIPTS: ["owner", "manager", "administratie", "bediening"],
   APPROVE_RECEIPTS: ["owner", "manager"],
   MANAGE_INVOICES: ["owner", "administratie"],
-  VIEW_REPORTS: ["owner", "administratie", "manager"],
-  MANAGE_DAILY_CLOSING: ["owner", "manager"],
+  VIEW_DAILY_CLOSING: ["owner", "manager", "administratie"],
+  EXECUTE_DAILY_CLOSING: ["owner", "manager"],
+  MANAGE_TEAM: ["owner"],
+  MANAGE_SETTINGS: ["owner", "administratie"],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

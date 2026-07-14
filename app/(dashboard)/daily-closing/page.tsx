@@ -8,7 +8,7 @@ export default async function DailyClosingPage() {
   let permissionError: string | null = null;
 
   try {
-    const ctx = await requireRole("VIEW_REPORTS");
+    const ctx = await requireRole("VIEW_DAILY_CLOSING");
     const supabase = createSupabaseServerClient();
     const today = new Date().toISOString().slice(0, 10);
     report = await buildDailyClosingReport(supabase, ctx.restaurantId, today);
