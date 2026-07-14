@@ -19,7 +19,14 @@ export interface InviteResult {
 export async function sendInvitation(email: string): Promise<InviteResult> {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email);
+  // Zonder expliciete redirectTo zou de uitnodigingslink iemand direct kunnen
+  // inloggen via een tijdelijke sessie, zonder ooit een eigen wachtwoord te
+  // kiezen — dat zou hen bij een volgend bezoek buitensluiten. Door naar
+  // /reset-password te wijzen (dezelfde pagina als wachtwoord-vergeten)
+  // kiest de nieuwe medewerker altijd expliciet een eigen wachtwoord.
+  const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL || "https://polder.vercel.app"}/reset-password`;
+
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
 
   if (error) {
     // Uitnodiging kan mislukken door de bekende mail-testlimiet — dat is geen

@@ -92,6 +92,14 @@ set encrypted_password = crypt('NieuwWachtwoord', gen_salt('bf'))
 where email = 'GEBRUIKER-EMAIL';
 ```
 
+## Testaccount aanmaken (zonder Resend-domein)
+
+**Er staat al een werkend testaccount:** `stuctech+test1@gmail.com` (rol: bediening, gekoppeld aan Café Restaurant Polder) — bevestigd werkend, aangemaakt door het "wees"-account van een mislukte uitnodiging (v1.24) alsnog te activeren. Herbruikbaar sjabloon voor nieuwe testaccounts: `supabase/scripts/create-test-account.sql` (geen migratie, handmatig te gebruiken, meerdere keren herhaalbaar met andere waarden).
+
+Handig om een tweede/derde gebruiker te testen (bijv. voor de klant om zelf te proberen) zolang er nog geen eigen maildomein is. Gebruik een Gmail plus-adres (`jouwadres+watdanook@gmail.com` — komt gewoon aan in je normale inbox, geen nep-adres, officiële Gmail-functie).
+
+Inloggen als testgebruiker: privénavigatie-venster → `polder.vercel.app` → `stuctech+test1@gmail.com` / `TestWachtwoord123`.
+
 ## Setup (iPhone-first, geen desktop nodig)
 
 1. **Supabase project aanmaken** op supabase.com (via Safari/app)

@@ -472,6 +472,29 @@ teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een a
   subquery) is een directe recursie-kandidaat — voortaan bij zelfreferentiële RLS-policies
   altijd een `SECURITY DEFINER`-functie gebruiken i.p.v. een inline subquery.
 
+**v1.25** — Implementatie-update: testaccount bevestigd werkend, herbruikbaar script toegevoegd:
+- `stuctech+test1@gmail.com` (rol bediening) is geactiveerd door het "wees"-account uit v1.24
+  alsnog een wachtwoord + profielkoppeling te geven — bevestigd inlogbaar
+- `supabase/scripts/create-test-account.sql` toegevoegd — **bewust geen migratie** (geen
+  schemawijziging, maar testdata), apart gehouden van `supabase/migrations/` zodat de
+  migratienummering zuiver blijft. Herbruikbaar voor meerdere rollen/testers.
+- Doel: de klant kan nu zelf met een tweede account inloggen en het multi-user-gedrag
+  beoordelen, zonder te hoeven wachten op het Resend-domein
+
+**v1.26** — Bugfix: uitnodigingslink miste koppeling aan wachtwoord-instellen (geen architectuurwijziging, belangrijk vóór echte uitnodigingen):
+- Ontdekt bij een operationele vraag ("krijgt de medewerker een mail en kan die met eigen
+  gegevens inloggen?"): `inviteUserByEmail` werd zonder `redirectTo` aangeroepen, waardoor de
+  uitnodigingslink iemand mogelijk direct via een tijdelijke sessie had ingelogd zonder ooit
+  een eigen wachtwoord te kiezen — bij een volgend bezoek zouden ze dan buitengesloten zijn
+  (geen wachtwoord ingesteld).
+- Oplossing: `redirectTo` wijst nu expliciet naar `/reset-password` — dezelfde pagina die al
+  voor wachtwoord-vergeten gebruikt wordt, hergebruikt voor het instellen van het eerste
+  wachtwoord bij een uitnodiging. Geen nieuwe Supabase-configuratie nodig, want die
+  redirect-URL stond al op de whitelist (v1.3).
+- Bevestigt nogmaals de waarde van operationele "hoe werkt dit in de praktijk"-vragen — deze
+  bug was niet zichtbaar in een technische test (de uitnodiging zelf "lukte" volgens de API),
+  alleen in het doordenken van de complete gebruikerservaring.
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
