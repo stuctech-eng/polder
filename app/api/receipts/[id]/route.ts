@@ -38,9 +38,16 @@ export async function PATCH(
   // rekening mag ook niet meer bewerkt worden (audit trail / factuur-integriteit).
   const { data: existingReceipt } = await supabase
     .from("receipts")
-    .select("open_tab_id")
+    .select("open_tab_id, status")
     .eq("id", params.id)
     .single();
+
+  if (existingReceipt?.status === "locked") {
+    return NextResponse.json(
+      { error: "Bon is vergrendeld na goedkeuring en kan niet meer bewerkt worden" },
+      { status: 400 }
+    );
+  }
 
   if (existingReceipt?.open_tab_id) {
     const { data: relatedTab } = await supabase
@@ -100,12 +107,19 @@ export async function DELETE(
   // de rekening al gefactureerd is (audit trail / factuur-integriteit).
   const { data: receipt } = await supabase
     .from("receipts")
-    .select("open_tab_id")
+    .select("open_tab_id, status")
     .eq("id", params.id)
     .single();
 
   if (!receipt) {
     return NextResponse.json({ error: "Bon niet gevonden" }, { status: 404 });
+  }
+
+  if (receipt.status === "locked") {
+    return NextResponse.json(
+      { error: "Bon is vergrendeld na goedkeuring en kan niet meer verwijderd worden" },
+      { status: 400 }
+    );
   }
 
   if (receipt.open_tab_id) {

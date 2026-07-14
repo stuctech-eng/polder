@@ -69,6 +69,17 @@ export async function POST(
     );
   }
 
+  // Approval Engine-integratie: een bon die nog op goedkeuring wacht mag niet
+  // meegenomen worden in een factuur — anders klopt de factuur niet meer
+  // zodra de goedkeuring alsnog wordt afgewezen.
+  const pendingReceipt = receipts.find((r) => r.status === "pending_approval");
+  if (pendingReceipt) {
+    return NextResponse.json(
+      { error: "Eén of meer bonnen wachten nog op goedkeuring — kan geen factuur genereren" },
+      { status: 400 }
+    );
+  }
+
   const { data: restaurant } = await supabase
     .from("restaurants")
     .select("name")

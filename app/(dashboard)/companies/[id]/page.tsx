@@ -8,6 +8,7 @@ import {
   WorkflowRuleSection,
   CompanyCodesSection,
   RequiredFieldsSection,
+  ApprovalSettingsSection,
 } from "./sub-entities";
 
 export default async function CompanyDetailPage({
@@ -34,6 +35,7 @@ export default async function CompanyDetailPage({
     { data: workflowRule },
     { data: companyCodes },
     { data: requiredFieldsConfig },
+    { data: approvalSettings },
   ] = await Promise.all([
     supabase.from("departments").select("*").eq("company_id", params.id).order("name"),
     supabase.from("cost_centers").select("*").eq("company_id", params.id).order("name"),
@@ -45,6 +47,11 @@ export default async function CompanyDetailPage({
       .select("value")
       .eq("company_id", params.id)
       .eq("key", "receipt_fields")
+      .maybeSingle(),
+    supabase
+      .from("approval_settings")
+      .select("is_required, method")
+      .eq("company_id", params.id)
       .maybeSingle(),
   ]);
 
@@ -82,6 +89,11 @@ export default async function CompanyDetailPage({
         <RequiredFieldsSection
           companyId={params.id}
           initialConfig={(requiredFieldsConfig?.value as Record<string, boolean>) ?? {}}
+        />
+        <ApprovalSettingsSection
+          companyId={params.id}
+          initialEnabled={approvalSettings?.is_required ?? false}
+          initialMethod={(approvalSettings?.method as "pin" | "restaurant_confirms" | null) ?? null}
         />
       </div>
     </>

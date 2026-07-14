@@ -18,6 +18,7 @@ function parseDecimal(text: string): number {
 type Receipt = {
   id: string;
   receipt_number: string | null;
+  status: string;
   total: number;
   subtotal: number;
   vat_amount: number;
@@ -35,10 +36,12 @@ export function ReceiptsSection({
   openTabId,
   initialReceipts,
   isInvoiced = false,
+  approvalMethod = null,
 }: {
   openTabId: string;
   initialReceipts: Receipt[];
   isInvoiced?: boolean;
+  approvalMethod?: "pin" | "restaurant_confirms" | null;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
@@ -145,6 +148,7 @@ export function ReceiptsSection({
             key={r.id}
             receipt={r}
             isInvoiced={isInvoiced}
+            approvalMethod={approvalMethod}
             onDeleted={() => setReceipts((prev) => prev.filter((x) => x.id !== r.id))}
             onUpdated={(updated) =>
               setReceipts((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
@@ -256,11 +260,13 @@ export function ReceiptsSection({
 function ReceiptItem({
   receipt,
   isInvoiced,
+  approvalMethod,
   onDeleted,
   onUpdated,
 }: {
   receipt: Receipt;
   isInvoiced: boolean;
+  approvalMethod: "pin" | "restaurant_confirms" | null;
   onDeleted: () => void;
   onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
 }) {
@@ -319,7 +325,15 @@ function ReceiptItem({
             className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm mr-2"
           />
         ) : (
-          <span>{receipt.receipt_number || "Bon zonder nummer"}</span>
+          <span>
+            {receipt.receipt_number || "Bon zonder nummer"}
+            {receipt.status === "pending_approval" && (
+              <span className="ml-2 text-xs font-normal text-amber-600">wacht op goedkeuring</span>
+            )}
+            {receipt.status === "locked" && (
+              <span className="ml-2 text-xs font-normal text-green-700">✓ goedgekeurd</span>
+            )}
+          </span>
         )}
         <span>€{receipt.total.toFixed(2)}</span>
       </div>
@@ -331,7 +345,15 @@ function ReceiptItem({
         ))}
       </div>
 
-      {!isInvoiced && (
+      {receipt.status === "pending_approval" && (
+        <ApprovalBlock
+          receiptId={receipt.id}
+          method={approvalMethod}
+          onApproved={(status) => onUpdated({ id: receipt.id, status })}
+        />
+      )}
+
+      {!isInvoiced && receipt.status !== "locked" && receipt.status !== "pending_approval" && (
         <div className="flex gap-3 mt-2">
           {editing ? (
             <>
@@ -370,5 +392,84 @@ function ReceiptItem({
       )}
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </li>
+  );
+}
+
+/**
+ * Kent alleen de methode-naam om het juiste invoerveld te tonen — geen
+ * providerlogica (PIN-hashing, etc.) zit hier, dat blijft server-side in de
+ * Approval Service (klant-instructie, sectie 10.7).
+ */
+function ApprovalBlock({
+  receiptId,
+  method,
+  onApproved,
+}: {
+  receiptId: string;
+  method: "pin" | "restaurant_confirms" | null;
+  onApproved: (status: string) => void;
+}) {
+  const [pin, setPin] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleApprove(e?: React.FormEvent) {
+    e?.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const response = await fetch(`/api/receipts/${receiptId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(method === "pin" ? { credential: pin } : {}),
+    });
+
+    const body = await response.json();
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(body.error || "Goedkeuring mislukt.");
+      return;
+    }
+
+    onApproved(body.status);
+  }
+
+  if (method === "pin") {
+    return (
+      <form onSubmit={handleApprove} className="flex gap-2 mt-2 items-center">
+        <input
+          type="password"
+          inputMode="numeric"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          placeholder="PIN"
+          className="w-20 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm"
+        />
+        <button
+          type="submit"
+          disabled={loading || !pin}
+          className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-xs font-medium disabled:opacity-50"
+        >
+          {loading ? "..." : "Goedkeuren"}
+        </button>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </form>
+    );
+  }
+
+  // restaurant_confirms (of onbekende/niet-geconfigureerde methode: toon
+  // toch de knop, de server valideert alsnog of dit toegestaan is)
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => handleApprove()}
+        disabled={loading}
+        className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-xs font-medium disabled:opacity-50"
+      >
+        {loading ? "Bezig..." : "Goedkeuren"}
+      </button>
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </div>
   );
 }

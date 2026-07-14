@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getApprovalSettings } from "@/lib/approval/approval-service";
 import { notFound } from "next/navigation";
 import CloseTabButton from "./close-button";
 import { ReceiptsSection } from "./receipts-section";
@@ -29,6 +30,10 @@ export default async function OpenTabDetailPage({
     .select("*, receipt_lines(*)")
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
+
+  const approvalSettings = tab.company_id
+    ? await getApprovalSettings(supabase, tab.company_id)
+    : null;
 
   let invoice = null;
   if (tab.status === "invoiced") {
@@ -83,6 +88,12 @@ export default async function OpenTabDetailPage({
         openTabId={params.id}
         initialReceipts={receipts ?? []}
         isInvoiced={tab.status === "invoiced"}
+        approvalMethod={
+          approvalSettings?.enabled &&
+          (approvalSettings.method === "pin" || approvalSettings.method === "restaurant_confirms")
+            ? approvalSettings.method
+            : null
+        }
       />
 
       {tab.status === "open" && (

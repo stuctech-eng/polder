@@ -302,6 +302,126 @@ export function RequiredFieldsSection({
   );
 }
 
+export function ApprovalSettingsSection({
+  companyId,
+  initialEnabled,
+  initialMethod,
+}: {
+  companyId: string;
+  initialEnabled: boolean;
+  initialMethod: "pin" | "restaurant_confirms" | null;
+}) {
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [method, setMethod] = useState<"pin" | "restaurant_confirms">(initialMethod ?? "restaurant_confirms");
+  const [newPin, setNewPin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSave() {
+    setError(null);
+    setSaved(false);
+    setLoading(true);
+
+    const response = await fetch(`/api/companies/${companyId}/approval-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled,
+        method: enabled ? method : null,
+        autoLock: true,
+        newPin: newPin || undefined,
+      }),
+    });
+
+    setLoading(false);
+
+    if (!response.ok) {
+      const body = await response.json();
+      setError(body.error || "Kon niet opslaan.");
+      return;
+    }
+
+    setSaved(true);
+    setNewPin("");
+  }
+
+  return (
+    <Section title="Goedkeuring bij bonnen">
+      <details className="mb-2 rounded-lg border border-neutral-200 bg-neutral-50 open:pb-2">
+        <summary className="px-3 py-2 text-xs font-medium text-neutral-700 cursor-pointer">
+          Hoe werkt dit? ℹ️
+        </summary>
+        <div className="px-3 text-xs text-neutral-600 space-y-1">
+          <p>
+            Wanneer ingeschakeld, moet elke nieuwe bon voor dit bedrijf goedgekeurd
+            worden vóórdat 'm gefactureerd kan worden. Na goedkeuring is de bon
+            vergrendeld (niet meer te wijzigen).
+          </p>
+          <p>
+            <strong>PIN</strong>: een code die de manager invoert bij elke bon.{" "}
+            <strong>Restaurant bevestigt</strong>: een geautoriseerde gebruiker klikt
+            gewoon op "Goedkeuren", geen code nodig.
+          </p>
+        </div>
+      </details>
+
+      <label className="flex items-center gap-2 text-sm py-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="min-h-touch min-w-touch"
+        />
+        Goedkeuring vereist voor bonnen van dit bedrijf
+      </label>
+
+      {enabled && (
+        <>
+          <div className="mb-2">
+            <label className="block text-sm font-medium mb-1">Methode</label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value as "pin" | "restaurant_confirms")}
+              className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
+            >
+              <option value="restaurant_confirms">Restaurant bevestigt</option>
+              <option value="pin">PIN</option>
+            </select>
+          </div>
+
+          {method === "pin" && (
+            <div className="mb-2">
+              <label className="block text-sm font-medium mb-1">
+                {initialMethod === "pin" ? "Nieuwe PIN instellen" : "PIN instellen"}
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                placeholder="Minimaal 4 cijfers"
+                className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {saved && <p className="text-sm text-green-700">Opgeslagen.</p>}
+
+      <button
+        onClick={handleSave}
+        disabled={loading}
+        className="min-h-touch px-4 rounded-lg bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+      >
+        {loading ? "Bezig..." : "Opslaan"}
+      </button>
+    </Section>
+  );
+}
+
 export function DepartmentsSection({
   companyId,
   initialDepartments,

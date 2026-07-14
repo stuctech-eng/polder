@@ -495,6 +495,40 @@ teamleden van hetzelfde restaurant elkaar mogen zien (nooit gebruikers van een a
   bug was niet zichtbaar in een technische test (de uitnodiging zelf "lukte" volgens de API),
   alleen in het doordenken van de complete gebruikerservaring.
 
+**v1.27** — Bugfix: handmatige `auth.users`-insert faalde stil bij inloggen (geen architectuurwijziging):
+- Testaccount leek volledig te werken (kwam voor in Team-lijst, wachtwoord-reset/uitnodigen
+  API's gaven geen fout), maar inloggen zelf faalde met "Inloggen mislukt" — zonder duidelijke
+  serverfout, want dit is Supabase Auth's eigen interne verwerking, niet onze applicatiecode.
+- Oorzaak: `confirmation_token`/`recovery_token`/`email_change*`-kolommen op `null` i.p.v. een
+  lege string (`''`) breken Supabase's interne inlogverwerking, ook al lijkt de rij verder
+  volledig geldig (wachtwoord-hash correct, `email_confirmed_at` gezet).
+- Oplossing: `supabase/scripts/create-test-account.sql` bijgewerkt met expliciete lege strings
+  voor alle token-kolommen en de vereiste `raw_app_meta_data`/`raw_user_meta_data`-velden.
+- Les: **altijd daadwerkelijk inloggen testen** na een handmatige `auth.users`-insert, niet
+  alleen controleren of de rij bestaat of of gekoppelde API's (reset/invite) foutloos reageren
+  — die testen een ander code-pad dan het daadwerkelijke inlogproces zelf.
+
+**v1.28** — Fase B geïmplementeerd: Approval Engine core + PIN + Restaurant-bevestigt (klant-goedgekeurd, volgens plan sectie 10.7):
+- **Volledige vertical slice werkend**: `Receipt → Approval Request → PIN/Restaurant
+  Confirmation → Approved → Locked → Audit`, niet alleen schema/instellingen
+- `lib/approval/`: `types.ts` (Approval Provider Interface), `approval-service.ts`
+  (enige aanspreekpunt voor aanroepers — kent alleen "goedkeuring nodig ja/nee", nooit
+  een concrete provider), `providers/pin-provider.ts` (Node `crypto.scrypt`, geen extra
+  dependency — zelfde afweging als `pdf-lib`), `providers/restaurant-confirm-provider.ts`
+- Migratie 0007: vult de kleine gaten uit Fase A aan (`pin_hash`/`pin_salt`,
+  `requested_at`/`metadata` op `approvals`, `expired`-status)
+- 3 nieuwe events: `ApprovalRequested`, `ApprovalCompleted`, `ReceiptLocked`
+- **Integratiepunten in bestaande code** (per plan, geen nieuwe architectuur):
+  - Bon aanmaken: automatisch `pending_approval` als het bedrijf dat vereist
+  - Bon bewerken/verwijderen: geblokkeerd bij `status = locked` (naast de bestaande
+    `invoiced`-blokkade van de rekening zelf — twee onafhankelijke vergrendelingsniveaus)
+  - Factuur genereren: weigert als een gekoppelde bon nog `pending_approval` is
+- UI: `ApprovalSettingsSection` (bedrijfspagina — methode + PIN instellen, write-only),
+  `ApprovalBlock` (bonnenlijst — toont PIN-veld of bevestigknop; bevat zelf **geen**
+  providerlogica, roept alleen `/approve` aan met wat de gebruiker invoerde)
+- Klant-eis nageleefd: geen directe koppeling Receipt Manager ↔ Approval Providers —
+  alle communicatie loopt via `approval-service.ts`
+
 ## 9. WIJZIGINGSHISTORIE
 
 **v0.2** — Toegevoegd na review:
@@ -765,7 +799,7 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 ## 10. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET (v1.23). Fase B (Approval Engine) VOLLEDIG GEPLAND, NOG NIET GEBOUWD** (sectie 10.7 — kan nu beginnen, `approved_by` heeft nu betekenis dankzij Fase A.5). Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET (v1.28).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

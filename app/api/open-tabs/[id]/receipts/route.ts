@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getApprovalSettings } from "@/lib/approval/approval-service";
 import { z } from "zod";
 
 const receiptLineSchema = z.object({
@@ -69,7 +70,7 @@ export async function POST(
   // doorvallen naar "dus niet invoiced, dus toestaan" (dat was de eerdere bug-klasse).
   const { data: tab } = await supabase
     .from("open_tabs")
-    .select("status")
+    .select("status, company_id")
     .eq("id", params.id)
     .single();
 
@@ -138,6 +139,36 @@ export async function POST(
     return NextResponse.json({ error: linesError.message }, { status: 500 });
   }
 
+  // Approval Engine-integratie: de Receipt Manager weet alleen "dit bedrijf
+  // vereist goedkeuring" — geen kennis van PIN/restaurant_confirms zelf
+  // (klant-instructie, sectie 10.7).
+  let finalStatus = receipt.status;
+  if (tab.company_id) {
+    const settings = await getApprovalSettings(supabase, tab.company_id);
+    if (settings.enabled && settings.method) {
+      const { error: statusError } = await supabase
+        .from("receipts")
+        .update({ status: "pending_approval" })
+        .eq("id", receipt.id);
+
+      if (!statusError) {
+        finalStatus = "pending_approval";
+        await supabase.from("approvals").insert({
+          receipt_id: receipt.id,
+          company_id: tab.company_id,
+          method: settings.method,
+          status: "pending",
+        });
+        await supabase.from("domain_events").insert({
+          restaurant_id: profile.restaurant_id,
+          event_type: "ApprovalRequested",
+          payload: { receipt_id: receipt.id, company_id: tab.company_id, method: settings.method },
+          published_by: userData.user.id,
+        });
+      }
+    }
+  }
+
   await supabase.from("activity_log").insert({
     restaurant_id: profile.restaurant_id,
     user_id: userData.user.id,
@@ -154,5 +185,8 @@ export async function POST(
     published_by: userData.user.id,
   });
 
-  return NextResponse.json({ receipt: { ...receipt, receipt_lines: linesWithTotals } }, { status: 201 });
+  return NextResponse.json(
+    { receipt: { ...receipt, status: finalStatus, receipt_lines: linesWithTotals } },
+    { status: 201 }
+  );
 }
