@@ -37,3 +37,4 @@ export async function sendInvitation(email: string): Promise<InviteResult> {
 
   return { authUserId: data.user.id, emailSent: true };
 }
+ 
