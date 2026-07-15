@@ -7,7 +7,7 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 
 **Lees eerst dit bestand volledig, daarna `docs/architecture.md` (vooral sectie 9 Wijzigingshistorie en sectie 10 Status).** Deze twee bestanden samen bevatten alles om zonder verlies verder te werken.
 
-1. **Waar staan we nu:** Fase 1 (MVP) is compleet en end-to-end getest. Een klant-goedgekeurde uitbreiding (Approval Engine + Bedrijfsreferenties) is in uitvoering: Fase A is gebouwd, **Fase B is volledig gepland maar nog niet geïmplementeerd** — zie `docs/architecture.md` sectie 10.7 voor het exacte, goedgekeurde implementatieplan (nieuwe bestanden, database-wijzigingen, risico's).
+1. **Waar staan we nu:** Fase 1 (MVP) is compleet. De klant-goedgekeurde uitbreiding (Approval Engine + Bedrijfsreferenties + Teambeheer + Daily Closing) is volledig gebouwd: Fase A, A.5, B en C zijn compleet, inclusief de definitieve rechtenmatrix en volledige rolbeperking op alle routes. Alleen Fase D (digitale handtekening) staat nog open, samen met een paar losse punten — zie de volledige lijst hieronder.
 2. **Eerstvolgende actie:** Fase B bouwen volgens het plan in sectie 10.7 — bouwvolgorde: migratie → interfaces → service → providers → routes → UI → lock-enforcement → events → audit → end-to-end test.
 3. **Werkwijze die de hele tijd is aangehouden** (belangrijk om vast te houden):
    - Elke wijziging: lokaal `npx tsc --noEmit` + `npm run build` testen vóórdat een ZIP wordt aangeboden
@@ -102,9 +102,13 @@ Na deze 5 stappen werkt alles wat al gebouwd staat voor iedereen, niet alleen vo
 **Nog te bouwen (na Fase 1):**
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
 - Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
-- **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner
-- **Configureerbare rechtenmatrix**: rechten per rol staan nu vast in code (`role-helpers.ts`). Vervolgstap: verplaatsen naar een databasetabel (`role_permissions`) + scherm op de Team-pagina zodat de eigenaar zelf per rol rechten aan/uit kan zetten, zonder codewijziging. Architectuur is er al op voorbereid (`requireRole()` roept nu een hardcoded check aan die later een database-query wordt).
-- **Handleiding** (in-app, alle rollen): stap-voor-stap uitleg per functie, rolbewust — zie aparte planning in `docs/architecture.md` sectie 12.
+- **Fase D**: digitale handtekening (klant tekent zelf, bijv. op iPad) — nodig als aanvulling naast E-mail/QR
+- **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner voor bonnen, OCR
+- **Configureerbare rechtenmatrix**: rechten per rol staan nu vast in code (`role-helpers.ts`). Vervolgstap: verplaatsen naar een databasetabel + scherm op de Team-pagina zodat de eigenaar zelf per rol rechten aan/uit kan zetten, zonder codewijziging.
+- **Dagafsluiting heropenen**: een afgesloten dag kan nu niet meer teruggedraaid worden — database staat er al klaar voor (`reopened_at`/`reopened_by`), UI nog niet gebouwd (bewust uitgesteld, stond zelf al onder "later" in de oorspronkelijke spec)
+- **Contante/pin-omzetsplitsing** (Dagafsluiting): kan pas zodra betaalmethode per bon wordt vastgelegd
+- **Niet-gekoppelde/ontbrekende bonnen-controle** (Dagafsluiting): hoort bij Fase 2 (kassa-import), nu nog "n.v.t."
+- **Kleine polijstpunten**: `companies/new`-formulier checkt zelf geen rol vooraf (API blokkeert al wel, dus geen echt gat — knop zou gewoon een foutmelding geven i.p.v. verborgen te zijn); vervaldatum op QR/e-mail-goedkeuringslinks (nu voor altijd geldig totdat gebruikt)
 
 **Handmatige noodprocedure wachtwoord-reset** (zolang Resend nog niet gekoppeld is):
 ```sql
