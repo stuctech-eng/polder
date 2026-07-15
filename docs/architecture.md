@@ -620,6 +620,30 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.40** — Kritieke bugfix: `users`-tabel had nooit UPDATE/DELETE RLS-policies (geen architectuurwijziging):
+- **Symptoom**: rol wijzigen op de Team-pagina gaf `"Cannot coerce the result to a single
+  JSON object"` — de generieke PostgREST-foutmelding voor een `.single()`-call die 0 rijen
+  teruggeeft.
+- **Root cause**: sinds `users` bestaat, zijn er alleen SELECT-policies aan toegevoegd
+  (v1.4: eigen profiel lezen; v1.24a: teamleden zien binnen hetzelfde restaurant) — nooit
+  een UPDATE- of DELETE-policy. Elke poging tot rol wijzigen (`userRepository.updateRole`),
+  activeren/deactiveren, of verwijderen deed dus altijd een RLS-geblokkeerde, stilzwijgend
+  mislukte database-operatie — dit was de **eerste keer** dat een van deze acties
+  daadwerkelijk werd getest, dus de lacune bleef tot nu toe onopgemerkt.
+- **Oplossing**: `supabase/migrations/0013_fix_users_update_delete_rls.sql` — expliciete
+  UPDATE- en DELETE-policies, tenant-isolatie via `my_restaurant_id()` (zelfde functie als
+  v1.24a). De policy zelf is niet rol-specifiek (elke gebruiker binnen het restaurant zou
+  technisch een ander teamlid kunnen bewerken op databaseniveau) — dat is bewust, want de
+  daadwerkelijke rolcontrole (alleen eigenaar) gebeurt al vóór de database via
+  `requireRole("MANAGE_TEAM")` in de API-route, exact hetzelfde patroon als overal elders.
+  RLS is hier de tenant-isolatie-vangnet-laag, niet de primaire autorisatielaag.
+- **Patroon-herhaling**: dit is de **derde keer** dat een RLS-policy-set onvolledig bleek
+  te zijn gebleven totdat een specifieke actie voor het eerst werd getest (v1.4: SELECT
+  op users ontbrak voor genest gebruik; v1.36: GRANT voor service_role ontbrak). Les
+  bevestigd: **elke nieuwe database-operatie op een tabel moet expliciet getest worden**,
+  niet aangenomen "de tabel heeft al RLS, dus het werkt wel" — RLS is per operatie-type
+  (SELECT/INSERT/UPDATE/DELETE) een aparte, losse policy, geen alles-in-één-schakelaar.
+
 **v1.39** — Bonweergave verbeterd: eigen regel voor status, afwijzing zichtbaar, bewerkformulier uitgebreid (geen architectuurwijziging, drie gebruikersgevonden punten in één ronde):
 - **Leesbaarheid**: "✓ goedgekeurd door [naam]" stond voorheen inline achter het bonnummer,
   nu op een eigen regel eronder — voorkomt afkappen op smalle schermen (zoals zichtbaar was
