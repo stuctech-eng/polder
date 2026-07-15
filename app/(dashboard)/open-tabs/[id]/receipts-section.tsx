@@ -26,6 +26,9 @@ type Receipt = {
   receipt_lines: { description: string; quantity: number; unit_price: number; line_total: number }[];
   approval_token?: string | null;
   approved_by?: string | null;
+  rejected_by?: string | null;
+  rejection_reason?: string | null;
+  notes?: string | null;
 };
 
 const VAT_RATES = [
@@ -281,6 +284,8 @@ function ReceiptItem({
 }) {
   const [editing, setEditing] = useState(false);
   const [receiptNumber, setReceiptNumber] = useState(receipt.receipt_number ?? "");
+  const [receiptDate, setReceiptDate] = useState(receipt.receipt_date ?? "");
+  const [notes, setNotes] = useState(receipt.notes ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -291,7 +296,11 @@ function ReceiptItem({
     const response = await fetch(`/api/receipts/${receipt.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ receiptNumber: receiptNumber || undefined }),
+      body: JSON.stringify({
+        receiptNumber: receiptNumber || undefined,
+        receiptDate: receiptDate || undefined,
+        notes: notes || undefined,
+      }),
     });
 
     setLoading(false);
@@ -302,7 +311,7 @@ function ReceiptItem({
       return;
     }
 
-    onUpdated({ id: receipt.id, receipt_number: receiptNumber || null });
+    onUpdated({ id: receipt.id, receipt_number: receiptNumber || null, receipt_date: receiptDate, notes: notes || null });
     setEditing(false);
   }
 
@@ -334,20 +343,43 @@ function ReceiptItem({
             className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm mr-2"
           />
         ) : (
-          <span>
-            {receipt.receipt_number || "Bon zonder nummer"}
-            {receipt.status === "pending_approval" && (
-              <span className="ml-2 text-xs font-normal text-amber-600">wacht op goedkeuring</span>
-            )}
-            {receipt.status === "locked" && (
-              <span className="ml-2 text-xs font-normal text-green-700">
-                ✓ goedgekeurd{receipt.approved_by ? ` door ${receipt.approved_by}` : ""}
-              </span>
-            )}
-          </span>
+          <span>{receipt.receipt_number || "Bon zonder nummer"}</span>
         )}
         <span>€{receipt.total.toFixed(2)}</span>
       </div>
+
+      {!editing && receipt.status === "pending_approval" && (
+        <div className="text-xs font-medium text-amber-600 mt-1">wacht op goedkeuring</div>
+      )}
+      {!editing && receipt.status === "locked" && (
+        <div className="text-xs font-medium text-green-700 mt-1">
+          ✓ goedgekeurd{receipt.approved_by ? ` door ${receipt.approved_by}` : ""}
+        </div>
+      )}
+      {!editing && receipt.rejected_by && receipt.status !== "locked" && receipt.status !== "pending_approval" && (
+        <div className="text-xs font-medium text-red-600 mt-1">
+          ⚠ eerder afgewezen door {receipt.rejected_by}
+          {receipt.rejection_reason ? `: "${receipt.rejection_reason}"` : ""} — nu weer bewerkbaar
+        </div>
+      )}
+
+      {editing && (
+        <div className="flex gap-2 mt-2">
+          <input
+            type="date"
+            value={receiptDate}
+            onChange={(e) => setReceiptDate(e.target.value)}
+            className="min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm"
+          />
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Opmerkingen (optioneel)"
+            className="flex-1 min-h-touch px-2 rounded-lg border border-neutral-300 bg-white text-sm"
+          />
+        </div>
+      )}
+
       <div className="text-neutral-500 text-xs mt-1">
         {receipt.receipt_lines.map((l, i) => (
           <div key={i}>

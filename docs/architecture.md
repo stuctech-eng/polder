@@ -620,6 +620,21 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.39** — Bonweergave verbeterd: eigen regel voor status, afwijzing zichtbaar, bewerkformulier uitgebreid (geen architectuurwijziging, drie gebruikersgevonden punten in één ronde):
+- **Leesbaarheid**: "✓ goedgekeurd door [naam]" stond voorheen inline achter het bonnummer,
+  nu op een eigen regel eronder — voorkomt afkappen op smalle schermen (zoals zichtbaar was
+  bij "Test jopie" die tegen het bedrag aan liep).
+- **Afwijzing was onzichtbaar**: een afgewezen bon ging terug naar status `linked` (bewust,
+  zodat personeel 'm kan corrigeren) — maar toonde daardoor **geen enkel spoor** meer van de
+  afwijzing zelf, zag er identiek uit aan een gewone nieuwe bon. Nu toont de bon
+  "⚠ eerder afgewezen door [naam]: '[reden]' — nu weer bewerkbaar" zolang er geen nieuwere
+  goedkeuring overheen ligt. Vereiste het apart uit elkaar trekken van `approved_by` vs.
+  `rejected_by` in de query (voorheen één ongedifferentieerd "laatste resultaat"-veld).
+- **Bewerken deed te weinig**: de API (`PATCH /api/receipts/[id]`) ondersteunde altijd al
+  `receiptDate` en `notes` naast `receiptNumber`, maar de UI toonde alleen het bonnummer-veld
+  — een sinds de polijstronde (v1.17) blijvende inconsistentie tussen wat de API kon en wat
+  de gebruiker kon zien. Bewerkformulier toont nu ook datum en opmerkingen.
+
 **v1.38** — Naam tonen bij goedgekeurde bon (geen architectuurwijziging, afronding v1.37):
 - **Gevonden gat**: de naam van wie een bon goedkeurde (v1.37: verplicht veld op de publieke
   pagina, al opgeslagen in `approvals.approved_by`) werd wél vastgelegd, maar nergens getoond

@@ -42,24 +42,28 @@ export default async function OpenTabDetailPage({
 
   const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("*, receipt_lines(*), approvals(verification_code, status, approved_by, approved_at)")
+    .select(
+      "*, receipt_lines(*), approvals(verification_code, status, approved_by, approved_at, metadata)"
+    )
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
 
   // Guardian Mode-les: het goedkeuringstoken mag niet alleen in tijdelijke
   // client-state leven (dat verdween bij een page-refresh, zie diagnose
   // van v1.34-testronde) — hier halen we het altijd opnieuw uit de database.
-  // approvedBy: het meest recente (op approved_at) afgeronde resultaat,
-  // los van of er ook nog een pending token is.
+  // approvedBy/rejectedBy: het meest recente afgeronde resultaat, apart per
+  // uitkomst zodat een afwijzing niet ten onrechte als goedkeuring oogt.
   const receipts = receiptsRaw?.map((r: any) => {
     const pendingApproval = r.approvals?.find((a: any) => a.status === "pending");
-    const latestResolved = r.approvals
-      ?.filter((a: any) => a.status === "approved" || a.status === "rejected")
+    const resolved = (r.approvals ?? [])
+      .filter((a: any) => a.status === "approved" || a.status === "rejected")
       .sort((a: any, b: any) => new Date(b.approved_at).getTime() - new Date(a.approved_at).getTime())[0];
     return {
       ...r,
       approval_token: pendingApproval?.verification_code ?? null,
-      approved_by: latestResolved?.approved_by ?? null,
+      approved_by: resolved?.status === "approved" ? resolved.approved_by : null,
+      rejected_by: resolved?.status === "rejected" ? resolved.approved_by : null,
+      rejection_reason: resolved?.status === "rejected" ? resolved.metadata?.reason ?? null : null,
     };
   });
 
