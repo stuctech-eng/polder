@@ -40,11 +40,19 @@ export default async function OpenTabDetailPage({
     notFound();
   }
 
-  const { data: receipts } = await supabase
+  const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("*, receipt_lines(*)")
+    .select("*, receipt_lines(*), approvals(verification_code, status)")
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
+
+  // Guardian Mode-les: het goedkeuringstoken mag niet alleen in tijdelijke
+  // client-state leven (dat verdween bij een page-refresh, zie diagnose
+  // van v1.34-testronde) — hier halen we het altijd opnieuw uit de database.
+  const receipts = receiptsRaw?.map((r: any) => {
+    const pendingApproval = r.approvals?.find((a: any) => a.status === "pending");
+    return { ...r, approval_token: pendingApproval?.verification_code ?? null };
+  });
 
   const approvalSettings = tab.company_id
     ? await getApprovalSettings(supabase, tab.company_id)

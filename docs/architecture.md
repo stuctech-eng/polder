@@ -620,6 +620,26 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.35** — Bugfix: QR-goedkeuringstoken verdween bij page-refresh (geen architectuurwijziging, gevonden tijdens gebruikerstest):
+- **Symptoom**: QR-code werd correct getoond direct na het aanmaken van een bon, maar na een
+  page-refresh (of nieuw bezoek aan de rekening) leidde de gescande QR-code naar "Ongeldige
+  of verlopen link" — terwijl `approvals.verification_code` gewoon correct in de database
+  stond (bevestigd via directe SQL-diagnose).
+- **Root cause**: het token leefde alleen in tijdelijke client-side React-state (uit de
+  eerste POST-response bij bon aanmaken) — de pagina haalde het bij een refresh nergens
+  opnieuw op, waardoor `approvalToken` `undefined` werd en de QR-afbeelding een kapotte URL
+  (`.../approve/undefined`) codeerde die er nog wél als geldige QR-code uitzag.
+  Diagnosemethode: directe SQL-query op `approvals` bevestigde dat de opgeslagen token
+  klopte, wat de zoektocht meteen naar de weergavelaag verlegde in plaats van de opslag.
+- **Oplossing**: `open-tabs/[id]/page.tsx` haalt nu bij elke laadbeurt de `approvals`-rij
+  van elke bon mee (embedded query), en bepaalt het actieve `pending`-token daaruit — de
+  database is en blijft de bron van waarheid (governance 6.2), niet de tijdelijke
+  client-state van het moment van aanmaken.
+- **Les voor vervolg**: elk token/gegenereerde-waarde die na de eerste weergave nog relevant
+  moet blijven (bijv. bij een refresh, of een tweede bezoeker), moet **altijd** herleidbaar
+  zijn uit de database-query van de pagina zelf — nooit alleen uit een eenmalige API-response
+  die verloren gaat zodra de client-state ververst.
+
 **v1.34** — Fase C geïmplementeerd: E-mail + QR-goedkeuring (klant-goedgekeurd, volgens plan sectie 10.8):
 - **Email Engine** (`lib/email/`): eerste echte implementatie van de Email Provider Interface
   (governance 6.4) — `types.ts` (interface), `providers/resend-provider.ts` (plain fetch naar
