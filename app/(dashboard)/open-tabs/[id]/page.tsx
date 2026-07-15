@@ -42,16 +42,25 @@ export default async function OpenTabDetailPage({
 
   const { data: receiptsRaw } = await supabase
     .from("receipts")
-    .select("*, receipt_lines(*), approvals(verification_code, status)")
+    .select("*, receipt_lines(*), approvals(verification_code, status, approved_by, approved_at)")
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
 
   // Guardian Mode-les: het goedkeuringstoken mag niet alleen in tijdelijke
   // client-state leven (dat verdween bij een page-refresh, zie diagnose
   // van v1.34-testronde) — hier halen we het altijd opnieuw uit de database.
+  // approvedBy: het meest recente (op approved_at) afgeronde resultaat,
+  // los van of er ook nog een pending token is.
   const receipts = receiptsRaw?.map((r: any) => {
     const pendingApproval = r.approvals?.find((a: any) => a.status === "pending");
-    return { ...r, approval_token: pendingApproval?.verification_code ?? null };
+    const latestResolved = r.approvals
+      ?.filter((a: any) => a.status === "approved" || a.status === "rejected")
+      .sort((a: any, b: any) => new Date(b.approved_at).getTime() - new Date(a.approved_at).getTime())[0];
+    return {
+      ...r,
+      approval_token: pendingApproval?.verification_code ?? null,
+      approved_by: latestResolved?.approved_by ?? null,
+    };
   });
 
   const approvalSettings = tab.company_id

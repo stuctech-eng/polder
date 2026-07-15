@@ -113,5 +113,5 @@ export async function POST(
     target_id: params.id,
   });
 
-  return NextResponse.json({ status: newReceiptStatus });
+  return NextResponse.json({ status: newReceiptStatus, approvedBy: userProfile?.full_name ?? null });
 }

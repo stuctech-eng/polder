@@ -620,6 +620,21 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.38** — Naam tonen bij goedgekeurde bon (geen architectuurwijziging, afronding v1.37):
+- **Gevonden gat**: de naam van wie een bon goedkeurde (v1.37: verplicht veld op de publieke
+  pagina, al opgeslagen in `approvals.approved_by`) werd wél vastgelegd, maar nergens getoond
+  op de bon zelf — alleen terug te vinden via de Activity Log op het Dashboard.
+- **Oplossing**: `open-tabs/[id]/page.tsx` haalt nu ook `approved_by`/`approved_at` op uit de
+  `approvals`-embed en bepaalt het meest recente afgeronde resultaat (approved of rejected,
+  niet alleen de pending-rij); bonnenlijst toont nu "✓ goedgekeurd door [naam]".
+- **Bijkomende consistentiefix**: de **interne** PIN/Restaurant-bevestigt-goedkeuring (via de
+  ingelogde `/api/receipts/[id]/approve`-route) gaf de naam ook niet direct terug aan de UI —
+  nu wel, zodat de naam meteen zichtbaar is zonder page-refresh, consistent met de externe
+  e-mail/QR-flow.
+- **Patroon herhaald uit v1.35**: ook hier gold "iets wat eenmalig in een API-response
+  terugkomt, moet ook herleidbaar zijn uit de database-query van de pagina zelf" — ditmaal
+  vooraf goed toegepast in plaats van achteraf ontdekt als bug.
+
 **v1.37** — Naamregistratie + afwijzen toegevoegd aan publieke goedkeuring (geen architectuurwijziging):
 - **Naam verplicht**: wie de publieke `/approve/[token]`-link opent (klant of manager op
   afstand) moet nu een naam invullen vóór goedkeuren/afwijzen — vastgelegd in

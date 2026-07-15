@@ -25,6 +25,7 @@ type Receipt = {
   receipt_date: string;
   receipt_lines: { description: string; quantity: number; unit_price: number; line_total: number }[];
   approval_token?: string | null;
+  approved_by?: string | null;
 };
 
 const VAT_RATES = [
@@ -339,7 +340,9 @@ function ReceiptItem({
               <span className="ml-2 text-xs font-normal text-amber-600">wacht op goedkeuring</span>
             )}
             {receipt.status === "locked" && (
-              <span className="ml-2 text-xs font-normal text-green-700">✓ goedgekeurd</span>
+              <span className="ml-2 text-xs font-normal text-green-700">
+                ✓ goedgekeurd{receipt.approved_by ? ` door ${receipt.approved_by}` : ""}
+              </span>
             )}
           </span>
         )}
@@ -358,7 +361,7 @@ function ReceiptItem({
           receiptId={receipt.id}
           method={approvalMethod}
           approvalToken={receipt.approval_token ?? null}
-          onApproved={(status) => onUpdated({ id: receipt.id, status })}
+          onApproved={(status, approvedBy) => onUpdated({ id: receipt.id, status, approved_by: approvedBy })}
         />
       )}
 
@@ -418,7 +421,7 @@ function ApprovalBlock({
   receiptId: string;
   method: "pin" | "restaurant_confirms" | "email" | "qr" | null;
   approvalToken: string | null;
-  onApproved: (status: string) => void;
+  onApproved: (status: string, approvedBy?: string) => void;
 }) {
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -443,7 +446,7 @@ function ApprovalBlock({
       return;
     }
 
-    onApproved(body.status);
+    onApproved(body.status, body.approvedBy);
   }
 
   if (method === "pin") {
