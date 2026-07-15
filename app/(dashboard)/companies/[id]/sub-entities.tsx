@@ -306,14 +306,19 @@ export function ApprovalSettingsSection({
   companyId,
   initialEnabled,
   initialMethod,
+  initialNotifyEmail,
 }: {
   companyId: string;
   initialEnabled: boolean;
-  initialMethod: "pin" | "restaurant_confirms" | null;
+  initialMethod: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  initialNotifyEmail?: string | null;
 }) {
   const [enabled, setEnabled] = useState(initialEnabled);
-  const [method, setMethod] = useState<"pin" | "restaurant_confirms">(initialMethod ?? "restaurant_confirms");
+  const [method, setMethod] = useState<"pin" | "restaurant_confirms" | "email" | "qr">(
+    initialMethod ?? "restaurant_confirms"
+  );
   const [newPin, setNewPin] = useState("");
+  const [notifyEmail, setNotifyEmail] = useState(initialNotifyEmail ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -331,6 +336,7 @@ export function ApprovalSettingsSection({
         method: enabled ? method : null,
         autoLock: true,
         newPin: newPin || undefined,
+        notifyEmail: method === "email" ? notifyEmail || undefined : undefined,
       }),
     });
 
@@ -359,9 +365,9 @@ export function ApprovalSettingsSection({
             vergrendeld (niet meer te wijzigen).
           </p>
           <p>
-            <strong>PIN</strong>: een code die de manager invoert bij elke bon.{" "}
-            <strong>Restaurant bevestigt</strong>: een geautoriseerde gebruiker klikt
-            gewoon op "Goedkeuren", geen code nodig.
+            <strong>PIN</strong> en <strong>Restaurant bevestigt</strong> zijn voor eigen
+            personeel (ingelogd). <strong>E-mail</strong> en <strong>QR</strong> sturen een
+            unieke link — handig voor een manager op afstand, geen inloggen nodig.
           </p>
         </div>
       </details>
@@ -382,11 +388,15 @@ export function ApprovalSettingsSection({
             <label className="block text-sm font-medium mb-1">Methode</label>
             <select
               value={method}
-              onChange={(e) => setMethod(e.target.value as "pin" | "restaurant_confirms")}
+              onChange={(e) =>
+                setMethod(e.target.value as "pin" | "restaurant_confirms" | "email" | "qr")
+              }
               className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
             >
-              <option value="restaurant_confirms">Restaurant bevestigt</option>
-              <option value="pin">PIN</option>
+              <option value="restaurant_confirms">Restaurant bevestigt (personeel)</option>
+              <option value="pin">PIN (personeel)</option>
+              <option value="email">E-mail (link naar manager op afstand)</option>
+              <option value="qr">QR-code (scanbare link)</option>
             </select>
           </div>
 
@@ -404,6 +414,30 @@ export function ApprovalSettingsSection({
                 className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
               />
             </div>
+          )}
+
+          {method === "email" && (
+            <div className="mb-2">
+              <label className="block text-sm font-medium mb-1">E-mailadres voor goedkeuring</label>
+              <input
+                type="email"
+                value={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.value)}
+                placeholder="manager@voorbeeld.nl"
+                className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
+              />
+              <p className="text-xs text-neutral-400 mt-1">
+                Let op: vereist een geverifieerd Resend-domein om betrouwbaar aan te komen bij
+                willekeurige adressen (zie README).
+              </p>
+            </div>
+          )}
+
+          {method === "qr" && (
+            <p className="text-xs text-neutral-500 mb-2">
+              Bij elke bon verschijnt een scanbare QR-code met een unieke goedkeuringslink —
+              geen verdere instelling nodig.
+            </p>
           )}
         </>
       )}

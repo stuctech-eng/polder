@@ -105,8 +105,7 @@ export default async function OpenTabDetailPage({
         isInvoiced={tab.status === "invoiced"}
         canAddReceipts={tab.status === "open"}
         approvalMethod={
-          approvalSettings?.enabled &&
-          (approvalSettings.method === "pin" || approvalSettings.method === "restaurant_confirms")
+          approvalSettings?.enabled && approvalSettings.method !== "signature"
             ? approvalSettings.method
             : null
         }

@@ -590,7 +590,62 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 - Onderscheid met Dashboard nu scherp: Dashboard = managementinformatie (maandomzet,
   trends, top bedrijven), Daily Closing = operationele controle vóór kassa-afsluiting
 
+### 10.8 Fase C — Implementatieplan (vastgelegd vóór bouwen, Guardian Mode)
+
+**Bevindingen uit codebase-review:**
+- Er bestaat nog geen echte Email Provider Interface in code — alleen gedocumenteerd
+  (governance 6.4). Resend loopt tot nu toe alleen via Supabase Auth (wachtwoord-reset/
+  uitnodigingen). Fase C wordt de eerste echte implementatie van de Email Engine —
+  herbruikbaar voor het latere factuur-mailen.
+- E-mail/QR zijn fundamenteel anders dan PIN: die laatste vereist een ingelogde gebruiker
+  die op een knop klikt; e-mail/QR zijn voor iemand die **niet per se inlogt** (manager op
+  afstand, of later de klant zelf) — vraagt een publieke, token-based goedkeuringspagina.
+- `approvals.verification_code` bestaat al sinds Fase A, ongebruikt — precies hiervoor bedoeld.
+
+**Nieuw:**
+- `lib/email/types.ts`, `lib/email/providers/resend-provider.ts`, `lib/email/email-service.ts`
+  — Email Engine, eerste echte implementatie
+- `app/approve/[token]/page.tsx` + `app/api/public-approve/[token]/route.ts` — publieke,
+  niet-ingelogde goedkeuringsflow (token via `verification_code`)
+- QR hergebruikt dezelfde link, alleen als scanbare afbeelding (externe QR-image-service,
+  client-side, geen nieuwe dependency)
+- Migratie 0011: `notify_email`-kolom op `approval_settings`
+
+**Wijzigingen:** `middleware.ts` (`/approve` publiek), `approval-settings`-route en -UI,
+`ApprovalBlock` (toont per methode het juiste — mailmelding, QR-afbeelding, of PIN-veld).
+
+**Risico's:** mislukte e-mailverzending mag de bon-flow niet blokkeren (zelfde principe als
+PDF-opslag, v1.14) — bon gaat gewoon naar `pending_approval`, met zichtbare waarschuwing.
+Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande SMTP-config).
+
 ## 10. WIJZIGINGSHISTORIE
+
+**v1.34** — Fase C geïmplementeerd: E-mail + QR-goedkeuring (klant-goedgekeurd, volgens plan sectie 10.8):
+- **Email Engine** (`lib/email/`): eerste echte implementatie van de Email Provider Interface
+  (governance 6.4) — `types.ts` (interface), `providers/resend-provider.ts` (plain fetch naar
+  Resend API, geen extra dependency), `email-service.ts` (enige aanspreekpunt). Aparte
+  `RESEND_API_KEY` van de bestaande Supabase Auth SMTP-configuratie.
+- **Publieke, niet-ingelogde goedkeuringsflow**: `app/approve/[token]/page.tsx` +
+  `app/api/public-approve/[token]/route.ts` — gebruikt `approvals.verification_code`
+  (bestond al sinds Fase A, tot nu toe ongebruikt) als niet-raadbare, eenmalige token.
+  Service-role client (`createSupabaseAdminClient`) nodig omdat er geen sessie is om RLS
+  namens te laten gelden.
+- **QR-methode**: hergebruikt exact dezelfde publieke link, alleen als scanbare afbeelding
+  getoond via een externe QR-image-service (client-side `<img>`, geen nieuwe dependency).
+- **Middleware uitgebreid**: `/approve` en `/api/public-approve` toegevoegd aan de publieke
+  paden — belangrijk detail: de middleware-matcher dekt óók API-routes, dus beide moesten
+  expliciet toegevoegd worden, niet alleen de pagina.
+- **`ApprovalSettingsSection`/`ApprovalBlock` uitgebreid**: E-mail (met `notify_email`-veld)
+  en QR als extra methode-opties, naast PIN/Restaurant-bevestigt.
+- **Bewuste architecturale scheiding**: E-mail/QR gebruiken een fundamenteel ander pad dan
+  PIN/Restaurant-bevestigt — die laatste vereisen een ingelogde gebruiker (`verify()` via de
+  geauthenticeerde `/approve`-route), E-mail/QR zijn voor wie niet per se inlogt (token-link
+  via de publieke route). Dit stond niet expliciet zo in het oorspronkelijke Fase B/C-plan,
+  maar volgt logisch uit hoe deze methoden bedoeld zijn (`Provider 2 — Email Approval` uit de
+  klant-spec: "Manager opent link, Akkoord" — geen credential-invoer).
+- **Zelfde discipline als eerder**: mislukte e-mailverzending blokkeert de bon-flow niet
+  (bon gaat gewoon naar `pending_approval`, met zichtbare waarschuwing) — zelfde principe
+  als de factuur-PDF-opslag (v1.14).
 
 **v1.33** — Prestatie-optimalisatie (geen architectuurwijziging, gebruikersfeedback):
 - **Gemelde klacht**: knoppen "reageerden niet" (1 seconde niets, dan pas actie) — geen
@@ -923,7 +978,7 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 ## 11. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B (Approval Engine core + PIN + Restaurant-bevestigt) COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET (v1.31).** Volgende stap: Fase C (E-mail + QR-provider) of Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), geen van beide urgent. Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B COMPLEET, Fase C (E-mail + QR-goedkeuring) COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET (v1.34).** Volgende stap: Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), niet urgent. Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

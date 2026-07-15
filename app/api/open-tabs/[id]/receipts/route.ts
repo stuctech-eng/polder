@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getApprovalSettings } from "@/lib/approval/approval-service";
+import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
+import { generateApprovalToken } from "@/lib/approval/token";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { z } from "zod";
 
@@ -151,9 +152,11 @@ export async function POST(
   }
 
   // Approval Engine-integratie: de Receipt Manager weet alleen "dit bedrijf
-  // vereist goedkeuring" — geen kennis van PIN/restaurant_confirms zelf
-  // (klant-instructie, sectie 10.7).
+  // vereist goedkeuring" — geen kennis van PIN/restaurant_confirms/e-mail/QR
+  // zelf (klant-instructie, sectie 10.7).
   let finalStatus = receipt.status;
+  let approvalToken: string | null = null;
+  let approvalWarning: string | null = null;
   if (tab.company_id) {
     const settings = await getApprovalSettings(supabase, tab.company_id);
     if (settings.enabled && settings.method) {
@@ -164,12 +167,39 @@ export async function POST(
 
       if (!statusError) {
         finalStatus = "pending_approval";
+
+        // Token alleen nodig voor de publieke link-flows (email/qr) —
+        // PIN/restaurant_confirms lopen via de ingelogde, geauthenticeerde route.
+        if (settings.method === "email" || settings.method === "qr") {
+          approvalToken = generateApprovalToken();
+        }
+
         await supabase.from("approvals").insert({
           receipt_id: receipt.id,
           company_id: tab.company_id,
           method: settings.method,
           status: "pending",
+          verification_code: approvalToken,
         });
+
+        if (settings.method === "email") {
+          const { data: restaurant } = await supabase
+            .from("restaurants")
+            .select("name")
+            .eq("id", ctx.restaurantId)
+            .single();
+          const notifyResult = await notifyApprovalRequested({
+            settings,
+            token: approvalToken!,
+            restaurantName: restaurant?.name ?? "Restaurant",
+            receiptTotal: total,
+            baseUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://polder.vercel.app",
+          });
+          if (!notifyResult.success) {
+            approvalWarning = notifyResult.warning ?? "Kon goedkeuringsmail niet versturen";
+          }
+        }
+
         await supabase.from("domain_events").insert({
           restaurant_id: ctx.restaurantId,
           event_type: "ApprovalRequested",
@@ -197,7 +227,11 @@ export async function POST(
   });
 
   return NextResponse.json(
-    { receipt: { ...receipt, status: finalStatus, receipt_lines: linesWithTotals } },
+    {
+      receipt: { ...receipt, status: finalStatus, receipt_lines: linesWithTotals },
+      approvalToken,
+      approvalWarning,
+    },
     { status: 201 }
   );
 }

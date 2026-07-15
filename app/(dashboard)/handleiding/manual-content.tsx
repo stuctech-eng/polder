@@ -77,6 +77,16 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Geen code nodig — een geautoriseerde gebruiker klikt gewoon op 'Goedkeuren'. De vergrendeling gebeurt automatisch daarna.",
       },
       {
+        title: "E-mail (voor wie niet inlogt)",
+        detail:
+          "Een unieke link wordt gemaild naar het ingestelde adres — handig voor een manager op afstand. Geen account nodig, gewoon de link openen en op 'Goedkeuren' tikken.",
+      },
+      {
+        title: "QR-code (voor wie niet inlogt)",
+        detail:
+          "Zelfde unieke link als E-mail, maar als scanbare code getoond bij de bon. Handig als er geen mailadres beschikbaar is, of voor een snelle scan ter plekke.",
+      },
+      {
         title: "Na goedkeuring",
         detail:
           "De bon wordt vergrendeld ('locked') en kan niet meer gewijzigd of verwijderd worden.",

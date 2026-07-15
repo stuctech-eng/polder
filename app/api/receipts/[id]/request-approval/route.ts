@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getApprovalSettings } from "@/lib/approval/approval-service";
+import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
+import { generateApprovalToken } from "@/lib/approval/token";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 
 export async function POST(
@@ -23,7 +24,7 @@ export async function POST(
   // terug = bon bestaat niet of hoort bij een ander restaurant.
   const { data: receipt } = await supabase
     .from("receipts")
-    .select("id, status, open_tab_id, restaurant_id, open_tabs(company_id)")
+    .select("id, status, total, open_tab_id, restaurant_id, open_tabs(company_id)")
     .eq("id", params.id)
     .single();
 
@@ -61,14 +62,39 @@ export async function POST(
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  let approvalToken: string | null = null;
+  if (settings.method === "email" || settings.method === "qr") {
+    approvalToken = generateApprovalToken();
+  }
+
   const { error: approvalError } = await supabase.from("approvals").insert({
     receipt_id: params.id,
     company_id: companyId,
     method: settings.method,
     status: "pending",
+    verification_code: approvalToken,
   });
   if (approvalError) {
     return NextResponse.json({ error: approvalError.message }, { status: 500 });
+  }
+
+  let approvalWarning: string | null = null;
+  if (settings.method === "email") {
+    const { data: restaurant } = await supabase
+      .from("restaurants")
+      .select("name")
+      .eq("id", ctx.restaurantId)
+      .single();
+    const notifyResult = await notifyApprovalRequested({
+      settings,
+      token: approvalToken!,
+      restaurantName: restaurant?.name ?? "Restaurant",
+      receiptTotal: Number(receipt.total ?? 0),
+      baseUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://polder.vercel.app",
+    });
+    if (!notifyResult.success) {
+      approvalWarning = notifyResult.warning ?? "Kon goedkeuringsmail niet versturen";
+    }
   }
 
   await supabase.from("domain_events").insert({
@@ -86,5 +112,10 @@ export async function POST(
     target_id: params.id,
   });
 
-  return NextResponse.json({ status: "pending_approval", method: settings.method });
+  return NextResponse.json({
+    status: "pending_approval",
+    method: settings.method,
+    approvalToken,
+    approvalWarning,
+  });
 }

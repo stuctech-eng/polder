@@ -24,6 +24,7 @@ type Receipt = {
   vat_amount: number;
   receipt_date: string;
   receipt_lines: { description: string; quantity: number; unit_price: number; line_total: number }[];
+  approval_token?: string | null;
 };
 
 const VAT_RATES = [
@@ -43,7 +44,7 @@ export function ReceiptsSection({
   initialReceipts: Receipt[];
   isInvoiced?: boolean;
   canAddReceipts?: boolean;
-  approvalMethod?: "pin" | "restaurant_confirms" | null;
+  approvalMethod?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
@@ -101,11 +102,14 @@ export function ReceiptsSection({
       return;
     }
 
-    const { receipt } = await response.json();
-    setReceipts((prev) => [receipt, ...prev]);
+    const { receipt, approvalToken, approvalWarning } = await response.json();
+    setReceipts((prev) => [{ ...receipt, approval_token: approvalToken }, ...prev]);
     setReceiptNumber("");
     setLines([{ description: "", quantityText: "1", unitPriceText: "", vatRate: 9 }]);
     setShowForm(false);
+    if (approvalWarning) {
+      setError(approvalWarning);
+    }
     router.refresh();
   }
 
@@ -270,7 +274,7 @@ function ReceiptItem({
 }: {
   receipt: Receipt;
   isInvoiced: boolean;
-  approvalMethod: "pin" | "restaurant_confirms" | null;
+  approvalMethod: "pin" | "restaurant_confirms" | "email" | "qr" | null;
   onDeleted: () => void;
   onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
 }) {
@@ -353,6 +357,7 @@ function ReceiptItem({
         <ApprovalBlock
           receiptId={receipt.id}
           method={approvalMethod}
+          approvalToken={receipt.approval_token ?? null}
           onApproved={(status) => onUpdated({ id: receipt.id, status })}
         />
       )}
@@ -407,10 +412,12 @@ function ReceiptItem({
 function ApprovalBlock({
   receiptId,
   method,
+  approvalToken,
   onApproved,
 }: {
   receiptId: string;
-  method: "pin" | "restaurant_confirms" | null;
+  method: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  approvalToken: string | null;
   onApproved: (status: string) => void;
 }) {
   const [pin, setPin] = useState("");
@@ -459,6 +466,29 @@ function ApprovalBlock({
         </button>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </form>
+    );
+  }
+
+  if (method === "email") {
+    return (
+      <p className="mt-2 text-xs text-neutral-500">
+        📧 Goedkeuringsmail verstuurd — wacht tot de manager de link opent.
+      </p>
+    );
+  }
+
+  if (method === "qr" && approvalToken) {
+    const approveUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/approve/${approvalToken}`
+        : `/approve/${approvalToken}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(approveUrl)}`;
+    return (
+      <div className="mt-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={qrImageUrl} alt="Scan om goed te keuren" width={140} height={140} className="rounded-lg border border-neutral-200" />
+        <p className="text-xs text-neutral-500 mt-1">Scan om goed te keuren.</p>
+      </div>
     );
   }
 

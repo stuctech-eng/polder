@@ -6,9 +6,10 @@ import { z } from "zod";
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
-  method: z.enum(["pin", "restaurant_confirms"]).nullable(),
+  method: z.enum(["pin", "restaurant_confirms", "email", "qr"]).nullable(),
   autoLock: z.boolean().default(true),
   newPin: z.string().min(4, "PIN moet minimaal 4 cijfers zijn").optional(),
+  notifyEmail: z.string().email("Ongeldig e-mailadres").optional(),
 });
 
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from("approval_settings")
-    .select("is_required, method, auto_lock")
+    .select("is_required, method, auto_lock, notify_email")
     .eq("company_id", params.id)
     .maybeSingle();
   // pin_hash/pin_salt bewust niet geselecteerd — nooit teruggeven aan de client.
@@ -32,7 +33,7 @@ export async function GET(
           enabled: data.is_required,
           method: data.method,
           autoLock: data.auto_lock,
-          hasPinSet: undefined, // apart afgehandeld hieronder
+          notifyEmail: data.notify_email,
         }
       : null,
   });
@@ -90,12 +91,30 @@ export async function PUT(
     }
   }
 
+  if (parsed.data.enabled && parsed.data.method === "email" && !parsed.data.notifyEmail) {
+    const { data: existing } = await supabase
+      .from("approval_settings")
+      .select("notify_email")
+      .eq("company_id", params.id)
+      .maybeSingle();
+    if (!existing?.notify_email) {
+      return NextResponse.json(
+        { error: "Vul een e-mailadres in voor de E-mail-goedkeuringsmethode" },
+        { status: 400 }
+      );
+    }
+  }
+
   const updates: Record<string, unknown> = {
     is_required: parsed.data.enabled,
     method: parsed.data.method,
     auto_lock: parsed.data.autoLock,
     updated_at: new Date().toISOString(),
   };
+
+  if (parsed.data.notifyEmail) {
+    updates.notify_email = parsed.data.notifyEmail;
+  }
 
   if (parsed.data.newPin) {
     const { hash, salt } = hashPin(parsed.data.newPin);
@@ -115,13 +134,13 @@ export async function PUT(
       .from("approval_settings")
       .update(updates)
       .eq("id", existing.id)
-      .select("is_required, method, auto_lock")
+      .select("is_required, method, auto_lock, notify_email")
       .single();
   } else {
     result = await supabase
       .from("approval_settings")
       .insert({ company_id: params.id, ...updates })
-      .select("is_required, method, auto_lock")
+      .select("is_required, method, auto_lock, notify_email")
       .single();
   }
 

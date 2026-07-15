@@ -63,7 +63,7 @@ export default async function CompanyDetailPage({
       .maybeSingle(),
     supabase
       .from("approval_settings")
-      .select("is_required, method")
+      .select("is_required, method, notify_email")
       .eq("company_id", params.id)
       .maybeSingle(),
   ]);
@@ -106,7 +106,10 @@ export default async function CompanyDetailPage({
         <ApprovalSettingsSection
           companyId={params.id}
           initialEnabled={approvalSettings?.is_required ?? false}
-          initialMethod={(approvalSettings?.method as "pin" | "restaurant_confirms" | null) ?? null}
+          initialMethod={
+            (approvalSettings?.method as "pin" | "restaurant_confirms" | "email" | "qr" | null) ?? null
+          }
+          initialNotifyEmail={approvalSettings?.notify_email ?? null}
         />
       </div>
     </>

@@ -59,7 +59,11 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ **Handleiding** (`/handleiding`): voor iedereen toegankelijk (geen rechten-check op lezen), rolafhankelijk gesorteerd — eigen rol-secties staan open bovenaan, de rest staat er ook maar dichtgeklapt. Bevat ook een rollen/rechten-overzichtstabel.
 - ✅ **Navigatie herbouwd** als horizontale scrollbare knoppenbalk (pill-stijl) — schaalt beter nu er meer secties zijn dan op één regel passen.
 - ✅ **Prestatie-optimalisatie**: rol/sessie-opzoeking wordt nu binnen één paginabezoek gedeeld tussen layout en pagina (React `cache()`) i.p.v. dubbel bevraagd; `loading.tsx` toegevoegd aan alle hoofdpagina's zodat navigatie **direct** visuele feedback geeft (skeleton), ook als de data zelf nog even ophaalt — lost het "voelt-kapot"-gevoel bij trage responses op.
-- ⬜ Fase C (E-mail + QR-provider), Fase D (digitale handtekening — nodig zodra de **bedrijfsklant zelf** moet kunnen goedkeuren, i.p.v. alleen intern personeel via PIN)
+- ✅ **Fase C gebouwd — E-mail + QR-goedkeuring**: Email Engine (eerste echte implementatie, `lib/email/`, herbruikbaar voor factuur-mailen later), publieke token-based goedkeuringsflow (`/approve/[token]`, geen login nodig — voor managers op afstand of straks klanten), QR-code als scanbare afbeelding van dezelfde link. Instelbaar per bedrijf naast PIN/Restaurant-bevestigt.
+- ⬜ Fase D (digitale handtekening — nodig zodra de **bedrijfsklant zelf** moet kunnen goedkeuren)
+
+**Belangrijk — nieuwe actie vereist voor E-mail-goedkeuring:**
+`RESEND_API_KEY` toevoegen als environment variable in Vercel — een **aparte** key dan de bestaande SMTP-configuratie (die is voor Supabase Auth-mails zoals wachtwoord-reset; dit is voor eigen app-mails). Ophalen via Resend → API Keys. Optioneel: `RESEND_FROM_ADDRESS` (standaard `onboarding@resend.dev`, dus dezelfde testlimiet als eerder totdat het domein geregeld is).
 
 **Belangrijk — extra actie vereist voor Facturatie:**
 De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé). Als die nog niet bestaat:
@@ -68,7 +72,7 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 3. Draai daarna óók `supabase/migrations/0005_storage_policies.sql` — de bucket alleen is niet genoeg, storage heeft een eigen RLS-systeem (zie v1.15)
 
 **Belangrijk — actie vereist voor de nieuwe uitbreiding:**
-Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_engine_extend.sql`, en `0010_daily_closing.sql` in de Supabase SQL Editor.
+Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_engine_extend.sql`, `0010_daily_closing.sql`, en `0011_approval_email_qr.sql` in de Supabase SQL Editor.
 
 **Belangrijk — actie vereist voor Teambeheer:**
 1. Draai `supabase/migrations/0008_team_management.sql` in de Supabase SQL Editor
