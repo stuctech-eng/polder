@@ -620,6 +620,23 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.37** — Naamregistratie + afwijzen toegevoegd aan publieke goedkeuring (geen architectuurwijziging):
+- **Naam verplicht**: wie de publieke `/approve/[token]`-link opent (klant of manager op
+  afstand) moet nu een naam invullen vóór goedkeuren/afwijzen — vastgelegd in
+  `approvals.approved_by`, i.p.v. het generieke "extern (via link)" van v1.34.
+- **Afwijzen toegevoegd**: eerste echte reject-flow in de Approval Engine. Bon gaat terug
+  naar `linked` (opnieuw bewerkbaar door personeel), `approvals.status = rejected` met
+  optionele reden in `metadata` (jsonb, bestond al sinds Fase B). Nieuw event:
+  `ApprovalRejected`.
+- **Daily Closing Engine bijgewerkt**: de controle "Afgekeurde bonnen" toonde sinds de
+  eerste versie bewust "n.v.t." (afkeuren bestond nog niet) — nu een echte, werkende
+  telling van vandaag afgewezen bonnen. Mooi voorbeeld van hoe een eerlijk benoemd gat
+  later alsnog gesloten wordt zodra de onderliggende functionaliteit er is.
+- **Aanleiding**: directe vervolgvraag op de succesvolle Fase C-test ("de bedoeling is dat
+  de klant zelf scant, toch?") — bevestigde dat dit zonder naamregistratie een zwakke
+  audit trail zou geven voor een externe partij, en dat "alleen goedkeuren, nooit afwijzen
+  kunnen" een onnodige beperking was.
+
 **v1.36** — Kritieke bugfix: GRANT-rechten ontbraken voor `service_role` (geen architectuurwijziging):
 - **Symptoom**: publieke QR/e-mail-goedkeuringslink bleef "Ongeldige of verlopen link" tonen,
   ook na de v1.35-fix — terwijl de token bevestigd correct in de database stond.

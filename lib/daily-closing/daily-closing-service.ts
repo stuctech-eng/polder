@@ -40,6 +40,7 @@ export async function buildDailyClosingReport(
     { count: awaitingInvoice },
     { count: pendingApproval },
     { count: draftReceipts },
+    { count: rejectedApprovalsToday },
     { data: existingClosing },
   ] = await Promise.all([
     supabase
@@ -65,6 +66,12 @@ export async function buildDailyClosingReport(
       .from("receipts")
       .select("id", { count: "exact", head: true })
       .eq("status", "draft"),
+    supabase
+      .from("approvals")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "rejected")
+      .gte("approved_at", `${date}T00:00:00.000Z`)
+      .lte("approved_at", `${date}T23:59:59.999Z`),
     supabase
       .from("daily_closings")
       .select("closed_at, users(full_name)")
@@ -96,9 +103,12 @@ export async function buildDailyClosingReport(
       detail: (draftReceipts ?? 0) > 0 ? `${draftReceipts} conceptbon(nen)` : undefined,
     },
     {
-      label: "Afgekeurde bonnen",
-      status: "not_applicable",
-      detail: "Afkeuren bestaat nog niet in de Approval Engine — deze controle is nog niet mogelijk",
+      label: "Afgekeurde bonnen (vandaag)",
+      status: (rejectedApprovalsToday ?? 0) === 0 ? "ok" : "warning",
+      detail:
+        (rejectedApprovalsToday ?? 0) > 0
+          ? `${rejectedApprovalsToday} bon(nen) afgewezen — controleer of ze gecorrigeerd zijn`
+          : undefined,
     },
     {
       label: "Niet-gekoppelde / ontbrekende bonnen",

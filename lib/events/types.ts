@@ -24,6 +24,7 @@ export type DomainEventType =
   | "UserDeactivated"
   | "ApprovalRequested"
   | "ApprovalCompleted"
+  | "ApprovalRejected"
   | "ReceiptLocked"
   | "DayClosed";
 
