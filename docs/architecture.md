@@ -567,6 +567,20 @@ bron van waarheid, geen dubbele state).
 - "Niet gekoppelde/ontbrekende bonnen": hoort bij Fase 2 (Import Engine/kassa-koppeling),
   n.v.t. in de huidige handmatige flow
 
+**Vervolgfase (na Integration Engine, klant-overleg v1.45): Volledige restaurant-dagafsluiting.**
+Belangrijk onderscheid: de bovenstaande gaten zijn **niet** een onvolledige Dagafsluiting —
+de module zelf is compleet voor wat er intern beschikbaar is. Ze wachten op een externe
+bron (kassa-koppeling) die simpelweg nog niet aangesloten is. Zodra Integration Engine
+(Fase 2) er is, breidt Dagafsluiting uit met:
+- Kassa-omzet ophalen en **vergelijken** met wat Polder zelf heeft verwerkt (kasverschillen
+  direct zichtbaar, bijv. "Kassa €5.240 / Polder €5.180 / Verschil €60 ⚠")
+- Pin/contant-splitsing (nu n.v.t., wordt dan wel mogelijk)
+- Geannuleerde kassa-transacties + medewerkers/kassahandelingen vergelijken
+Volgorde bevestigd: (1) interne administratie ✅ → (2) controle/goedkeuring ✅ →
+(3) Integration Engine 🔄 → (4) Dagafsluiting met echte kassacontrole 🔜. Architectuur is
+hier al op voorbereid (`daily-closing-service.ts` verzamelt al uit meerdere bronnen —
+kassa wordt straks gewoon een extra bron naast de bestaande).
+
 **Toegang:** nieuwe permissie `MANAGE_DAILY_CLOSING` (eigenaar/manager), zelfde patroon als
 `APPROVE_RECEIPTS`.
 
@@ -703,6 +717,20 @@ verwerken, automatische betalingsregistratie (schrijft naar dezelfde `payments`-
 punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneringen.
 
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.45** — Daily Closing vervolgfase vastgelegd: volledige restaurant-dagafsluiting na Integration Engine (klant-overleg, geen implementatie — planning only):
+- **Belangrijke verduidelijking**: de huidige "n.v.t."-gaten in Daily Closing (contant/pin-
+  splitsing, niet-gekoppelde bonnen) zijn géén onvolledigheid van de module zelf — de
+  module is compleet voor wat intern beschikbaar is. Ze wachten op een externe bron
+  (kassa-koppeling) die pas met Integration Engine (Fase 2) beschikbaar komt.
+- Vastgelegd wat Daily Closing dan krijgt: kassa-omzet vergelijken met wat Polder zelf
+  verwerkte (directe kasverschil-detectie), pin/contant-splitsing, geannuleerde
+  kassa-transacties en medewerkers/kassahandelingen vergelijken.
+- Architectuur al voorbereid: `daily-closing-service.ts` verzamelt al uit meerdere interne
+  bronnen (governance 6.2, alleen lezen) — kassa wordt straks gewoon een extra bron naast
+  de bestaande, geen herontwerp nodig.
+- Volgorde herbevestigd: interne administratie ✅ → controle/goedkeuring ✅ →
+  Integration Engine 🔄 → Dagafsluiting met kassacontrole 🔜.
 
 **v1.44** — Roadmap-verfijning: automatische "te laat"-detectie toegevoegd, extra factuurstatussen expliciet afgewezen (klant-overleg, geen implementatie — planning only):
 - **Bewuste keuze om NIET te bouwen**: voorstel voor 5 factuurstatussen
