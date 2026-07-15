@@ -618,16 +618,36 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 PDF-opslag, v1.14) — bon gaat gewoon naar `pending_approval`, met zichtbare waarschuwing.
 Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande SMTP-config).
 
-## 10. OFFICIËLE ROADMAP (v1.41, klant-goedgekeurd — vervangt oudere losse plannen)
+## 10. OFFICIËLE ROADMAP (v1.43, klant-goedgekeurd — vervangt oudere losse plannen)
 
 **Uitgangspunt**: kernfunctionaliteit is compleet (Fase 1, A, A.5, B, C, Daily Closing,
 rechtenmatrix — allemaal ✅). Wat resteert is uitbreiding en verfijning, geen basis meer
 afmaken. Volgorde hieronder is de enige geldende — bij twijfel over prioriteit, dit
 raadplegen vóór een oudere sectie.
 
+**Grote lijn — drie architectuurfasen na de huidige kern:**
+
+| Fase | Naam | Inhoud |
+|---|---|---|
+| 1 | Administratieplatform | ✅ Compleet — Receipt Manager, Workflow Engine, Approval Engine, Teambeheer, Facturatie, Dashboard, Daily Closing, Audit |
+| 2 | Integratieplatform | POS-koppelingen, CSV/Excel-import, OCR, QR-scanner |
+| 3 | Financieel platform | Payment Provider Interface (Mollie/Stripe), betaallinks, webhooks, automatische betalingsregistratie |
+
+Bewuste scheiding: Fase 1 **beheert** de administratie (bonnen, rekeningen, goedkeuringen,
+facturen). Fase 3 gaat een stap verder en **initieert/verwerkt** daadwerkelijke betalingen —
+een andere verantwoordelijkheid, met eigen compliance-overwegingen (PSD2) en een externe
+afhankelijkheid (Mollie/Stripe-account + transactiekosten), vergelijkbaar met de
+Resend-domeinbeslissing. Bewust ná Fase 2 gepland, niet ervoor — eerst het
+administratieplatform verder bewijzen.
+
 **1. Factuurstatus + Betalingen** ✅ **COMPLEET (v1.42)**
 Statusketen `draft → sent → paid` (+ `overdue`), betalingen met automatische 'paid'-detectie,
 Dashboard toont openstaand bedrag. Geen nieuwe migratie nodig — schema bestond al.
+**Belangrijk, expliciet vastgelegd**: deze statusketen is en blijft **volledig onafhankelijk**
+van de toekomstige Payment Engine (punt 6) — handmatig registreren blijft altijd mogelijk,
+ook nadat Mollie/Stripe er ooit bij komt. De Payment Engine zal straks dezelfde status
+automatisch bijwerken via een webhook, in plaats van een nieuw, parallel statussysteem te
+introduceren.
 
 **2. Resend-domein activeren + facturen mailen** ← eerstvolgende bouwstap
 Geen ontwikkelrisico — architectuur (Email Engine, governance 6.4) staat al klaar. Wacht
@@ -642,6 +662,15 @@ POS API, CSV/Excel-import, OCR, QR-scanner voor bonnen. Volledig nieuwe ontwikke
 bewust pas ná de bovenstaande punten — eerst de bestaande basis verder laten bewijzen.
 
 **5. Kleine verfijningen** — pas oppakken bij concrete behoefte, niet uit zichzelf plannen:
+- **Facturatie: automatische vervaldatumcontrole ("te laat"-indicatie)** — klant-overleg:
+  géén nieuwe factuurstatussen toevoegen ("Openstaand"/"Afgesloten" zijn al af te leiden uit
+  bestaande data: verzonden + niet volledig betaald = openstaand). Wél interessant:
+  automatisch tonen dat een factuur te laat is, **berekend bij het weergeven**
+  (`vandaag > vervaldatum && betaald < totaal`), nooit als los database-veld dat een
+  achtergrondtaak moet bijwerken — zelfde principe als elders in Te's projecten
+  (bijv. `kasSaldo` altijd berekend, nooit opgeslagen). Kwaliteitsverbetering op een al
+  werkend systeem, geen ontbrekende kernfunctie — bewust laag geprioriteerd, onder
+  Integration Engine.
 - QR/e-mail-goedkeuringslinks: tijdgebonden vervaldatum + handmatig intrekken (statuscontrole
   zelf — link werkt alleen bij `pending`, geweigerd na approved/rejected — bestaat al sinds
   Fase C, dit zijn dus verfijningen bovenop een werkend fundament, geen ontbrekende kern)
@@ -650,7 +679,61 @@ bewust pas ná de bovenstaande punten — eerst de bestaande basis verder laten 
 - Niet-gekoppelde bonnen-controle (hoort feitelijk bij punt 4)
 - Configureerbare rechtenmatrix (database-driven i.p.v. code)
 
+**6. Payment Engine (Fase 3 — financieel platform)** — ná Integration Engine, niet ervoor
+Zelfde architectuurpatroon als Approval Engine/Email Engine: een **Payment Provider
+Interface** die de Factuurmodule als enige aanspreekpunt kent ("maak een betaalverzoek"),
+met Mollie als eerste implementatie (Stripe optioneel later).
+
+```
+Payment Engine
+      │
+Payment Provider Interface
+      │
+──────────────────────────
+│                        │
+Mollie Provider    Stripe Provider
+```
+
+Events, zelfde patroon als de rest (Event Bus, governance 6.1):
+`InvoiceCreated → PaymentRequested → PaymentPending → PaymentSucceeded → InvoicePaid`
+(of `PaymentFailed`/`PaymentExpired` als alternatieve uitkomst).
+
+Omvat: betaallinks versturen (via de bestaande Email Engine), webhooks ontvangen en
+verwerken, automatische betalingsregistratie (schrijft naar dezelfde `payments`-tabel als
+punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneringen.
+
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.44** — Roadmap-verfijning: automatische "te laat"-detectie toegevoegd, extra factuurstatussen expliciet afgewezen (klant-overleg, geen implementatie — planning only):
+- **Bewuste keuze om NIET te bouwen**: voorstel voor 5 factuurstatussen
+  (`Concept/Verzonden/Openstaand/Administratief betaald/Afgesloten`) kritisch beoordeeld —
+  "Openstaand" en "Afgesloten" voegen geen nieuwe informatie toe (al af te leiden uit
+  bestaande `status`+`payments`-data) en zijn bewust niet toegevoegd. Voorkomt een tweede,
+  overlappende plek om dezelfde toestand bij te houden.
+- **Wel toegevoegd aan roadmap (punt 5, laag geprioriteerd)**: automatische
+  vervaldatumcontrole — een factuur toont "te laat" zodra `vandaag > vervaldatum` én nog
+  niet volledig betaald, **berekend bij weergave**, nooit als database-veld dat een
+  achtergrondtaak zou moeten bijwerken. Zelfde principe als eerder toegepaste patronen
+  (bijv. `kasSaldo` altijd berekend, nooit opgeslagen, uit een eerder project van de klant).
+- **Payment Engine (Fase 3, v1.43) opnieuw bevestigd**: geen bankkoppeling, geen
+  betaalproviders, geen webhooks/PSD2 totdat er een concrete behoefte aan automatische
+  betalingen ontstaat — de huidige handmatige registratie houdt het systeem bewust simpel
+  en onder controle van de eigenaar.
+
+**v1.43** — Payment Engine (Fase 3) toegevoegd aan de officiële roadmap (klant-overleg, geen implementatie — planning only):
+- Vastgelegd als **derde architectuurfase**, ná Fase 2 (Integration Engine): Fase 1
+  (Administratieplatform, compleet) → Fase 2 (Integratieplatform) → Fase 3 (Financieel
+  platform). Bewuste volgorde: eerst het administratieplatform verder bewijzen, dan pas de
+  stap naar daadwerkelijk betalingen initiëren/verwerken — een andere verantwoordelijkheid
+  dan administratie beheren, met eigen compliance-overwegingen (PSD2).
+- Architectuur vooraf vastgelegd (nog niet gebouwd): Payment Provider Interface, Mollie als
+  eerste implementatie, event-keten `InvoiceCreated → PaymentRequested → PaymentPending →
+  PaymentSucceeded/Failed/Expired → InvoicePaid`, zelfde patroon als Approval/Email Engine.
+- **Expliciete garantie vastgelegd**: de in v1.42 gebouwde factuurstatus/betalingen-flow
+  (handmatig registreren) blijft volledig functioneel en onafhankelijk — de Payment Engine
+  schrijft later naar dezelfde `payments`-tabel via een webhook, introduceert geen nieuw
+  parallel statussysteem. Dit was een expliciete zorg tijdens het overleg en is nu als
+  architectuurbeslissing vastgelegd, niet alleen als mondelinge afspraak.
 
 **v1.42** — Factuurstatus + Betalingen geïmplementeerd (roadmap-punt 1, klant-goedgekeurd, geen architectuurwijziging):
 - **Statusketen**: `draft → sent → paid` (plus `overdue`, al in het schema sinds Fase 1).
@@ -1158,7 +1241,7 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 ## 12. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B COMPLEET, Fase C COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET, alle bekende RLS/GRANT-gaten gedicht, Factuurstatus + Betalingen COMPLEET (v1.42).** **Volgende stap: zie sectie 10 (Officiële Roadmap) — eerstvolgende bouwstap is het Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening).** Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9) + **drie-fasen-roadmap** (sectie 10: Administratieplatform ✅ → Integratieplatform → Financieel platform). **Implementatie: Fase 1 (Administratieplatform) COMPLEET** — Fase 1 kernmodules, Fase A/A.5/B/C, Daily Closing, rechtenmatrix, Factuurstatus + Betalingen (v1.42), alle bekende RLS/GRANT-gaten gedicht. **Volgende stap: Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening) — daarna pas Fase 2 (Integratieplatform) en Fase 3 (Financieel platform/Payment Engine, v1.43).** Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

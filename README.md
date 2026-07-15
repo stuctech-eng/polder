@@ -100,7 +100,7 @@ Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_
 
 Na deze 5 stappen werkt alles wat al gebouwd staat voor iedereen, niet alleen voor het testadres.
 
-**Nog te bouwen (na Fase 1) — zie officiële roadmap in docs/architecture.md sectie 10:**
+**Nog te bouwen — zie officiële roadmap in docs/architecture.md sectie 10 (drie architectuurfasen: 1. Administratieplatform ✅ compleet → 2. Integratieplatform → 3. Financieel platform/Payment Engine):**
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
 - **Fase D**: digitale handtekening (klant tekent zelf, bijv. op iPad) — nodig als aanvulling naast E-mail/QR
 - **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner voor bonnen, OCR
