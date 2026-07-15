@@ -592,6 +592,26 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.33** — Prestatie-optimalisatie (geen architectuurwijziging, gebruikersfeedback):
+- **Gemelde klacht**: knoppen "reageerden niet" (1 seconde niets, dan pas actie) — geen
+  functioneel probleem, wel een reëel UX-gat, plus een oplosbare, aanwijsbare oorzaak.
+- **Root cause 1 (traagheid)**: sinds v1.31 deed elke paginanavigatie meerdere aparte
+  "wie ben ik, welke rol"-database-queries — middleware, layout.tsx, én elke pagina via
+  `requireRole()` bevroegen dit allemaal los van elkaar.
+  Oplossing: `lib/user-management/session-context.ts` — `getCurrentUserContext()`, gewrapt
+  in React's `cache()`, dedupliceert deze query binnen één render-pass. Layout en pagina
+  delen nu dezelfde query i.p.v. 'm dubbel te doen. Middleware blijft noodgedwongen apart
+  (andere runtime/request-fase, niet te delen met de RSC-render).
+- **Root cause 2 ("voelt kapot")**: geen enkele visuele feedback bij navigatie totdat de
+  volledige nieuwe pagina + data klaar was — dus zelfs bij normale snelheid voelde een tik
+  soms "dood" aan.
+  Oplossing: `loading.tsx` toegevoegd aan alle hoofdroutes (Next.js toont dit **direct** bij
+  navigatie, los van hoe lang de data ophalen duurt) — een simpel skeleton
+  (`components/ui/page-loading.tsx`), consistent op elke pagina.
+- Blijft bestaand, benoemd als niet dit keer opgelost: Supabase/Vercel cold-starts na een
+  periode van inactiviteit (gratis tier) — buiten onze controle, verdwijnt vanzelf bij
+  actief gebruik.
+
 **v1.32** — Handleiding toegevoegd + navigatie herbouwd (geen architectuurwijziging):
 - **Handleiding** (`/handleiding`): geen rechten-check op lezen (klant-overleg: bewust voor
   iedereen beschikbaar, ook voor de developer als geheugensteun) — wel rolafhankelijk

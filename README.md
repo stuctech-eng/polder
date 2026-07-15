@@ -58,6 +58,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ **Definitieve rechtenmatrix + volledige rolbeperking**: elke rol (eigenaar/manager/administratie/bediening/keuken) ziet nu alleen wat bij die rol hoort — zowel in de navigatie als in elke API-route. Bediening ziet bijv. geen omzetcijfers of bedrijvenbeheer, alleen rekeningen/bonnen. Zie `lib/user-management/role-helpers.ts` voor de volledige matrix.
 - ✅ **Handleiding** (`/handleiding`): voor iedereen toegankelijk (geen rechten-check op lezen), rolafhankelijk gesorteerd — eigen rol-secties staan open bovenaan, de rest staat er ook maar dichtgeklapt. Bevat ook een rollen/rechten-overzichtstabel.
 - ✅ **Navigatie herbouwd** als horizontale scrollbare knoppenbalk (pill-stijl) — schaalt beter nu er meer secties zijn dan op één regel passen.
+- ✅ **Prestatie-optimalisatie**: rol/sessie-opzoeking wordt nu binnen één paginabezoek gedeeld tussen layout en pagina (React `cache()`) i.p.v. dubbel bevraagd; `loading.tsx` toegevoegd aan alle hoofdpagina's zodat navigatie **direct** visuele feedback geeft (skeleton), ook als de data zelf nog even ophaalt — lost het "voelt-kapot"-gevoel bij trage responses op.
 - ⬜ Fase C (E-mail + QR-provider), Fase D (digitale handtekening — nodig zodra de **bedrijfsklant zelf** moet kunnen goedkeuren, i.p.v. alleen intern personeel via PIN)
 
 **Belangrijk — extra actie vereist voor Facturatie:**

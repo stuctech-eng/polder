@@ -1,23 +1,11 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentUserContext } from "@/lib/user-management/session-context";
 import { hasPermission } from "@/lib/user-management/permission-service";
 import { PERMISSIONS, ROLE_LABELS, type UserRole } from "@/lib/user-management/role-helpers";
 import { MANUAL_SECTIONS } from "./manual-content";
 
 export default async function ManualPage() {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let role: UserRole | null = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    role = (profile?.role as UserRole) ?? null;
-  }
+  const ctx = await getCurrentUserContext();
+  const role = ctx?.role ?? null;
 
   // Sorteren, niet filteren: relevante secties voor de eigen rol bovenaan,
   // maar niets wordt verborgen — iedereen kan alles lezen (bewuste keuze).
