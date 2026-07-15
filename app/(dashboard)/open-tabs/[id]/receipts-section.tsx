@@ -487,7 +487,10 @@ function ApprovalBlock({
       <div className="mt-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={qrImageUrl} alt="Scan om goed te keuren" width={140} height={140} className="rounded-lg border border-neutral-200" />
-        <p className="text-xs text-neutral-500 mt-1">Scan om goed te keuren.</p>
+        <p className="text-xs text-neutral-500 mt-1">Scan om goed te keuren, of:</p>
+        <a href={approveUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline break-all">
+          {approveUrl}
+        </a>
       </div>
     );
   }
