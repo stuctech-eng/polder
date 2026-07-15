@@ -27,11 +27,6 @@ export default function PublicApprovePage({ params }: { params: { token: string 
       .then((body) => {
         if (body.error) {
           setError(body.error);
-          if (body.debugToken || body.debugSupabaseError) {
-            setError(
-              `${body.error} — [debug] token: ${body.debugToken}, supabase error: ${body.debugSupabaseError ?? "geen"}`
-            );
-          }
         } else {
           setReceipt(body.receipt);
           setCompanyName(body.companyName);

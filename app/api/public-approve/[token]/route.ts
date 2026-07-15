@@ -13,22 +13,14 @@ export async function GET(
 ) {
   const supabase = createSupabaseAdminClient();
 
-  const { data: approval, error: approvalError } = await supabase
+  const { data: approval } = await supabase
     .from("approvals")
     .select("id, status, receipt_id, company_id, method")
     .eq("verification_code", params.token)
     .maybeSingle();
 
   if (!approval) {
-    return NextResponse.json(
-      {
-        error: "Ongeldige of verlopen link",
-        // Tijdelijk voor diagnose — verwijderen zodra bevestigd (v1.35-vervolg)
-        debugToken: params.token,
-        debugSupabaseError: approvalError?.message ?? null,
-      },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Ongeldige of verlopen link" }, { status: 404 });
   }
 
   const { data: receipt } = await supabase

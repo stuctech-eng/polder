@@ -620,6 +620,30 @@ Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande
 
 ## 10. WIJZIGINGSHISTORIE
 
+**v1.36** — Kritieke bugfix: GRANT-rechten ontbraken voor `service_role` (geen architectuurwijziging):
+- **Symptoom**: publieke QR/e-mail-goedkeuringslink bleef "Ongeldige of verlopen link" tonen,
+  ook na de v1.35-fix — terwijl de token bevestigd correct in de database stond.
+- **Root cause, gevonden via tijdelijke debug-output** (Supabase-foutmelding zichtbaar
+  gemaakt in de UI, sectie 15-principe): `permission denied for table approvals`. Migratie
+  0004 (v1.5, de oorspronkelijke GRANT-fix) gaf destijds alleen de rol `authenticated`
+  tabelrechten — niet `service_role`. Alle gewone, ingelogde requests werken via
+  `authenticated` en waren dus altijd goed; de publieke goedkeuringsflow (Fase C) is de
+  **eerste plek** die de service-role client daadwerkelijk gebruikt, en liep daardoor als
+  eerste tegen dit gat aan.
+- **Kernles herhaald, nu voor een derde rol-context**: RLS-bypass (wat service_role doet)
+  en GRANT-tabelrechten zijn **twee volledig gescheiden lagen** — precies de les uit v1.5,
+  nu gebleken ook te gelden voor `service_role`, niet alleen `authenticated`.
+- **Oplossing**: `supabase/migrations/0012_fix_service_role_grants.sql` — zelfde patroon
+  als migratie 0004, nu voor `service_role`, inclusief `alter default privileges` zodat
+  toekomstige tabellen dit automatisch meekrijgen.
+- **Diagnosemethode die werkte**: tijdelijk de daadwerkelijke Supabase-foutmelding
+  meesturen in de API-response (i.p.v. de generieke "niet gevonden"-tekst) legde het
+  probleem in één keer bloot — bevestigt nogmaals dat foutmeldingen tonen (sectie 15)
+  sneller naar de waarheid leidt dan aannames testen.
+- **Vervolgles**: bij elke toekomstige nieuwe rol/context die de database aanspreekt
+  (bijv. een cron-job-rol, of een andere service), altijd expliciet controleren of die
+  rol ook GRANT-rechten heeft — niet aannemen dat "het werkt voor authenticated" genoeg is.
+
 **v1.35** — Bugfix: QR-goedkeuringstoken verdween bij page-refresh (geen architectuurwijziging, gevonden tijdens gebruikerstest):
 - **Symptoom**: QR-code werd correct getoond direct na het aanmaken van een bon, maar na een
   page-refresh (of nieuw bezoek aan de rekening) leidde de gescande QR-code naar "Ongeldige

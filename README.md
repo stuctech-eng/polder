@@ -72,7 +72,7 @@ De PDF-opslag gebruikt een Supabase Storage bucket genaamd `documents` (privé).
 3. Draai daarna óók `supabase/migrations/0005_storage_policies.sql` — de bucket alleen is niet genoeg, storage heeft een eigen RLS-systeem (zie v1.15)
 
 **Belangrijk — actie vereist voor de nieuwe uitbreiding:**
-Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_engine_extend.sql`, `0010_daily_closing.sql`, en `0011_approval_email_qr.sql` in de Supabase SQL Editor.
+Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_engine_extend.sql`, `0010_daily_closing.sql`, `0011_approval_email_qr.sql`, en `0012_fix_service_role_grants.sql` in de Supabase SQL Editor.
 
 **Belangrijk — actie vereist voor Teambeheer:**
 1. Draai `supabase/migrations/0008_team_management.sql` in de Supabase SQL Editor
