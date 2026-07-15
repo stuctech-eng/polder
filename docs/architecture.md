@@ -618,7 +618,72 @@ afgesloten dag. Tabel is er klaar voor (`reopened_at`/`reopened_by`-kolommen), U
 PDF-opslag, v1.14) — bon gaat gewoon naar `pending_approval`, met zichtbare waarschuwing.
 Vereist een nieuwe `RESEND_API_KEY` environment variable (apart van de bestaande SMTP-config).
 
-## 10. WIJZIGINGSHISTORIE
+## 10. OFFICIËLE ROADMAP (v1.41, klant-goedgekeurd — vervangt oudere losse plannen)
+
+**Uitgangspunt**: kernfunctionaliteit is compleet (Fase 1, A, A.5, B, C, Daily Closing,
+rechtenmatrix — allemaal ✅). Wat resteert is uitbreiding en verfijning, geen basis meer
+afmaken. Volgorde hieronder is de enige geldende — bij twijfel over prioriteit, dit
+raadplegen vóór een oudere sectie.
+
+**1. Factuurstatus + Betalingen** ✅ **COMPLEET (v1.42)**
+Statusketen `draft → sent → paid` (+ `overdue`), betalingen met automatische 'paid'-detectie,
+Dashboard toont openstaand bedrag. Geen nieuwe migratie nodig — schema bestond al.
+
+**2. Resend-domein activeren + facturen mailen** ← eerstvolgende bouwstap
+Geen ontwikkelrisico — architectuur (Email Engine, governance 6.4) staat al klaar. Wacht
+puur op de domeinbeslissing bij de restauranthouder + configuratie.
+
+**3. Digitale handtekening (Fase D)**
+Laatste Approval Provider — maakt de Approval Engine compleet (PIN/Restaurant/E-mail/QR
+zijn al ✅).
+
+**4. Integration Engine (Fase 2)**
+POS API, CSV/Excel-import, OCR, QR-scanner voor bonnen. Volledig nieuwe ontwikkelfase,
+bewust pas ná de bovenstaande punten — eerst de bestaande basis verder laten bewijzen.
+
+**5. Kleine verfijningen** — pas oppakken bij concrete behoefte, niet uit zichzelf plannen:
+- QR/e-mail-goedkeuringslinks: tijdgebonden vervaldatum + handmatig intrekken (statuscontrole
+  zelf — link werkt alleen bij `pending`, geweigerd na approved/rejected — bestaat al sinds
+  Fase C, dit zijn dus verfijningen bovenop een werkend fundament, geen ontbrekende kern)
+- Dagafsluiting heropenen
+- Contante/pin-omzetsplitsing
+- Niet-gekoppelde bonnen-controle (hoort feitelijk bij punt 4)
+- Configureerbare rechtenmatrix (database-driven i.p.v. code)
+
+## 11. WIJZIGINGSHISTORIE
+
+**v1.42** — Factuurstatus + Betalingen geïmplementeerd (roadmap-punt 1, klant-goedgekeurd, geen architectuurwijziging):
+- **Statusketen**: `draft → sent → paid` (plus `overdue`, al in het schema sinds Fase 1).
+  Handmatig markeren als "verzonden"; "betaald" gebeurt **automatisch** zodra de som van
+  betalingen de factuur volledig dekt — geen handmatige stap die vergeten kan worden.
+- **Betalingen registreren**: bedrag + optionele methode, meerdere deelbetalingen mogelijk
+  per factuur. Toont "€X betaald, nog €Y openstaand" totdat volledig gedekt.
+- **Guardian Mode-guard**: een betaalde factuur kan niet handmatig teruggezet worden naar
+  een eerdere status via de PATCH-route — voorkomt inconsistentie met de betalingshistorie.
+- **Dashboard uitgebreid**: nieuwe kaart "Openstaand (nog te betalen)" — som van
+  onbetaald/deels-betaald over alle `sent`/`overdue`-facturen. Dit was expliciet het
+  gevraagde doel ("welke facturen staan nog open, wat moet nagebeld worden").
+- **Geen nieuwe migratie nodig** — `invoices.status` en de `payments`-tabel bestonden al
+  sinds de allereerste Fase 1-migratie (0001), alleen nooit gebruikt. Bevestigt de waarde
+  van vroeg een compleet schema neerzetten, ook voor functionaliteit die pas later gebouwd
+  wordt.
+- Nieuwe bestanden: `app/api/invoices/[id]/route.ts` (PATCH status), `.../payments/route.ts`
+  (GET/POST), `invoice-list-item.tsx` (client component, zelfde patroon als `ReceiptItem`).
+
+**v1.41** — Officiële roadmap vastgelegd (sectie 10), klant-goedgekeurd, vervangt oudere
+losse plannen/adviezen verspreid door eerdere gesprekken:
+- Volgorde: (1) Factuurstatus + Betalingen, (2) Resend-domein + facturen mailen, (3)
+  Digitale handtekening (Fase D, laatste Approval Provider), (4) Integration Engine
+  (Fase 2), (5) kleine verfijningen — pas bij concrete behoefte
+- Correctie tijdens het opstellen: QR/e-mail-goedkeuringslinks worden al automatisch
+  ongeldig na `approved`/`rejected` (bestond al sinds Fase C, statuscontrole op
+  `pending`) — alleen tijdgebonden vervaldatum en handmatig intrekken ontbreken nog,
+  niet de hele beveiliging zoals eerst gesuggereerd
+- README's "Nog te bouwen"-lijst tegelijk opgeschoond: twee verouderde regels gevonden
+  en gecorrigeerd (Fase B stond nog als "niet geïmplementeerd" terwijl die al v1.28
+  compleet was; Handleiding stond nog als "te bouwen" terwijl die al v1.32 bestond) —
+  les: periodiek de open-punten-lijst tegen de wijzigingshistorie aanhouden om dit soort
+  drift te voorkomen
 
 **v1.40** — Kritieke bugfix: `users`-tabel had nooit UPDATE/DELETE RLS-policies (geen architectuurwijziging):
 - **Symptoom**: rol wijzigen op de Team-pagina gaf `"Cannot coerce the result to a single
@@ -1091,9 +1156,9 @@ in sectie 10.7 — codebase-review, vertical slice-aanpak, nieuwe/gewijzigde bes
 Bouwvolgorde per klant-instructie: migraties → interfaces → service → providers → routes →
 UI → lock-enforcement → events → audit → end-to-end test.
 
-## 11. STATUS
+## 12. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B COMPLEET, Fase C (E-mail + QR-goedkeuring) COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET (v1.34).** Volgende stap: Fase D (digitale handtekening — nodig voor externe/klant-goedkeuring), niet urgent. Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9). **Implementatie: Fase 1 COMPLEET, Fase A COMPLEET, Fase A.5 (Teambeheer) COMPLEET, Fase B COMPLEET, Fase C COMPLEET, Daily Closing Engine COMPLEET, definitieve rechtenmatrix + volledige route-migratie COMPLEET, alle bekende RLS/GRANT-gaten gedicht, Factuurstatus + Betalingen COMPLEET (v1.42).** **Volgende stap: zie sectie 10 (Officiële Roadmap) — eerstvolgende bouwstap is het Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening).** Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  

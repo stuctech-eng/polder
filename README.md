@@ -60,6 +60,7 @@ Zonder deze twee migraties toont de app geen data, ook al staat die wel in de da
 - ✅ **Navigatie herbouwd** als horizontale scrollbare knoppenbalk (pill-stijl) — schaalt beter nu er meer secties zijn dan op één regel passen.
 - ✅ **Prestatie-optimalisatie**: rol/sessie-opzoeking wordt nu binnen één paginabezoek gedeeld tussen layout en pagina (React `cache()`) i.p.v. dubbel bevraagd; `loading.tsx` toegevoegd aan alle hoofdpagina's zodat navigatie **direct** visuele feedback geeft (skeleton), ook als de data zelf nog even ophaalt — lost het "voelt-kapot"-gevoel bij trage responses op.
 - ✅ **Fase C gebouwd — E-mail + QR-goedkeuring**: Email Engine (eerste echte implementatie, `lib/email/`, herbruikbaar voor factuur-mailen later), publieke token-based goedkeuringsflow (`/approve/[token]`, geen login nodig — voor managers op afstand of de klant), QR-code als scanbare afbeelding van dezelfde link. Bevestigd werkend end-to-end (QR gescand/geopend, bon goedgekeurd zonder inloggen). Naam verplicht bij goedkeuren/afwijzen (`approvals.approved_by`); **afwijzen** toegevoegd (bon terug naar bewerkbaar, met reden) — sluit de eerder als "n.v.t." gemarkeerde Dagafsluiting-controle "Afgekeurde bonnen".
+- ✅ **Factuurstatus + Betalingen**: statusketen `draft → sent → paid` (plus `overdue`), betalingen registreren (bedrag + methode), **automatisch op 'betaald' zodra volledig gedekt** — ook gedeeltelijke betalingen mogelijk (toont "€X betaald, nog €Y openstaand"). Dashboard toont nu ook "Openstaand (nog te betalen)" als eigen kaart. Geen nieuwe migratie nodig — schema (`invoices.status`, `payments`-tabel) bestond al sinds Fase 1.
 - ⬜ Fase D (digitale handtekening — nodig zodra de **bedrijfsklant zelf** moet kunnen goedkeuren)
 
 **Belangrijk — nieuwe actie vereist voor E-mail-goedkeuring:**
@@ -99,9 +100,8 @@ Draai `supabase/migrations/0006_approval_engine_foundation.sql`, `0007_approval_
 
 Na deze 5 stappen werkt alles wat al gebouwd staat voor iedereen, niet alleen voor het testadres.
 
-**Nog te bouwen (na Fase 1):**
+**Nog te bouwen (na Fase 1) — zie officiële roadmap in docs/architecture.md sectie 10:**
 - Facturen daadwerkelijk **mailen** naar klanten (wacht op eigen Resend-domein — beslissing bij restauranthouder)
-- Factuurstatus bijwerken naar "sent"/"paid" + betalingen registreren
 - **Fase D**: digitale handtekening (klant tekent zelf, bijv. op iPad) — nodig als aanvulling naast E-mail/QR
 - **Fase 2**: Integration Engine als plugin-systeem (POS-koppelingen, import CSV/Excel), Barcode/QR-scanner voor bonnen, OCR
 - **Configureerbare rechtenmatrix**: rechten per rol staan nu vast in code (`role-helpers.ts`). Vervolgstap: verplaatsen naar een databasetabel + scherm op de Team-pagina zodat de eigenaar zelf per rol rechten aan/uit kan zetten, zonder codewijziging.

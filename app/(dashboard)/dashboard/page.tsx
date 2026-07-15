@@ -27,6 +27,7 @@ export default async function DashboardPage() {
     { count: closedCount },
     { data: monthInvoices },
     { data: allInvoicesWithCompany },
+    { data: outstandingInvoices },
     { data: recentActivity },
   ] = await Promise.all([
     supabase.from("open_tabs").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -37,6 +38,10 @@ export default async function DashboardPage() {
       .gte("issued_at", startOfMonth.toISOString().slice(0, 10)),
     supabase.from("invoices").select("total, companies(name)"),
     supabase
+      .from("invoices")
+      .select("total, payments(amount)")
+      .in("status", ["sent", "overdue"]),
+    supabase
       .from("activity_log")
       .select("action, created_at, users(full_name)")
       .order("created_at", { ascending: false })
@@ -44,6 +49,11 @@ export default async function DashboardPage() {
   ]);
 
   const monthRevenue = (monthInvoices ?? []).reduce((sum, i) => sum + Number(i.total), 0);
+
+  const outstandingAmount = (outstandingInvoices ?? []).reduce((sum: number, inv: any) => {
+    const paid = (inv.payments ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+    return sum + Math.max(0, Number(inv.total) - paid);
+  }, 0);
 
   const byCompany = new Map<string, number>();
   (allInvoicesWithCompany ?? []).forEach((inv: any) => {
@@ -66,6 +76,7 @@ export default async function DashboardPage() {
           href="/open-tabs?status=closed"
         />
         <StatCard label="Omzet deze maand" value={`€${monthRevenue.toFixed(2)}`} href="/invoices" />
+        <StatCard label="Openstaand (nog te betalen)" value={`€${outstandingAmount.toFixed(2)}`} href="/invoices" />
         <StatCard label="Totaal facturen" value={String(allInvoicesWithCompany?.length ?? 0)} href="/invoices" />
       </div>
 
