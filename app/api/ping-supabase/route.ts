@@ -7,21 +7,22 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/`, {
-      headers: {
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-      },
-    });
-    const bodyText = await response.text();
+    // Service-role key i.p.v. anon-key: het kale /rest/v1/-pad accepteert
+    // alleen de secret key (zie diagnose), en een service-role query op een
+    // concrete tabel werkt sowieso gegarandeerd (bypast RLS/GRANT-gedoe).
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/restaurants?select=id&limit=1`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      }
+    );
     return NextResponse.json({
       ok: response.ok,
       status: response.status,
       pingedAt: new Date().toISOString(),
-      // Tijdelijk voor diagnose — geeft de exacte Supabase-foutmelding terug
-      supabaseResponse: bodyText.slice(0, 300),
-      urlUsed: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/`,
-      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
