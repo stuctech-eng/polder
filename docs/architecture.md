@@ -718,6 +718,24 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.46** — Supabase keep-alive toegevoegd (geen architectuurwijziging) + sandbox-herstel gedocumenteerd:
+- **Aanleiding**: Supabase's gratis tier pauzeert een project automatisch na 7 dagen zonder
+  API/database-activiteit — puur inloggen op het dashboard telt niet mee. Gebeurde al
+  eenmaal in de praktijk.
+- **Oplossing**: `app/api/ping-supabase/route.ts` (lichte, publieke healthcheck-route, geen
+  gevoelige data) + `vercel.json` met een dagelijkse Vercel Cron Job — ruim binnen zowel
+  Supabase's 7-dagen-drempel als Vercel's gratis-tier-limiet (1×/dag op Hobby-plan). Gekozen
+  boven een losse GitHub Action of externe cron-dienst omdat het in dezelfde repo blijft die
+  toch al beheerd wordt (geen extra secrets/dienst nodig).
+- Route toegevoegd aan de publieke paden in `middleware.ts` — anders zou de cron-aanroep
+  zelf al geblokkeerd worden vóórdat 'm Supabase kan bereiken (geen sessie/cookie
+  beschikbaar voor een cron-aanroep).
+- **Operationele noot, geen architectuurwijziging**: tijdens deze bouwstap bleek de
+  sandbox-werkomgeving zelf gereset te zijn (kan gebeuren bij zeer lange sessies) — het
+  project is volledig hersteld uit de laatst gedeelde ZIP in de outputmap, geverifieerd met
+  een schone `npm install` + TypeScript-check + volledige build (21 routes/pagina's, alles
+  intact). Bevestigt de waarde van "altijd de laatste ZIP bevat alles" als werkwijze.
+
 **v1.45** — Daily Closing vervolgfase vastgelegd: volledige restaurant-dagafsluiting na Integration Engine (klant-overleg, geen implementatie — planning only):
 - **Belangrijke verduidelijking**: de huidige "n.v.t."-gaten in Daily Closing (contant/pin-
   splitsing, niet-gekoppelde bonnen) zijn géén onvolledigheid van de module zelf — de

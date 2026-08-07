@@ -117,6 +117,10 @@ set encrypted_password = crypt('NieuwWachtwoord', gen_salt('bf'))
 where email = 'GEBRUIKER-EMAIL';
 ```
 
+## Supabase actief houden (voorkomt automatisch pauzeren)
+
+Supabase's gratis tier pauzeert een project na 7 dagen zonder activiteit — inloggen op het dashboard telt niet mee. Dit is al eens gebeurd. Opgelost met een dagelijkse Vercel Cron Job (`vercel.json` + `app/api/ping-supabase`) die automatisch draait, geen actie nodig. Wel belangrijk: Vercel Cron Jobs werken alleen op een **actief gekoppeld Vercel-project met productie-deploys** — als het project ooit gepauzeerd/verwijderd wordt in Vercel zelf, stopt ook deze bescherming.
+
 ## Testaccount aanmaken (zonder Resend-domein)
 
 **Er staat al een werkend testaccount:** `stuctech+test1@gmail.com` (rol: bediening, gekoppeld aan Café Restaurant Polder) — bevestigd werkend, aangemaakt door het "wees"-account van een mislukte uitnodiging (v1.24) alsnog te activeren. Herbruikbaar sjabloon voor nieuwe testaccounts: `supabase/scripts/create-test-account.sql` (geen migratie, handmatig te gebruiken, meerdere keren herhaalbaar met andere waarden).
