@@ -718,6 +718,17 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.47** — Bugfix: keep-alive ping gaf 401 (geen architectuurwijziging):
+- **Oorzaak**: het kale `/rest/v1/`-pad (zonder specifieke tabel) accepteert bij dit
+  Supabase-project alleen de secret/service-role key, niet de publieke anon-key — gaf
+  `"Secret API key required"`.
+- **Oplossing**: `app/api/ping-supabase/route.ts` gebruikt nu de service-role key
+  (uitsluitend server-side, nooit blootgesteld) en vraagt een concrete, onschuldige tabel
+  op (`restaurants?select=id&limit=1`) i.p.v. het kale root-pad — werkt gegarandeerd,
+  bypast bovendien meteen elke RLS/GRANT-afhankelijkheid.
+- Diagnosemethode nogmaals bevestigd: tijdelijk de exacte Supabase-foutmelding
+  meesturen loste dit in één keer op, zelfde patroon als v1.36.
+
 **v1.46** — Supabase keep-alive toegevoegd (geen architectuurwijziging) + sandbox-herstel gedocumenteerd:
 - **Aanleiding**: Supabase's gratis tier pauzeert een project automatisch na 7 dagen zonder
   API/database-activiteit — puur inloggen op het dashboard telt niet mee. Gebeurde al
