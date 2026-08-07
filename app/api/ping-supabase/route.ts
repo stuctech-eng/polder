@@ -13,7 +13,16 @@ export async function GET() {
         Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
       },
     });
-    return NextResponse.json({ ok: response.ok, status: response.status, pingedAt: new Date().toISOString() });
+    const bodyText = await response.text();
+    return NextResponse.json({
+      ok: response.ok,
+      status: response.status,
+      pingedAt: new Date().toISOString(),
+      // Tijdelijk voor diagnose — geeft de exacte Supabase-foutmelding terug
+      supabaseResponse: bodyText.slice(0, 300),
+      urlUsed: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/`,
+      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
