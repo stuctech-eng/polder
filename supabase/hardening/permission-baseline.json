@@ -1,0 +1,101 @@
+{
+  "source": "lib/user-management/role-helpers.ts PERMISSIONS",
+  "roles": [
+    "owner",
+    "manager",
+    "administratie",
+    "bediening",
+    "keuken"
+  ],
+  "permissions": {
+    "VIEW_DASHBOARD": [
+      "owner",
+      "manager",
+      "administratie"
+    ],
+    "VIEW_REVENUE": [
+      "owner",
+      "manager",
+      "administratie"
+    ],
+    "MANAGE_COMPANIES": [
+      "owner",
+      "administratie"
+    ],
+    "MANAGE_OPEN_TABS": [
+      "owner",
+      "manager",
+      "administratie",
+      "bediening"
+    ],
+    "MANAGE_RECEIPTS": [
+      "owner",
+      "manager",
+      "administratie",
+      "bediening"
+    ],
+    "APPROVE_RECEIPTS": [
+      "owner",
+      "manager"
+    ],
+    "MANAGE_INVOICES": [
+      "owner",
+      "administratie"
+    ],
+    "VIEW_DAILY_CLOSING": [
+      "owner",
+      "manager",
+      "administratie"
+    ],
+    "EXECUTE_DAILY_CLOSING": [
+      "owner",
+      "manager"
+    ],
+    "MANAGE_TEAM": [
+      "owner"
+    ],
+    "MANAGE_SETTINGS": [
+      "owner",
+      "administratie"
+    ]
+  },
+  "matrix": {
+    "owner": [
+      "APPROVE_RECEIPTS",
+      "EXECUTE_DAILY_CLOSING",
+      "MANAGE_COMPANIES",
+      "MANAGE_INVOICES",
+      "MANAGE_OPEN_TABS",
+      "MANAGE_RECEIPTS",
+      "MANAGE_SETTINGS",
+      "MANAGE_TEAM",
+      "VIEW_DAILY_CLOSING",
+      "VIEW_DASHBOARD",
+      "VIEW_REVENUE"
+    ],
+    "manager": [
+      "APPROVE_RECEIPTS",
+      "EXECUTE_DAILY_CLOSING",
+      "MANAGE_OPEN_TABS",
+      "MANAGE_RECEIPTS",
+      "VIEW_DAILY_CLOSING",
+      "VIEW_DASHBOARD",
+      "VIEW_REVENUE"
+    ],
+    "administratie": [
+      "MANAGE_COMPANIES",
+      "MANAGE_INVOICES",
+      "MANAGE_OPEN_TABS",
+      "MANAGE_RECEIPTS",
+      "MANAGE_SETTINGS",
+      "VIEW_DAILY_CLOSING",
+      "VIEW_DASHBOARD",
+      "VIEW_REVENUE"
+    ],
+    "bediening": [
+      "MANAGE_OPEN_TABS",
+      "MANAGE_RECEIPTS"
+    ],
+    "keuken": []
+  }
+}

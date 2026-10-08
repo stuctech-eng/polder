@@ -839,6 +839,11 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.53** — Security hardening STAP 0 (voorbereiding, geen productiewijziging): map `supabase/hardening/`
+(alleen-lezen productiecontroles, staging-seed, testharnas + 168 testcases, rechtenbaseline, README met
+migratie/rollbackstructuur voor de 11 stappen). Sectie 13.7 beschrijft de uitkomst. Geen migratie, policy,
+grant, trigger, functie of app-code gewijzigd. Wacht op nieuwe expliciete GO voor stap 1.
+
 **v1.52** — Documentatie: `docs/security-hardening-plan.md` toegevoegd (alleen plan; geen migratie,
 policy-, privilege- of codewijziging). Sectie 13.6 verwijst ernaar.
 
@@ -1510,6 +1515,38 @@ regel, betrokken code, tests, volgorde en rollback, plus een rollenmatrix en tes
 bevindingen daaruit (11 t/m 15): gedeactiveerde gebruikers werken nog via directe API; PIN-hash en
 -salt zijn voor elke rol leesbaar; `users` is voor elke rol leesbaar; geen afdeling/bedrijf-controle
 op rekeningen; goedkeuringslink is voor bediening zichtbaar (ontwerpkeuze).
+
+### 13.7 STAP 0 — Voorbereiding en testharnas (2026-10-08, alleen voorbereiding)
+**Geen productiewijziging.** Alles staat in `supabase/hardening/` (zie README daar). Opgeleverd:
+`prod-readonly-checks.sql` (alleen lezen, 65 controles), `staging-seed.sql` (restaurant A/B/C, alle rollen,
+gedeactiveerde gebruiker, wees-account), testharnas (`hardening_test`, 168 cases in 14 categorieën, per case
+verwachting nu/na stap N), rechtenbaseline (55 rijen) en de migratie/rollback-structuur voor de 11 stappen.
+* **Lokaal bewezen** (Postgres 16, schone keten 0001–0014 + productierechten): `run(0)` = 168/168 PASS; elke test
+  wordt teruggedraaid (data ongewijzigd); 91 cases zijn "bekende zwaktes" die in een latere stap omslaan.
+  Controles-query getest op een lege DB, op seeddata en met bewust ingebrachte fouten (geen owner, cross-restaurant,
+  verkeerd opslagpad, wees-account): geeft de juiste BLOCKER/WARNING; draait met `default_transaction_read_only=on`.
+* **Bewezen: de huidige uitnodigflow faalt.** Test TM06: een owner kan via de eigen verbinding geen `users`-rij
+  invoegen (`new row violates row-level security policy for table "users"`). `inviteUser` stuurt dus eerst de mail
+  en maakt het auth-account, en faalt daarna op het profiel → wees-account zonder opruiming. Oplossing = stap 3.
+* **Service-role inventaris** (basis voor stap 2/7/11, nog niets verlaagd): publieke goedkeuring — SELECT approvals,
+  receipts, receipt_lines, companies; UPDATE approvals, receipts; INSERT activity_log, domain_events ·
+  ping-supabase — SELECT restaurants · uitnodiging — alleen auth-admin-API · gepland team-service — users I/U/D ·
+  PIN-verificatie — SELECT approval_settings. Alle andere tabellen hebben geen service-role-gebruik.
+* **Service-role + triggers:** de gepland guard-triggers krijgen géén algemene service-role-bypass. De publieke
+  goedkeuring (approvals pending→approved/rejected; receipts pending_approval→locked/linked) wordt een smalle
+  SECURITY DEFINER-functie (alleen EXECUTE voor service_role) die een transactie-lokale vlag zet. Besluit in stap 7.
+* **Gecorrigeerde aanname in het plan:** H9 (`is_active`) geldt direct alleen voor policies die `my_restaurant_id()`
+  gebruiken (daily_closings, users). Overige policies gebruiken een inline subquery; de afsluiting van
+  gedeactiveerde gebruikers komt dus stap voor stap (2–9). Optie D9: een RESTRICTIVE "alleen actieve gebruikers"-policy
+  per tabel (behalve `users`) zodat het in één keer dicht kan — open beslispunt.
+* **Verwijderen van gebruikers met historie** wordt door foreign keys geblokkeerd (bonnen, dagafsluitingen, logs
+  verwijzen naar `users`). In de praktijk: deactiveren, niet verwijderen (relevant voor stap 3 en de owner-constraint).
+* **VIEW_REVENUE** staat in de matrix maar wordt in geen enkele route/pagina gebruikt (baseline-ambiguïteit).
+* **Open beslispunten:** D6 (factuur draft→paid), D4 (account stuctech@gmail.com: alleen onderzocht, niet verwijderd),
+  D9 (restrictive actief-policy), plus D1/D2/D3/D5/D7/D8 uit het plan.
+* **Nog te doen door Dick (productie, alleen lezen):** `supabase/hardening/prod-readonly-checks.sql` draaien en het
+  resultaat terugsturen. Tot dan zijn de datacompatibiliteit, het productie-fingerprintvergelijk (repo ↔ productie) en D4
+  onbeoordeeld.
 
 ## 12. STATUS
 
