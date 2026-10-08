@@ -1548,6 +1548,23 @@ verwachting nu/na stap N), rechtenbaseline (55 rijen) en de migratie/rollback-st
   resultaat terugsturen. Tot dan zijn de datacompatibiliteit, het productie-fingerprintvergelijk (repo ↔ productie) en D4
   onbeoordeeld.
 
+### 13.8 STAP 0 — Uitkomst productiecontrole (2026-10-08, `prod-readonly-checks.sql` door Dick gedraaid)
+Productie bevat uitsluitend testdata: 1 restaurant (Café Restaurant Polder), 2 gebruikers (1 owner, 1 bediening, geen
+gedeactiveerde), 5 bonnen, 4 facturen, 4 betalingen, 3 documenten, 2 dagafsluitingen. **Geen BLOCKER.**
+* **Repo ↔ productie:** fingerprints policies (A04), storage-policies (A05), kolommen (A07) en check-constraints (A08)
+  zijn **identiek** aan de repo-keten. Twee verschillen: (1) de brontekst van `my_restaurant_id()` in productie
+  (md5 `c6ceb8cf…`) wijkt af van de repo (md5 `dfe36a32…`) — SECURITY DEFINER/stable gelijk, inhoud nog niet
+  vergeleken (vermoedelijk witruimte of `public.`-prefix); vóór stap 1 eerst de productietekst lezen; (2) productie
+  heeft de functie `rls_auto_enable()` (SECURITY DEFINER, search_path=pg_catalog) die de repo niet kent (Supabase-
+  platformfunctie die RLS op nieuwe tabellen aanzet). Niet gecorrigeerd, alleen gerapporteerd.
+* **Datacompatibiliteit:** owner-integriteit OK; geen cross-restaurant of cross-bedrijf verwijzingen; alle storage-paden
+  conform; geen `integration_plugins`; statussen binnen de geplande state machine (receipts: linked 2, locked 5;
+  facturen: draft 1, paid 3, nooit sent/overdue). WARNING: `approval_settings` bevat 1 `pin_hash` (leesbaar voor elke rol)
+  bij methode qr; `my_restaurant_id` zonder vast search_path.
+* **D6-indicatie:** 1 betaalde factuur zonder "sent" in het logboek — mogelijk draft → paid. Niet beslist.
+* **D4:** `stuctech@gmail.com` bestaat (aangemaakt 2026-07-05, bevestigd, nooit ingelogd, geen profiel = wees-account).
+  Niets verwijderd. Relevant voor stap 3: dit e-mailadres kan niet opnieuw worden uitgenodigd zolang het auth-account bestaat.
+
 ## 12. STATUS
 
 **Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9) + **drie-fasen-roadmap** (sectie 10: Administratieplatform ✅ → Integratieplatform → Financieel platform). **Implementatie: Fase 1 (Administratieplatform) COMPLEET** — Fase 1 kernmodules, Fase A/A.5/B/C, Daily Closing, rechtenmatrix, Factuurstatus + Betalingen (v1.42), alle bekende RLS/GRANT-gaten gedicht. **Fase 0 (audit) en baseline (0014) zijn klaar (sectie 13); volgende gebouwde stap: security hardening (na expliciete GO, roadmap-punt 7).** Eerder: Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening) — daarna pas Fase 2 (Integratieplatform) en Fase 3 (Financieel platform/Payment Engine, v1.43).** Dit document staat per sectie 3 boven aannames.
