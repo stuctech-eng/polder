@@ -8,7 +8,7 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 **Lees eerst dit bestand volledig, daarna `docs/architecture.md` (vooral sectie 9 Wijzigingshistorie en sectie 10 Status).** Deze twee bestanden samen bevatten alles om zonder verlies verder te werken.
 
 1. **Waar staan we nu:** Fase 1 (MVP) is compleet. De klant-goedgekeurde uitbreiding (Approval Engine + Bedrijfsreferenties + Teambeheer + Daily Closing) is volledig gebouwd: Fase A, A.5, B en C zijn compleet, inclusief de definitieve rechtenmatrix en volledige rolbeperking op alle routes. Alleen Fase D (digitale handtekening) staat nog open, samen met een paar losse punten — zie de volledige lijst hieronder.
-2. **Eerstvolgende actie:** Fase B bouwen volgens het plan in sectie 10.7 — bouwvolgorde: migratie → interfaces → service → providers → routes → UI → lock-enforcement → events → audit → end-to-end test.
+2. **Eerstvolgende actie:** Fase 0 (audit) en baseline-migratie 0014 zijn klaar. Volgende stap is **security hardening** (rollen in RLS, gevaarlijke wijzig-/verwijderrechten dicht, logboeken append-only) — pas na een expliciete GO van Dick. Daarna pas platformbeheer. Volledige volgorde: architecture.md sectie 10, punt 7; auditrapport: sectie 13. Niet eigenstandig doorgaan naar een volgende fase.
 2b. **Open actie van Te (opgepakt later):** uitzoeken welke kassa het restaurant echt gebruikt (Eijsink/DISH of BishPOS) en die leverancier benaderen over API-toegang. Daarna pas verder met de Integration Engine — zie research note in architecture.md sectie 10, punt 4. Niet bouwen vóór dit bekend is.
 3. **Werkwijze die de hele tijd is aangehouden** (belangrijk om vast te houden):
    - Elke wijziging: lokaal `npx tsc --noEmit` + `npm run build` testen vóórdat een ZIP wordt aangeboden
@@ -120,6 +120,9 @@ set encrypted_password = crypt('NieuwWachtwoord', gen_salt('bf'))
 where email = 'GEBRUIKER-EMAIL';
 ```
 
+## Database-uitgangspunt (Fase 0, 2026-10-08)
+Productie is de waarheid; migratie `0014_baseline_production_state.sql` legt dat vast (RLS op `users` aan). Een verse omgeving heeft één tabel meer dan productie (`email_settings`, bewust niet toegepast, ongebruikt). Controle: `supabase/scripts/verify-baseline.sql` (alleen lezen). Bekende, nog open securitypunten staan in architecture.md sectie 13.2 en worden in de hardeningsfase aangepakt.
+
 ## Supabase actief houden (voorkomt automatisch pauzeren)
 
 Supabase's gratis tier pauzeert een project na 7 dagen zonder activiteit — inloggen op het dashboard telt niet mee. Dit is al eens gebeurd. Opgelost met een dagelijkse Vercel Cron Job (`vercel.json` + `app/api/ping-supabase`) die automatisch draait, geen actie nodig. Wel belangrijk: Vercel Cron Jobs werken alleen op een **actief gekoppeld Vercel-project met productie-deploys** — als het project ooit gepauzeerd/verwijderd wordt in Vercel zelf, stopt ook deze bescherming.
@@ -159,4 +162,4 @@ npm run dev
 
 Volledige details, governance-principes en de fasering (Fase 1 t/m 5): zie `docs/architecture.md`.
  
- 
+   

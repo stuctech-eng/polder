@@ -797,7 +797,56 @@ Omvat: betaallinks versturen (via de bestaande Email Engine), webhooks ontvangen
 verwerken, automatische betalingsregistratie (schrijft naar dezelfde `payments`-tabel als
 punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneringen.
 
+**7. Platformbeheer (control plane) en privacyfase** — *nog niet gebouwd; eerst architectuuraudit/plan, daarna bouwen* (advies GPT, door Claude overgenomen, 2026-10-08)
+- **Twee lagen, geen extra rol**: platformbeheer staat los van de restaurantrollen. Aparte tabel
+  `platform_admins (user_id, active, created_at)`, alleen in de database te vullen, nooit via
+  de app. Geen gedeeld admin-account: elke beheerder een eigen identiteit.
+- **Geen RLS-uitzondering "platformbeheerder mag alles"**: `restaurant_id` + RLS blijft de
+  primaire grens voor alle restaurantdata. Beheeracties lopen via gecontroleerde
+  server-side routes (service-role, nooit in de browser).
+- **Beheerscherm**: restaurant aanmaken, eerste eigenaar uitnodigen, restaurant aan/uit zetten,
+  overzicht. Platformdata (naam, status, eigenaar, abonnement, integratiestatus) is iets anders
+  dan restaurantdata (bonnen, omzet, facturen, bedragen).
+- **Platform-auditlog**: alle beheeracties loggen (restaurant aangemaakt/gedeactiveerd,
+  eigenaar uitgenodigd, gebruiker aangemaakt/verwijderd, integratie gekoppeld/ontkoppeld,
+  supporttoegang gestart/beëindigd).
+- **Fase A — nu/ontwikkeling (test mode)**: platformbeheerder mag alles zien, **alleen met
+  testdata**. Expliciet vastgelegd als tijdelijke status zodat dit niet per ongeluk de
+  productie-architectuur wordt.
+- **Fase B — vóór eerste echte restaurantdata (production mode)**: geen standaardtoegang tot
+  restaurantinhoud. Support = bewuste handeling: reden opgeven → restaurant kiezen → tijdelijk
+  beperkte toegang → alles loggen → toegang eindigt.
+- **Privacyfase vóór het eerste echte restaurant**: privacybeleid, verwerkersovereenkomst,
+  verwerkingsregister, subverwerkers (Supabase, Vercel, Resend), bewaartermijnen,
+  datalekprocedure, toegangsbeleid. Voorafgaand: security-audit (RLS, tenant-isolatie,
+  platform-admin, logging).
+- **Stand**: audit (fase 0) is uitgevoerd — zie sectie 13. **Definitieve volgorde** (besluit Te,
+  2026-10-08), elke stap vereist een eigen expliciete GO, na elke stap testen, stoppen, her-auditen:
+  1. Fase 0 — audit ✅ (sectie 13)
+  2. Baseline en reproduceerbaarheid ✅ (migratie 0014, geen gedragswijziging)
+  3. **Security hardening** — rollen in de database/RLS afdwingen, gevaarlijke wijzig-/verwijderrechten
+     dichtzetten, logboeken append-only, cross-restaurant relaties afdwingen, TRUNCATE/TRIGGER/
+     REFERENCES intrekken, `search_path` van `my_restaurant_id()`, profielaanmaak server-side
+     — **vóór** platformbeheer en vóór meerdere restaurants
+  4. Platformbeheer (`platform_admins`, platformcontext, restaurantstatus)
+  5. Restaurantbeheer (aanmaken, eigenaar uitnodigen, actief/inactief, platformlogboek)
+  6. Default Restaurant / configuratiemodel (alleen configuratie kopiëren, nooit data)
+  7. Restaurant testen (gecontroleerde inzage met reden, tijdslimiet, logging)
+  8. UI (platformomgeving en restaurantomgeving, modules op basis van configuratie)
+  9. Integraties met veilige secret-opslag
+  10. Privacy en productieklaar
+  Tot platformbeheer er is maakt Dick restaurants aan met SQL.
+
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.51** — Fase 0 afgerond: schema- en securityaudit (sectie 13) + baseline-migratie 0014:
+- Nieuwe migratie `0014_baseline_production_state.sql` (zet RLS op `users` aan zoals in productie,
+  idempotent, **geen gedragswijziging**) en `supabase/scripts/verify-baseline.sql` (alleen lezen).
+- Roadmap-punt 7 bijgewerkt met de definitieve volgorde (hardening vóór platformbeheer).
+- Geen app-code gewijzigd, geen UI-wijziging, geen hardening, geen platformbeheer.
+
+**v1.50** — Documentatie: roadmap-punt 7 toegevoegd (platformbeheer/control plane + privacyfase).
+Geen code.
 
 **v1.49** — Documentatie: eerste desk research Integration Engine toegevoegd onder roadmap-punt 4
 (SnelStart-authenticatie en kosten, DISH/BishPOS: geen openbare API gevonden). Nog steeds geen code.
@@ -1388,10 +1437,76 @@ in sectie 10.7 — codebase-review, vertical slice-aanpak, nieuwe/gewijzigde bes
 Bouwvolgorde per klant-instructie: migraties → interfaces → service → providers → routes →
 UI → lock-enforcement → events → audit → end-to-end test.
 
+## 13. FASE 0 — SCHEMA- EN SECURITYAUDIT (2026-10-08)
+
+*Alleen gelezen en geanalyseerd (repo + live Supabase via pg_class, pg_policies, information_schema,
+pg_proc, auth.users). Niets aangepast in productie.*
+
+### 13.1 Conclusie
+- **Tussen restaurants is geen lek gevonden.** RLS staat op alle 25 tabellen in `public` aan en elke
+  policy begrenst op restaurant. De rol `anon` heeft geen SELECT/INSERT/UPDATE/DELETE op enige tabel.
+- **Binnen één restaurant is de database te ruim**: rolrechten worden alleen in de app afgedwongen,
+  niet in de database.
+- **De repo was niet de waarheid**: productie wijkt op twee punten af (13.3). Productie is het
+  uitgangspunt; de repo is daarmee in overeenstemming gebracht (migratie 0014).
+
+### 13.2 Bevestigde bevindingen (productie)
+| # | Bevinding | Ernst | Oplossen in |
+|---|---|---|---|
+| 1 | Elke teamgenoot kan zichzelf/anderen een andere rol geven, ook `owner` (UPDATE-policy op `users` kijkt niet naar rol; `restaurant_id` kan niet wijzigen) | Hoog | Hardening |
+| 2 | Elke teamgenoot kan collega's, ook de eigenaar, verwijderen (DELETE-policy op `users`) | Hoog | Hardening |
+| 3 | Elke teamgenoot kan het eigen restaurant wijzigen/verwijderen (`restaurants`: ALL; cascade wist alle data) | Hoog | Hardening |
+| 4 | `audit_log`, `activity_log`, `domain_events` zijn door teamleden te wijzigen/wissen | Hoog | Hardening |
+| 5 | Vergrendelen, goedkeuren, factuurstatus, betalingen en dagafsluiting alleen in de app afgedwongen; via directe API te omzeilen | Hoog | Hardening |
+| 6 | Opslag (`documents`-bucket): elke teamgenoot kan documenten/factuur-PDF's van het eigen restaurant overschrijven (UPDATE); verwijderen kan niet (geen DELETE-policy) | Middel | Hardening |
+| 7 | `integration_plugins`: voor elke rol leesbaar/schrijfbaar, `config` is platte JSON | Middel (nog geen sleutels) | Vóór integraties |
+| 8 | Kindrijen kunnen naar rijen van een ander restaurant verwijzen (alleen eigen `restaurant_id` wordt gecontroleerd; integriteit, geen leesrisico) | Laag-middel | Hardening |
+| 9 | `anon` en `authenticated` hebben TRUNCATE, TRIGGER, REFERENCES op alle tabellen (PostgREST biedt TRUNCATE vermoedelijk niet aan; onnodig breed) | Laag | Hardening |
+| 10 | `my_restaurant_id()` is SECURITY DEFINER zonder vast `search_path` | Laag | Hardening |
+
+### 13.3 Verschillen repo ↔ productie (opgelost in migratie 0014)
+1. **RLS op `users`** stond in productie aan (handmatig), maar in geen enkele migratie. Een omgeving
+   opgebouwd uit uitsluitend de migraties kreeg `users` dus zonder RLS (de vier policies bestonden
+   wel, maar doen zonder RLS niets). Aangetoond met een lege Postgres: na 0001–0013 stond RLS op
+   `users` uit.
+2. **`email_settings`** (migratie 0002) staat niet in productie en wordt in de code niet gebruikt.
+   Bewust **niet** aan productie toegevoegd zonder functionele reden; 0002 blijft ongewijzigd in de
+   repo. Gevolg: een verse omgeving heeft 26 tabellen, productie 25 (alleen deze ene tabel verschilt).
+3. Overige tabellen, policies, `my_restaurant_id()` en opslag-policies komen overeen.
+4. **Rechten (GRANT)**: productie heeft naast de repo-grants (0004, 0012) ook de platformstandaard
+   (`anon`/`authenticated`: REFERENCES, TRIGGER, TRUNCATE). Die komen van Supabase, niet uit de repo,
+   en worden pas in de hardening ingetrokken.
+
+### 13.4 Nog onbewezen
+Uitnodigen schrijft het profiel via de gewone gebruikersverbinding in `users`, en voor `users`
+bestaat **geen INSERT-policy** (bewust niet toegevoegd; ook niet in 0014). Het kan dus zijn dat een
+uitnodiging wel het Auth-account aanmaakt en de mail verstuurt, maar het profiel niet opslaat.
+Dit is nooit echt getest (de Resend-testlimiet stopte eerdere pogingen vóór de profielstap). Er is
+precies één account zonder profiel (`stuctech@gmail.com`, 2026-07-05, van vóór het teambeheer):
+geen bewijs voor het probleem, wel een los eind (opruimen/koppelen in de hardening).
+**Besluit**: profielaanmaak gebeurt gecontroleerd server-side (service-role, ná de rechtencontrole
+`MANAGE_TEAM`), **niet** via een algemene INSERT-policy op `users`.
+
+### 13.5 Baseline (stap 1, migratie 0014)
+- `supabase/migrations/0014_baseline_production_state.sql`: zet RLS op `users` aan, herhaalt
+  `my_restaurant_id()` identiek, en maakt de vier `users`-policies alleen aan als ze ontbreken.
+  **Idempotent, geen gedragswijziging, geen hardening.** In productie een no-op; draaien is niet
+  nodig (mag wel).
+- `supabase/scripts/verify-baseline.sql`: alleen-lezen controle (RLS overal aan, vier `users`-policies,
+  `my_restaurant_id`, policy-aantallen) om productie of een nieuwe omgeving te toetsen.
+- **Getest op een lege lokale Postgres 16** (stubs voor `auth`/`storage`): (a) verse omgeving,
+  0001–0013: RLS op `users` uit → na 0014 aan; (b) productie-simulatie (zelfde keten + handmatig RLS
+  aan): vóór/na 0014 geen enkel verschil in RLS, policies, functie en grants; (c) verse omgeving na
+  0014 identiek aan productie na 0014; (d) tweede run geeft geen verandering.
+
+### 13.6 Vervolg
+Zie roadmap-punt 7 (sectie 10) voor de definitieve volgorde. Eerstvolgende stap: security hardening,
+alleen na een afzonderlijke expliciete GO.
+
 ## 12. STATUS
 
-**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9) + **drie-fasen-roadmap** (sectie 10: Administratieplatform ✅ → Integratieplatform → Financieel platform). **Implementatie: Fase 1 (Administratieplatform) COMPLEET** — Fase 1 kernmodules, Fase A/A.5/B/C, Daily Closing, rechtenmatrix, Factuurstatus + Betalingen (v1.42), alle bekende RLS/GRANT-gaten gedicht. **Volgende stap: Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening) — daarna pas Fase 2 (Integratieplatform) en Fase 3 (Financieel platform/Payment Engine, v1.43).** Dit document staat per sectie 3 boven aannames.
+**Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9) + **drie-fasen-roadmap** (sectie 10: Administratieplatform ✅ → Integratieplatform → Financieel platform). **Implementatie: Fase 1 (Administratieplatform) COMPLEET** — Fase 1 kernmodules, Fase A/A.5/B/C, Daily Closing, rechtenmatrix, Factuurstatus + Betalingen (v1.42), alle bekende RLS/GRANT-gaten gedicht. **Fase 0 (audit) en baseline (0014) zijn klaar (sectie 13); volgende gebouwde stap: security hardening (na expliciete GO, roadmap-punt 7).** Eerder: Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening) — daarna pas Fase 2 (Integratieplatform) en Fase 3 (Financieel platform/Payment Engine, v1.43).** Dit document staat per sectie 3 boven aannames.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  
- 
+   
