@@ -839,6 +839,9 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.52** — Documentatie: `docs/security-hardening-plan.md` toegevoegd (alleen plan; geen migratie,
+policy-, privilege- of codewijziging). Sectie 13.6 verwijst ernaar.
+
 **v1.51** — Fase 0 afgerond: schema- en securityaudit (sectie 13) + baseline-migratie 0014:
 - Nieuwe migratie `0014_baseline_production_state.sql` (zet RLS op `users` aan zoals in productie,
   idempotent, **geen gedragswijziging**) en `supabase/scripts/verify-baseline.sql` (alleen lezen).
@@ -1501,7 +1504,12 @@ geen bewijs voor het probleem, wel een los eind (opruimen/koppelen in de hardeni
 
 ### 13.6 Vervolg
 Zie roadmap-punt 7 (sectie 10) voor de definitieve volgorde. Eerstvolgende stap: security hardening,
-alleen na een afzonderlijke expliciete GO.
+alleen na een afzonderlijke expliciete GO. **Het volledige hardeningplan (voorstel, niets uitgevoerd)
+staat in `docs/security-hardening-plan.md`**: 11 kleine stappen met per onderdeel probleem, oude/nieuwe
+regel, betrokken code, tests, volgorde en rollback, plus een rollenmatrix en teststrategie. Nieuwe
+bevindingen daaruit (11 t/m 15): gedeactiveerde gebruikers werken nog via directe API; PIN-hash en
+-salt zijn voor elke rol leesbaar; `users` is voor elke rol leesbaar; geen afdeling/bedrijf-controle
+op rekeningen; goedkeuringslink is voor bediening zichtbaar (ontwerpkeuze).
 
 ## 12. STATUS
 
@@ -1509,4 +1517,4 @@ alleen na een afzonderlijke expliciete GO.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  
-   
+    
