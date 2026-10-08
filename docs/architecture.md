@@ -839,6 +839,10 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.55** — Security hardening STAP 2 (H3 + H8a): migratie `0016_hardening_step2_restaurants_privileges.sql` + rollback.
+`restaurants` alleen nog leesbaar (eigen restaurant, actieve gebruiker); TRUNCATE/TRIGGER/REFERENCES weg; anon zonder tabelrechten.
+Geen app-code gewijzigd. Sectie 13.10. Stap 3 wacht op nieuwe expliciete GO.
+
 **v1.54** — Security hardening STAP 1 (H1 + H9): migratie `0015_hardening_step1_helpers.sql` + rollback. `my_restaurant_id()` vast
 search_path + `is_active` (fail closed), nieuwe `my_role()`, `role_has_permission()`, `has_perm()`, EXECUTE alleen voor authenticated en
 service_role. Geen policy-, grant-, trigger-, storage- of app-wijziging. Sectie 13.9. Stap 2 wacht op nieuwe expliciete GO.
@@ -1590,6 +1594,28 @@ gedeactiveerde), 5 bonnen, 4 facturen, 4 betalingen, 3 documenten, 2 dagafsluiti
   rollback → `run(0)` 218/218; opnieuw toepassen en dubbel draaien (idempotent) 218/218. Matrix SQL ↔ TypeScript: 55/55 gelijk, direct
   uit `role-helpers.ts` geparsed. 50 nieuwe cases (categorie HELPERS); RE08/RE10 gaan van stap 3 naar stap 1 (inactieve gebruiker kan zichzelf
   niet meer promoveren/heractiveren). Nog te doen: Dick draait 0015 in productie en daarna de alleen-lezen controle uit het rapport.
+
+### 13.10 HARDENING STAP 2 — H3 restaurants + H8a rechten (migratie 0016, 2026-10-08)
+Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, rollback `supabase/rollbacks/0016_rollback.sql`.
+* **H3:** policy "tenant isolation restaurants" (for all) vervangen door SELECT-policy "restaurants read own" (`id = my_restaurant_id()`);
+  INSERT/UPDATE/DELETE op `restaurants` ingetrokken voor `authenticated`. Controle in de code: er wordt nergens naar `restaurants`
+  geschreven; er zijn drie leesplekken (naam voor factuur/mail door ingelogde gebruiker) en de service-role ping — alle blijven werken.
+* **H8a:** TRUNCATE/TRIGGER/REFERENCES ingetrokken voor anon, authenticated en service_role op alle tabellen in public; anon verliest
+  alle rechten op bestaande tabellen en sequences; standaardrechten voor nieuwe tabellen: geen TRUNCATE/TRIGGER/REFERENCES.
+  SELECT/INSERT/UPDATE/DELETE van authenticated en service_role op alle andere tabellen is **ongewijzigd** (least privilege per tabel = stap 11).
+* Niet gewijzigd: overige policies, functies, triggers, storage, data (fingerprints vóór/na gelijk).
+* Gevolg: een gedeactiveerde gebruiker kan zijn restaurant niet meer lezen; verwijderen van een restaurant (cascade) kan alleen nog
+  de databasebeheerder/service-role.
+* Tests (lokaal): vóór 0016 235/235; na 0016 `run(2)` 235/235; rollback = exacte vóór-stand (policy, rechten); dubbel draaien idempotent.
+  Nieuw: RS07–RS14 en PR20–PR28 (17 cases).
+* **Productie (2026-10-08, Dick):** vóór-stand vastgelegd; migratie 0016 zonder fouten gedraaid; controle: alleen policy "restaurants read own"
+  (SELECT), anon zonder tabelrechten, authenticated SELECT 25 / INSERT-UPDATE-DELETE 24, service_role DML 25, geen TRUNCATE/TRIGGER/REFERENCES.
+  App-regressie als eigenaar (dashboard, rekeningen, facturen, logboek) werkt. **Stap 2 is akkoord.**
+* **Genoteerd voor stap 11 (niet nu):** het recht MAINTAIN staat nog bij anon/authenticated/service_role (ook in de standaardrechten van
+  `postgres` in `public`: anon=m, authenticated/service_role=arwdm); vóór-stand had geen sequences in `public`. Standaardrechten van
+  `supabase_admin` (platform) zijn niet aan te passen en vallen buiten onze migraties.
+* **Dashboard-opmerking (los van hardening):** "Omzet deze maand" telt op `issued_at` van de factuur, niet op betaaldatum.
+
 
 ## 12. STATUS
 

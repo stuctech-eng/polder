@@ -36,7 +36,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 |---|---|---|---|---|
 | 0 | voorbereiding/testharnas | — | — | `run(0)` |
 | 1 | H1 + H9 helpers, search_path, is_active | `0015_hardening_step1_helpers.sql` (**uitgevoerd lokaal; productie wacht op Dicks run**) | `rollbacks/0015_rollback.sql` | `run(1)` |
-| 2 | H3 restaurants + H8a privileges | `0016_hardening_restaurants_privileges.sql` | `rollbacks/0016_rollback.sql` | `run(2)` |
+| 2 | H3 restaurants + H8a privileges | `0016_hardening_step2_restaurants_privileges.sql` (**lokaal getest**) | `rollbacks/0016_rollback.sql` | `run(2)` |
 | 3 | H2 users + server-side team/uitnodiging | `0017_hardening_users.sql` (+ app-wijziging) | `rollbacks/0017_rollback.sql` (+ app-revert) | `run(3)` |
 | 4 | H5a logs append-only | `0018_hardening_logs.sql` | `rollbacks/0018_rollback.sql` | `run(4)` |
 | 5 | H7 cross-reference integriteit | `0019_hardening_crossref.sql` | `rollbacks/0019_rollback.sql` | `run(5)` |

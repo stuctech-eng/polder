@@ -345,6 +345,36 @@ case("HP50", "HELPERS", "dagafsluitingen van B blijven onleesbaar voor A, ook m�
      f"select 1 from daily_closings where restaurant_id='{RB}'", True, False, 1, "vóór stap 1 leest A via de nep-tabel de dagafsluitingen van B",
      setup=f"create temp table users (id uuid, restaurant_id uuid, role text, is_active boolean); grant all on pg_temp.users to authenticated; insert into pg_temp.users values ('{A(10)}','{RB}','owner',true)")
 
+# ---------------------------------------------------------------- STAP 2 (H3 restaurants + H8a rechten)
+RS_ALL = "select count(*) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%'"
+case("RS07", "RESTAURANT", "gedeactiveerde gebruiker leest eigen restaurant", INA, "select", f"select 1 from restaurants where id='{RA}'", True, False, 2, "policy gebruikt my_restaurant_id() (H9)")
+case("RS08", "RESTAURANT", "actieve owner leest eigen restaurant (naam voor facturen/mails)", OWNER, "select", f"select name from restaurants where id='{RA}'", True)
+case("RS09", "RESTAURANT", "B-owner leest restaurant van A niet", em("b", "owner"), "select", f"select 1 from restaurants where id='{RA}'", False)
+case("RS10", "RESTAURANT", "restaurants heeft precies één policy: SELECT 'restaurants read own'", "postgres", "check",
+     "select (select count(*) from pg_policies where schemaname='public' and tablename='restaurants') = 1 and exists (select 1 from pg_policies where schemaname='public' and tablename='restaurants' and policyname='restaurants read own' and cmd='SELECT')", False, True, 2)
+case("RS11", "RESTAURANT", "service_role kan restaurant nog wijzigen (toekomstig platformbeheer, nu niet gebruikt)", "service_role", "dml", f"update restaurants set name=name where id='{RA}'", True)
+case("RS12", "RESTAURANT", "service_role leest restaurants (ping-supabase)", "service_role", "select", "select id from restaurants limit 1", True)
+case("RS13", "RESTAURANT", "owner kan geen restaurant aanmaken", OWNER, "dml", "insert into restaurants (name) values ('Nieuw')", False)
+case("RS14", "RESTAURANT", "owner wijzigt restaurantnaam van eigen restaurant (bestaat niet in de app)", OWNER, "dml", f"update restaurants set name='x' where id='{RA}'", True, False, 2, "zelfde als RS01, nu expliciet als regressiecheck app-gedrag")
+case("PR20", "PRIVILEGES", "authenticated heeft op GEEN enkele tabel TRUNCATE/TRIGGER/REFERENCES", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('authenticated', c.oid, 'truncate,trigger,references'))", False, True, 2)
+case("PR21", "PRIVILEGES", "service_role heeft op GEEN enkele tabel TRUNCATE/TRIGGER/REFERENCES", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('service_role', c.oid, 'truncate,trigger,references'))", False, True, 2)
+case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
+case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname <> 'restaurants' and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op ALLE tabellen", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
+case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
+     "select has_table_privilege('authenticated','public.restaurants','select') and not has_table_privilege('authenticated','public.restaurants','insert,update,delete')", False, True, 2)
+case("PR27", "PRIVILEGES", "standaardrechten voor nieuwe tabellen bevatten geen TRUNCATE/TRIGGER/REFERENCES voor anon/authenticated/service_role", "postgres", "check",
+     "select not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a where d.defaclnamespace='public'::regnamespace and d.defaclobjtype='r' and a.privilege_type in ('TRUNCATE','TRIGGER','REFERENCES') and a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated','service_role')))", True)
+case("PR28", "PRIVILEGES", "elke tabel in public heeft nog RLS aan na stap 2", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not c.relrowsecurity)", True)
+
 # ---------------------------------------------------------------- uitvoer
 def q(x): return "'" + x.replace("'", "''") + "'"
 def b(x): return "null" if x is None else ("true" if x else "false")
