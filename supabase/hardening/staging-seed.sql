@@ -25,9 +25,9 @@ $guard$;
 create table if not exists public._polder_staging_marker (created_at timestamptz default now(), note text);
 insert into public._polder_staging_marker (note) select 'staging-seed' where not exists (select 1 from public._polder_staging_marker);
 
--- opruimen vorige run (cascade via restaurants/auth.users)
-delete from auth.users where id::text like 'a0000000-%' or id::text like 'b0000000-%' or id::text like 'c0000000-%' or id::text like 'd0000000-%';
+-- opruimen vorige run (eerst restaurants — dat ruimt de profielen mee op; pas daarna de auth-accounts)
 delete from restaurants where id in ('a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001');
+delete from auth.users where id::text like 'a0000000-%' or id::text like 'b0000000-%' or id::text like 'c0000000-%' or id::text like 'd0000000-%';
 delete from storage.objects where bucket_id = 'documents' and (name like 'a0000000-0000-0000-0000-000000000001/%' or name like 'b0000000-0000-0000-0000-000000000001/%');
 insert into storage.buckets (id, name, public) values ('documents','documents',false) on conflict (id) do nothing;
 insert into restaurants (id, name) values ('a0000000-0000-0000-0000-000000000001', 'Staging A'), ('b0000000-0000-0000-0000-000000000001', 'Staging B'), ('d0000000-0000-0000-0000-000000000001', 'Staging C (leeg)');

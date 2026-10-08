@@ -49,8 +49,8 @@ export async function DELETE(
   try {
     const ctx = await requireRole("MANAGE_TEAM");
     const supabase = createSupabaseServerClient();
-    await teamService.removeUser(supabase, ctx, params.id);
-    return NextResponse.json({ success: true });
+    const { warning } = await teamService.removeUser(supabase, ctx, params.id);
+    return NextResponse.json({ success: true, ...(warning ? { warning } : {}) });
   } catch (err: any) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

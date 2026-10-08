@@ -121,6 +121,7 @@ begin
 
     begin
       if c.setup is not null then execute c.setup; end if;
+      set constraints all immediate;     -- uitgestelde (deferred) constraint-triggers meteen toetsen: de subtransactie wordt altijd teruggedraaid
       if c.as_user = 'service_role' then
         v_claims := '{"role":"service_role"}';
         perform set_config('request.jwt.claims', v_claims, true);

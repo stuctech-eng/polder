@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserRole } from "./role-helpers";
 
+// Alleen LEZEN met de gebruikersverbinding. Schrijven op `users` gebeurt uitsluitend in user-admin-repository.ts (stap 3).
+
 export interface TeamMember {
   id: string;
   full_name: string;
@@ -46,33 +48,4 @@ export async function getById(supabase: SupabaseClient, userId: string) {
 
   if (error) throw error;
   return data;
-}
-
-export async function updateRole(supabase: SupabaseClient, userId: string, role: UserRole) {
-  const { data, error } = await supabase
-    .from("users")
-    .update({ role, updated_at: new Date().toISOString() })
-    .eq("id", userId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function setActive(supabase: SupabaseClient, userId: string, isActive: boolean) {
-  const { data, error } = await supabase
-    .from("users")
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
-    .eq("id", userId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function remove(supabase: SupabaseClient, userId: string) {
-  const { error } = await supabase.from("users").delete().eq("id", userId);
-  if (error) throw error;
 }

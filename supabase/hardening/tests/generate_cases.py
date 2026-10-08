@@ -103,7 +103,7 @@ case("TM09", "TEAM", "service_role verwijdert de LAATSTE owner", "service_role",
 case("TM10", "TEAM", "service_role wijzigt restaurant_id van een gebruiker", "service_role", "dml",
      f"update users set restaurant_id='{RB}' where id='{A(13)}'", True, False, 3, "restaurant_id onveranderlijk")
 case("TM11", "TEAM", "bediening leest andere teamleden", BED, "select",
-     f"select 1 from users where id <> auth.uid() and restaurant_id='{RA}'", True, False, 3, "besluit D2 (alleen owner ziet team)")
+     f"select 1 from users where id <> auth.uid() and restaurant_id='{RA}'", True, None, 3, "OPEN: besluit D2 (alleen owner ziet team) is nog niet genomen; leespolicy bewust ongewijzigd in stap 3")
 case("TM12", "TEAM", "owner leest teamleden", OWNER, "select", f"select 1 from users where id <> auth.uid() and restaurant_id='{RA}'", True)
 case("TM13", "TEAM", "gebruiker leest eigen profiel", BED, "select", "select 1 from users where id = auth.uid()", True)
 case("TM14", "TEAM", "service_role verwijdert NIET-laatste owner (tweede owner bestaat)", "service_role", "dml",
@@ -364,8 +364,8 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname <> 'restaurants' and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants en users", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
 case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op ALLE tabellen", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
@@ -374,6 +374,41 @@ case("PR27", "PRIVILEGES", "standaardrechten voor nieuwe tabellen bevatten geen 
      "select not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a where d.defaclnamespace='public'::regnamespace and d.defaclobjtype='r' and a.privilege_type in ('TRUNCATE','TRIGGER','REFERENCES') and a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated','service_role')))", True)
 case("PR28", "PRIVILEGES", "elke tabel in public heeft nog RLS aan na stap 2", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not c.relrowsecurity)", True)
+
+# ---------------------------------------------------------------- STAP 3 (H2 users)
+SECOND_OWNER = f"insert into users (id, restaurant_id, full_name, role) values ('{ORPH}','{RA}','tweede owner','owner');"
+case("US01", "USERS", "authenticated heeft geen INSERT/UPDATE/DELETE-recht op users", "postgres", "check",
+     "select not has_table_privilege('authenticated','public.users','insert,update,delete') and has_table_privilege('authenticated','public.users','select')", False, True, 3)
+case("US02", "USERS", "users heeft exact twee policies, beide SELECT (own profile + team)", "postgres", "check",
+     "select (select count(*) from pg_policies where schemaname='public' and tablename='users') = 2 and not exists (select 1 from pg_policies where schemaname='public' and tablename='users' and cmd <> 'SELECT')", False, True, 3)
+case("US03", "USERS", "triggers users_guard en users_keep_owner bestaan (constraint trigger is deferrable)", "postgres", "check",
+     "select exists (select 1 from pg_trigger where tgname='users_guard' and not tgisinternal) and exists (select 1 from pg_trigger where tgname='users_keep_owner' and tgdeferrable and tginitdeferred)", False, True, 3)
+case("US04", "USERS", "service_role mag id van een gebruiker NIET wijzigen", "service_role", "dml",
+     f"update users set id='{ORPH}' where id='{A(14)}'", True, False, 3)
+case("US05", "USERS", "service_role mag rol van een gewone gebruiker wijzigen (legitieme server-flow)", "service_role", "dml",
+     f"update users set role='manager' where id='{A(13)}'", True)
+case("US06", "USERS", "service_role mag een gewone gebruiker deactiveren", "service_role", "dml",
+     f"update users set is_active=false where id='{A(14)}'", True)
+case("US07", "USERS", "service_role mag de LAATSTE owner niet degraderen", "service_role", "dml",
+     f"update users set role='manager' where id='{A(10)}'", True, False, 3)
+case("US08", "USERS", "service_role mag een owner degraderen als er een tweede actieve owner is", "service_role", "dml",
+     f"update users set role='manager' where id='{A(10)}'", True, True, 0, "", setup=SECOND_OWNER)
+case("US09", "USERS", "service_role mag een owner deactiveren als er een tweede actieve owner is", "service_role", "dml",
+     f"update users set is_active=false where id='{A(10)}'", True, True, 0, "", setup=SECOND_OWNER)
+case("US10", "USERS", "tweede owner is gedeactiveerd: de eerste owner is dan nog de laatste actieve → niet te deactiveren", "service_role", "dml",
+     f"update users set is_active=false where id='{A(10)}'", True, False, 3, "", setup=SECOND_OWNER.replace("'owner');", "'owner'); update users set is_active=false where id='" + ORPH + "';"))
+case("US11", "USERS", "service_role mag alle owners in één statement niet wegzetten (ook niet gelijktijdig)", "service_role", "dml",
+     f"update users set is_active=false where restaurant_id='{RA}' and role='owner'", True, False, 3)
+case("US12", "USERS", "restaurant verwijderen (cascade) blijft mogelijk voor service_role ondanks owner-vangnet", "service_role", "dml",
+     f"delete from restaurants where id='{RC}'", True)
+case("US13", "USERS", "gedeactiveerde owner verwijderen mag (er blijft een actieve owner)", "service_role", "dml",
+     f"delete from users where id='{ORPH}'", True, True, 0, "", setup=SECOND_OWNER.replace("'owner');", "'owner'); update users set is_active=false where id='" + ORPH + "';"))
+case("US14", "USERS", "service_role kan profiel van een nieuwe gebruiker aanmaken (invite-flow)", "service_role", "dml",
+     f"insert into users (id, restaurant_id, full_name, role) values ('{ORPH}','{RA}','Nieuw','keuken')", True)
+case("US15", "USERS", "A-owner kan via eigen verbinding geen rol van B-gebruiker wijzigen (privilege + RLS)", OWNER, "dml",
+     f"update users set role='keuken' where id='{B(13)}'", False)
+case("US16", "USERS", "gedeactiveerde gebruiker leest eigen profiel (middleware moet 'inactief' kunnen zien)", INA, "select",
+     "select is_active from users where id = auth.uid()", True)
 
 # ---------------------------------------------------------------- uitvoer
 def q(x): return "'" + x.replace("'", "''") + "'"

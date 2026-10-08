@@ -839,6 +839,8 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.56** — Security hardening STAP 3 (H2): migratie `0017_hardening_step3_users.sql` + rollback, server-side teambeheer (`user-admin-repository`), sectie 13.11. Productie wacht op uitvoering.
+
 **v1.55** — Security hardening STAP 2 (H3 + H8a): migratie `0016_hardening_step2_restaurants_privileges.sql` + rollback.
 `restaurants` alleen nog leesbaar (eigen restaurant, actieve gebruiker); TRUNCATE/TRIGGER/REFERENCES weg; anon zonder tabelrechten.
 Geen app-code gewijzigd. Sectie 13.10. Stap 3 wacht op nieuwe expliciete GO.
@@ -1616,6 +1618,15 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
   `supabase_admin` (platform) zijn niet aan te passen en vallen buiten onze migraties.
 * **Dashboard-opmerking (los van hardening):** "Omzet deze maand" telt op `issued_at` van de factuur, niet op betaaldatum.
 
+
+### 13.11 HARDENING STAP 3 — H2 users + server-side teambeheer (migratie 0017 + app-code, 2026-10-08)
+
+**Status: lokaal volledig getest; productie wacht op Dicks uitvoering (volgorde: eerst app-deploy, dan migratie).**
+
+* **Database (0017):** `users` verliest INSERT/UPDATE/DELETE voor `authenticated` (grants ingetrokken) en de twee team-policies (update/delete) vervallen. Nieuw: `users_guard` (id en restaurant_id onveranderlijk, ook voor service-role) en `users_keep_owner` (deferrable constraint trigger: minstens één actieve owner per restaurant, geserialiseerd via `for no key update` op de restaurantrij). SELECT-policies ongewijzigd (D2 blijft open).
+* **App:** alle schrijfacties op `users` lopen via `lib/user-management/user-admin-repository.ts` (service-role) ná `requireRole("MANAGE_TEAM")`, elke query gescoped op het restaurant van de aanroeper. Uitnodigen: Auth-uitnodiging → profiel-check → profiel; bij fout wordt een zojuist (<120 s) aangemaakt Auth-account opgeruimd (geen wees-account). Verwijderen ruimt ook het Auth-account op (met waarschuwing als dat mislukt). Gebruikers met historie worden gedeactiveerd, niet verwijderd.
+* **Tests:** 251 cases (incl. de oorspronkelijke 168): voor 0017 251/251 PASS (stap 2), na 0017 250 PASS + 1 OPEN (TM11/D2). App-integratietest van team-service tegen echte Postgres (nep-Supabase-client): 32/32 PASS zowel vóór als ná 0017. Rollback exact, migratie idempotent, concurrency-check OK. `npm run build` OK.
+* **Beperkingen:** een verstuurde uitnodigingsmail kan niet worden teruggehaald; de echte Auth Admin API is lokaal niet te testen (nagebootst); wees-account stuctech@gmail.com blokkeert opnieuw uitnodigen van dat adres tot D4 is besloten (niet verwijderd).
 
 ## 12. STATUS
 

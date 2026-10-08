@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as userRepository from "./user-repository";
-import { sendInvitation } from "./invitation-service";
+import * as userAdmin from "./user-admin-repository";
+import { sendInvitation, removeAuthAccount } from "./invitation-service";
 import { publishUserEvent } from "./events";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "./role-helpers";
 import type { AuthorizedContext } from "./permission-service";
 
@@ -9,6 +11,11 @@ import type { AuthorizedContext } from "./permission-service";
  * Generiek gebruikersbeheer — bewust niet "invite-service" genoemd (klant-instructie),
  * zodat resetPassword/resendInvitation/enable2FA/updateProfile er later zonder
  * architectuurwijziging bij kunnen.
+ *
+ * Security hardening stap 3 (H2): de gebruikersverbinding mag `users` alleen LEZEN. Alle schrijfacties lopen via
+ * user-admin-repository (service-role). Elke functie hier wordt uitsluitend aangeroepen NA `requireRole("MANAGE_TEAM")`
+ * (de ctx), controleert zelf expliciet dat het doelwit in HET RESTAURANT VAN DE AANROEPER zit (service-role kent geen RLS),
+ * en de database bewaakt aanvullend de laatste actieve owner. Logging (activity_log, domain_events) blijft via de gebruikersverbinding.
  */
 
 export async function listTeam(supabase: SupabaseClient, restaurantId: string) {
@@ -20,20 +27,37 @@ export async function inviteUser(
   ctx: AuthorizedContext,
   params: { email: string; fullName: string; role: UserRole }
 ) {
-  const { authUserId } = await sendInvitation(params.email);
+  if (!userAdmin.isUserRole(params.role)) throw new Error("Ongeldige rol");
+  const admin = createSupabaseAdminClient();
 
-  const { data: newUser, error } = await supabase
-    .from("users")
-    .insert({
+  const invite = await sendInvitation(params.email);
+  const authUserId = invite.authUserId;
+
+  // Een Auth-account dat al een profiel heeft (hier of in een ander restaurant) mag NOOIT worden overgenomen of opgeruimd.
+  if (await userAdmin.profileExists(admin, authUserId)) {
+    throw new Error("Dit e-mailadres is al in gebruik");
+  }
+
+  let newUser;
+  try {
+    newUser = await userAdmin.insertProfile(admin, {
       id: authUserId,
-      restaurant_id: ctx.restaurantId,
-      full_name: params.fullName,
+      restaurantId: ctx.restaurantId,
+      fullName: params.fullName,
       role: params.role,
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
+    });
+  } catch (err: any) {
+    // Profielaanmaak mislukt: geen wees-Auth-account achterlaten (alleen als dit account zojuist door ons is aangemaakt).
+    let cleanupNote = "";
+    if (invite.isNewAccount) {
+      const cleanup = await removeAuthAccount(authUserId);
+      if (!cleanup.ok) {
+        console.error("Uitnodiging: opruimen Auth-account mislukt", authUserId, cleanup.error);
+        cleanupNote = " Het aangemaakte inlogaccount kon niet automatisch worden opgeruimd; neem contact op met de beheerder.";
+      }
+    }
+    throw new Error(`Gebruiker kon niet worden aangemaakt: ${err?.message ?? "onbekende fout"}.${cleanupNote}`);
+  }
 
   await publishUserEvent(supabase, {
     restaurantId: ctx.restaurantId,
@@ -59,17 +83,21 @@ export async function updateRole(
   targetUserId: string,
   newRole: UserRole
 ) {
-  const target = await userRepository.getById(supabase, targetUserId);
+  if (!userAdmin.isUserRole(newRole)) throw new Error("Ongeldige rol");
+  const admin = createSupabaseAdminClient();
 
-  // Guard: laatste eigenaar van een restaurant mag niet gedegradeerd worden.
-  if (target.role === "owner" && newRole !== "owner") {
-    const ownerCount = await userRepository.countOwners(supabase, ctx.restaurantId);
+  const target = await userAdmin.findInRestaurant(admin, ctx.restaurantId, targetUserId);
+  if (!target) throw new Error(userAdmin.NOT_FOUND_MESSAGE);
+
+  // Guard: laatste actieve eigenaar van een restaurant mag niet gedegradeerd worden (de database bewaakt dit ook).
+  if (target.role === "owner" && target.is_active && newRole !== "owner") {
+    const ownerCount = await userAdmin.countActiveOwners(admin, ctx.restaurantId);
     if (ownerCount <= 1) {
       throw new Error("Kan de laatste eigenaar van dit restaurant niet degraderen");
     }
   }
 
-  const updated = await userRepository.updateRole(supabase, targetUserId, newRole);
+  const updated = await userAdmin.updateRole(admin, ctx.restaurantId, targetUserId, newRole);
 
   await publishUserEvent(supabase, {
     restaurantId: ctx.restaurantId,
@@ -98,17 +126,19 @@ export async function setActive(
   if (targetUserId === ctx.userId && !isActive) {
     throw new Error("Je kan jezelf niet deactiveren");
   }
+  const admin = createSupabaseAdminClient();
 
-  const target = await userRepository.getById(supabase, targetUserId);
+  const target = await userAdmin.findInRestaurant(admin, ctx.restaurantId, targetUserId);
+  if (!target) throw new Error(userAdmin.NOT_FOUND_MESSAGE);
 
-  if (target.role === "owner" && !isActive) {
-    const ownerCount = await userRepository.countOwners(supabase, ctx.restaurantId);
+  if (target.role === "owner" && target.is_active && !isActive) {
+    const ownerCount = await userAdmin.countActiveOwners(admin, ctx.restaurantId);
     if (ownerCount <= 1) {
       throw new Error("Kan de laatste (actieve) eigenaar van dit restaurant niet deactiveren");
     }
   }
 
-  const updated = await userRepository.setActive(supabase, targetUserId, isActive);
+  const updated = await userAdmin.setActive(admin, ctx.restaurantId, targetUserId, isActive);
 
   await publishUserEvent(supabase, {
     restaurantId: ctx.restaurantId,
@@ -132,34 +162,25 @@ export async function removeUser(
   supabase: SupabaseClient,
   ctx: AuthorizedContext,
   targetUserId: string
-) {
+): Promise<{ warning?: string }> {
   if (targetUserId === ctx.userId) {
     throw new Error("Je kan jezelf niet verwijderen");
   }
+  const admin = createSupabaseAdminClient();
 
-  const target = await userRepository.getById(supabase, targetUserId);
+  const target = await userAdmin.findInRestaurant(admin, ctx.restaurantId, targetUserId);
+  if (!target) throw new Error(userAdmin.NOT_FOUND_MESSAGE);
 
-  if (target.role === "owner") {
-    const ownerCount = await userRepository.countOwners(supabase, ctx.restaurantId);
+  if (target.role === "owner" && target.is_active) {
+    const ownerCount = await userAdmin.countActiveOwners(admin, ctx.restaurantId);
     if (ownerCount <= 1) {
       throw new Error("Kan de laatste eigenaar van dit restaurant niet verwijderen");
     }
   }
 
-  try {
-    await userRepository.remove(supabase, targetUserId);
-  } catch (err: any) {
-    // FK-constraints (activity_log.user_id, audit_log.changed_by) voorkomen hard
-    // verwijderen van gebruikers met historie — dat is gewenst gedrag, alleen
-    // netjes vertalen naar een begrijpelijke foutmelding i.p.v. ruwe DB-error.
-    if (err?.code === "23503") {
-      throw new Error(
-        "Deze gebruiker heeft al historie (bonnen/facturen/activiteit) en kan niet " +
-          "verwijderd worden — deactiveer het account in plaats daarvan"
-      );
-    }
-    throw err;
-  }
+  // FK-constraints (activity_log.user_id, audit_log.changed_by, bonnen, dagafsluitingen) voorkomen hard verwijderen van
+  // gebruikers met historie — dat is gewenst; de repository vertaalt dit naar een begrijpelijke melding.
+  await userAdmin.remove(admin, ctx.restaurantId, targetUserId);
 
   await supabase.from("activity_log").insert({
     restaurant_id: ctx.restaurantId,
@@ -168,4 +189,12 @@ export async function removeUser(
     target_table: "users",
     target_id: targetUserId,
   });
+
+  // Profiel en Auth-account blijven consistent: het inlogaccount van het verwijderde teamlid wordt ook opgeruimd.
+  const cleanup = await removeAuthAccount(targetUserId);
+  if (!cleanup.ok) {
+    console.error("Teamlid verwijderd, maar Auth-account opruimen mislukt", targetUserId, cleanup.error);
+    return { warning: "Het teamlid is verwijderd, maar het inlogaccount kon niet automatisch worden opgeruimd." };
+  }
+  return {};
 }
