@@ -288,6 +288,42 @@ case("ST08", "STORAGE", "bediening uploadt in eigen map", BED, "dml",
 case("ST09", "STORAGE", "upload met pad zonder restaurant-uuid", ADM, "dml",
      "insert into storage.objects (bucket_id, name) values ('documents','geen-uuid/x.pdf')", False)
 
+BADM = em("b", "admin")
+sel = lambda p: f"select 1 from storage.objects where bucket_id='documents' and name='{p}'"
+case("ST10", "STORAGE", "owner leest factuur-PDF", OWNER, "select", sel(pdf), True)
+case("ST11", "STORAGE", "keuken leest factuur-PDF", KEU, "select", sel(pdf), True, False, 6, "geen MANAGE_INVOICES")
+case("ST12", "STORAGE", "administratie van restaurant B leest PDF van A niet", BADM, "select", sel(pdf), False)
+case("ST13", "STORAGE", "gedeactiveerde gebruiker leest factuur-PDF", INA, "select", sel(pdf), True, False, 6, "gedeactiveerde verliest leesrecht (helpers uit stap 1)")
+case("ST14", "STORAGE", "owner overschrijft bestaand PDF (update)", OWNER, "dml",
+     f"update storage.objects set name=name where bucket_id='documents' and name='{pdf}'", True, False, 6)
+case("ST15", "STORAGE", "bediening overschrijft bestaand PDF (update)", BED, "dml",
+     f"update storage.objects set name=name where bucket_id='documents' and name='{pdf}'", True, False, 6)
+case("ST16", "STORAGE", "owner verwijdert PDF", OWNER, "dml", f"delete from storage.objects where bucket_id='documents' and name='{pdf}'", False)
+case("ST17", "STORAGE", "owner uploadt nieuw PDF in eigen map (geldig)", OWNER, "dml",
+     f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(501)}.pdf')", True)
+case("ST18", "STORAGE", "manager uploadt in eigen map", MGR, "dml",
+     f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(500)}.pdf')", True, False, 6, "geen MANAGE_INVOICES")
+case("ST19", "STORAGE", "administratie van B uploadt in map van restaurant A", BADM, "dml",
+     f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(501)}.pdf')", False)
+case("ST20", "STORAGE", "gedeactiveerde gebruiker uploadt in eigen map", INA, "dml",
+     f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(501)}.pdf')", True, False, 6)
+case("ST21", "STORAGE", "administratie uploadt in een andere bucket", ADM, "dml",
+     f"insert into storage.objects (bucket_id, name) values ('andere','{RA}/invoices/{A(501)}.pdf')", False,
+     setup="insert into storage.buckets (id, name, public) values ('andere','andere',false) on conflict do nothing;")
+case("ST22", "STORAGE", "anon leest factuur-PDF", "anon", "select", sel(pdf), False)
+case("ST23", "STORAGE", "anon uploadt", "anon", "dml", f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(501)}.pdf')", False)
+case("ST24", "STORAGE", "pad zonder uuid: leesactie geeft nette weigering (geen fout)", ADM, "check",
+     "select count(*) = 0 from storage.objects where bucket_id='documents' and name = 'geen-uuid/x.pdf'", True)
+case("ST25", "STORAGE", "service_role (server-side) uploadt PDF — blijft werken", "service_role", "dml",
+     f"insert into storage.objects (bucket_id, name) values ('documents','{RA}/invoices/{A(501)}.pdf')", True)
+case("ST26", "STORAGE", "service_role leest PDF — blijft werken", "service_role", "select", sel(pdf), True)
+case("ST27", "STORAGE", "geen UPDATE-, DELETE- of ALL-policy op storage.objects", "postgres", "check",
+     "select not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and cmd in ('UPDATE','DELETE','ALL'))", False, True, 6)
+case("ST28", "STORAGE", "storage.objects heeft precies 2 policies (lezen en uploaden), beide alleen voor authenticated", "postgres", "check",
+     "select (select count(*) from pg_policies where schemaname='storage' and tablename='objects') = 2 and not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and roles <> '{authenticated}')", False, True, 6)
+case("ST29", "STORAGE", "bestaand PDF van restaurant A en B nog aanwezig (data behouden)", "postgres", "check",
+     f"select (select count(*) from storage.objects where bucket_id='documents' and name in ('{pdf}','{RB}/invoices/{B(502)}.pdf')) = 2", True)
+
 # ---------------------------------------------------------------- BOEKHOUDING / STATUSSEN (H4, stap 7-9)
 case("AC01", "BOEKHOUDING", "bediening wijzigt notitie van vergrendelde bon", BED, "dml", f"update receipts set notes='x' where id='{A(302)}'", True, False, 7, "bevinding 5")
 case("AC02", "BOEKHOUDING", "bediening zet bon pending_approval → locked (zelf goedkeuren)", BED, "dml", f"update receipts set status='locked' where id='{A(301)}'", True, False, 7)

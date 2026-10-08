@@ -839,6 +839,8 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.59** — Security hardening STAP 6 (H6): migratie `0020_hardening_step6_storage.sql` + rollback, `upsert:false` in `generate-invoice`, sectie 13.14. Productie wacht op uitvoering (eerst app-deploy, dan migratie).
+
 **v1.58** — Security hardening STAP 5 (H7): migratie `0019_hardening_step5_crossref.sql` + rollback, sectie 13.13. Productie wacht op uitvoering.
 
 **v1.57** — Security hardening STAP 4 (H5a): migratie `0018_hardening_step4_logs_append_only.sql` + rollback, sectie 13.12. Productie wacht op uitvoering.
@@ -1656,6 +1658,18 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
 * **Veiligheidsstop in de migratie:** schendt bestaande data één van de regels (zelfde checks als B30–B42 in `prod-readonly-checks.sql`), dan stopt de migratie vóór er iets verandert.
 * **Bewuste uitzonderingen (niet geblokkeerd):** (1) een rekening zónder bedrijf mét afdeling/kostenplaats/project/contact uit het eigen restaurant (er is geen bedrijf om tegen te toetsen; de tenant-grens geldt wel); (2) een bon van een ander bedrijf binnen hetzelfde restaurant op een factuur (alleen de restaurantgrens is vastgelegd in Stap 0); (3) `documents` met een andere `related_table` dan `invoices`; (4) `activity_log.target_id`, `audit_log.record_id` en andere vrije verwijzingen (geen foreign key, informatief); (5) tabellen met één ouder (`payments`, `approval_settings`, `company_codes`, `departments`, `projects`, `contacts`): daar volgt het restaurant uit de ouder, dus er is niets te vergelijken.
 * **Tests:** 348 cases; vóór 0019 347 PASS + 1 OPEN (TM11/D2), na 0019 347 PASS + 1 OPEN. 39 cases die vóór 0019 een zwakte bewezen, zijn na 0019 geweigerd; alle geldige relaties blijven werken. Rollback exact, migratie herhaalbaar, veiligheidsstop getest. App-test teambeheer 32/32 PASS. `npm run build` OK.
+
+### 13.14 HARDENING STAP 6 — H6 storage (migratie 0020 + app-wijziging, 2026-10-08)
+
+**Status: lokaal volledig getest; productie wacht op Dicks uitvoering. Volgorde: eerst app-deploy (`upsert:false`), dan de migratie.**
+
+* **Pad-structuur ongewijzigd:** `{restaurant_id}/invoices/{invoice_id}.pdf`. Bestaande bestanden blijven leesbaar (Stap 0: alle paden hebben dit patroon).
+* **Policies op `storage.objects` (bucket `documents`):** de drie oude policies (lezen, uploaden, bijwerken, alleen op restaurantmap) zijn vervangen door twee: `documents bucket read` en `documents bucket upload`, alleen voor `authenticated`. Voorwaarde: eerste padonderdeel = `my_restaurant_id()` én recht `MANAGE_INVOICES` (owner en administratie, gelijk aan de routes). Gedeactiveerde gebruikers vallen af (helpers uit Stap 1). Een pad zonder uuid geeft een nette weigering in plaats van een cast-fout.
+* **Geen UPDATE- en geen DELETE-policy:** bestanden zijn voor gebruikers onveranderlijk (overschrijven en verwijderen geweigerd).
+* **App:** `generate-invoice` uploadt nu met `upsert: false` (het pad bevat de nieuwe factuur-id, dus er is nooit een bestaand bestand). `pdf-url` (signed URL, `MANAGE_INVOICES`) is ongewijzigd.
+* **Niet aangepast:** de rechten op het storage-schema zelf (beheerd door Supabase). **Bekende restrisico's:** service-role (server-side) omzeilt RLS en kan nog schrijven en verwijderen; de app gebruikt dat niet voor storage. Een trigger op de door Supabase beheerde tabel `storage.objects` is bewust niet toegevoegd. Het echte Storage-API-gedrag (upload, signed URL) is lokaal niet te testen; de policies zijn getest op tabelniveau.
+* **Gevolg:** een manager of bediening kan factuur-PDF's niet meer rechtstreeks via de Storage-API lezen. De app liet dat al niet toe.
+* **Tests:** 368 cases; vóór 0020 367 PASS + 1 OPEN (TM11/D2), na 0020 367 PASS + 1 OPEN. 12 cases die vóór 0020 een zwakte lieten zien, zijn na 0020 geweigerd. Rollback exact, migratie herhaalbaar. App-test teambeheer 32/32 PASS. `npm run build` OK.
 
 ## 12. STATUS
 

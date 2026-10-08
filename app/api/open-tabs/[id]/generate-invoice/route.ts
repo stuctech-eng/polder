@@ -145,10 +145,12 @@ export async function POST(
     total,
   });
 
+  // Security hardening stap 6 (H6): upsert:false — het pad bevat de nieuwe factuur-id, dus er is nooit een bestaand bestand;
+  // bestanden in de bucket zijn onveranderlijk (geen UPDATE-policy meer), een bestaand bestand wordt nooit stilzwijgend vervangen.
   const storagePath = `${ctx.restaurantId}/invoices/${invoice.id}.pdf`;
   const { error: uploadError } = await supabase.storage
     .from("documents")
-    .upload(storagePath, pdfBytes, { contentType: "application/pdf", upsert: true });
+    .upload(storagePath, pdfBytes, { contentType: "application/pdf", upsert: false });
 
   if (uploadError) {
     // PDF-opslag mag falen zonder de hele factuur te blokkeren (sectie 15: fout zichtbaar,
