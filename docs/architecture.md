@@ -839,7 +839,9 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.59** — Security hardening STAP 6 (H6): migratie `0020_hardening_step6_storage.sql` + rollback, `upsert:false` in `generate-invoice`, sectie 13.14. Productie wacht op uitvoering (eerst app-deploy, dan migratie).
+**v1.60** — Security hardening STAP 7 (H4a): migratie `0021_hardening_step7_tabs_receipts.sql` + rollback (rolbewuste policies en vier vangnet-triggers op `open_tabs`, `receipts`, `receipt_lines`, `approvals`), sectie 13.15. Geen app-wijziging. Lokaal getest; productie wacht op uitvoering.
+
+**v1.59** — Security hardening STAP 6 (H6): migratie `0020_hardening_step6_storage.sql` + rollback, `upsert:false` in `generate-invoice`, sectie 13.14. In productie en akkoord.
 
 **v1.58** — Security hardening STAP 5 (H7): migratie `0019_hardening_step5_crossref.sql` + rollback, sectie 13.13. Productie wacht op uitvoering.
 
@@ -1661,7 +1663,7 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
 
 ### 13.14 HARDENING STAP 6 — H6 storage (migratie 0020 + app-wijziging, 2026-10-08)
 
-**Status: lokaal volledig getest; productie wacht op Dicks uitvoering. Volgorde: eerst app-deploy (`upsert:false`), dan de migratie.**
+**Status: in productie (2026-10-08, eerst app-deploy, dan migratie) gecontroleerd en door Dick goedgekeurd.** Productiecontrole: precies 2 nieuwe policies voor `{authenticated}`, de 4 bestaande bestanden intact, geen afwijkende paden; nieuwe factuur 2026-0006 met PDF correct opgeslagen (`upsert:false`).
 
 * **Pad-structuur ongewijzigd:** `{restaurant_id}/invoices/{invoice_id}.pdf`. Bestaande bestanden blijven leesbaar (Stap 0: alle paden hebben dit patroon).
 * **Policies op `storage.objects` (bucket `documents`):** de drie oude policies (lezen, uploaden, bijwerken, alleen op restaurantmap) zijn vervangen door twee: `documents bucket read` en `documents bucket upload`, alleen voor `authenticated`. Voorwaarde: eerste padonderdeel = `my_restaurant_id()` én recht `MANAGE_INVOICES` (owner en administratie, gelijk aan de routes). Gedeactiveerde gebruikers vallen af (helpers uit Stap 1). Een pad zonder uuid geeft een nette weigering in plaats van een cast-fout.
@@ -1670,6 +1672,24 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
 * **Niet aangepast:** de rechten op het storage-schema zelf (beheerd door Supabase). **Bekende restrisico's:** service-role (server-side) omzeilt RLS en kan nog schrijven en verwijderen; de app gebruikt dat niet voor storage. Een trigger op de door Supabase beheerde tabel `storage.objects` is bewust niet toegevoegd. Het echte Storage-API-gedrag (upload, signed URL) is lokaal niet te testen; de policies zijn getest op tabelniveau.
 * **Gevolg:** een manager of bediening kan factuur-PDF's niet meer rechtstreeks via de Storage-API lezen. De app liet dat al niet toe.
 * **Tests:** 368 cases; vóór 0020 367 PASS + 1 OPEN (TM11/D2), na 0020 367 PASS + 1 OPEN. 12 cases die vóór 0020 een zwakte lieten zien, zijn na 0020 geweigerd. Rollback exact, migratie herhaalbaar. App-test teambeheer 32/32 PASS. `npm run build` OK.
+
+### 13.15 HARDENING STAP 7 — H4a rekeningen, bonnen, goedkeuringen (migratie 0021, 2026-10-08)
+
+**Status: lokaal volledig getest; productie wacht op Dicks uitvoering. Geen app-wijziging, dus geen deploy-volgorde.**
+Migratie `supabase/migrations/0021_hardening_step7_tabs_receipts.sql`, rollback `supabase/rollbacks/0021_rollback.sql`, controlequeries `supabase/hardening/prod-step7-checks.sql`.
+
+* **Policies (13, alle `to authenticated`; de vier "tenant isolation … for all"-policies zijn vervangen):**
+  `open_tabs` select/insert/update/delete met `MANAGE_OPEN_TABS` (insert alleen status `open`); `receipts` idem met `MANAGE_RECEIPTS` (insert alleen `draft` of `linked`); `receipt_lines` alleen select + insert (via een bon uit het eigen restaurant, `MANAGE_RECEIPTS`; de app wijzigt of verwijdert nooit rechtstreeks een regel); `approvals` select/insert met `MANAGE_RECEIPTS` (insert alleen `pending`), update met `APPROVE_RECEIPTS`, **geen delete-policy**. Alles hangt aan `my_restaurant_id()` en `has_perm()` (Stap 1), dus gedeactiveerde gebruikers en keuken (D1) hebben hier geen toegang meer.
+* **Vier vangnet-triggers, voor IEDEREEN (ook service-role en postgres; geen algemene bypass):**
+  * `receipts_guard`: nieuwe bon alleen `draft`/`linked` en alleen aan een **open** rekening; `draft|linked → pending_approval` (bonnenbeheer); `pending_approval → approved|locked` en `approved → locked` alleen met `APPROVE_RECEIPTS`; afwijzen `pending_approval → linked` met `APPROVE_RECEIPTS`; in `pending_approval`, `approved` en `locked` is behalve de status **geen enkel veld** te wijzigen; zo'n bon is niet te verwijderen; een bon van een gefactureerde rekening is onveranderlijk en niet te verwijderen; verhuizen kan alleen naar een open rekening. Vrije statussen (`draft`, `validated`, `linked`, `submitted`) onderling zijn niet beperkt: daar is geen businessregel voor.
+  * `receipt_lines_guard`: regels alleen toevoegen, wijzigen of verwijderen zolang de bon `draft` of `linked` is (cascade bij het verwijderen van de bon blijft werken).
+  * `open_tabs_guard`: nieuwe rekening alleen `open`; `open → closed` (rekeningenbeheer), `closed → invoiced` alleen met `MANAGE_INVOICES`; nooit terug, nooit `open → invoiced`; `invoiced` is volledig onveranderlijk; verwijderen alleen als `open` (bonnen houden de foreign key al tegen).
+  * `approvals_guard`: nieuw alleen `pending` en leeg; `pending → approved|rejected|expired` eenmalig door `APPROVE_RECEIPTS` of door de publieke link (service-role); daarna volledig onveranderlijk; bon, bedrijf, methode, verificatiecode en aanvraagtijd zijn altijd onveranderlijk; rechtstreeks verwijderen is voor niemand mogelijk (alleen cascade als de bon zelf wordt verwijderd).
+* **Service-role:** exact de twee overgangen van de publieke goedkeuringslink blijven mogelijk (`bon pending_approval → locked | linked`, `approval pending → approved | rejected | expired`). De eerder overwogen SECURITY DEFINER-functie met vlag bleek niet nodig: de trigger ziet via `current_user` of de aanroep van service-role komt, en dat is niet te vervalsen door een gebruiker. Daardoor is er **geen codewijziging** in `public-approve`.
+* **Cascade-herkenning:** een delete uit een andere trigger (`pg_trigger_depth() > 1`) bij een restaurant dat al weg is, wordt toegestaan, zodat het verwijderen van een heel restaurant blijft werken. (Eerste versie keek naar de rolnaam; dat bleek lokaal te breken omdat de tabeleigenaar daar anders heet. Nu onafhankelijk van rolnamen.)
+* **Gevolgen voor de app (bedoeld):** een bon in wacht, goedgekeurd of vergrendeld is in de database echt vast. De UI verbergt bewerken/verwijderen al voor `pending_approval` en `locked`; alleen een bon met status `approved` (alleen bij `autoLock = uit`) toont nog knoppen, die nu een databasefoutmelding geven in plaats van te slagen. De route `PATCH /api/receipts/[id]` blokkeerde alleen `locked`; de database dekt nu ook de andere beschermde statussen.
+* **Niet gedaan (bewust):** invoices/payments/documents (H4b), logs, D1–D9 (D6 niet beslist), grants (stap 11), UTC-weergave. Verwijderen van een heel restaurant met goedkeuringen faalt al vóór deze stap op `approvals.company_id` (foreign key zonder cascade); niet gewijzigd.
+* **Tests:** 476 cases (108 nieuw, categorie REKENINGEN): vóór 0021 475 PASS + 1 OPEN (TM11/D2), na 0021 475 PASS + 1 OPEN; de nieuwe cases die vooraf een zwakte lieten zien zijn na 0021 geweigerd. Rollback exact (policies, triggers, functies, grants, data identiek aan vóór stap 7), migratie herhaalbaar. **App-regressie langs de echte route-handlers** tegen de lokale database: 56/56 PASS (rekening openen, bon met regels, goedkeuring aanvragen, intern goedkeuren, publieke link goedkeuren/afwijzen/opnieuw indienen, autoLock uit, factureren met `upsert:false`, verwijderen, dashboard en dagafsluitingsrapport, directe pogingen buiten de app om); zonder 0021 falen 20 daarvan. `tsc` en `npm run build` OK.
 
 ## 12. STATUS
 

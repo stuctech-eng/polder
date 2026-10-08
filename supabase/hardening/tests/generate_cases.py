@@ -562,6 +562,151 @@ case("US15", "USERS", "A-owner kan via eigen verbinding geen rol van B-gebruiker
 case("US16", "USERS", "gedeactiveerde gebruiker leest eigen profiel (middleware moet 'inactief' kunnen zien)", INA, "select",
      "select is_active from users where id = auth.uid()", True)
 
+
+# ---------------------------------------------------------------- REKENINGEN / BONNEN / GOEDKEURINGEN (H4a, stap 7)
+REPL = lambda sql: "set local session_replication_role = replica; " + sql + " set local session_replication_role = origin;"
+TAB_INV_EMPTY = REPL(f"update open_tabs set status='invoiced' where id='{A(203)}';")
+RC_CHAIN = (f"insert into companies (id, restaurant_id, name) values ('{u('d', 100)}','{RC}','C-bedrijf'); "
+            f"insert into open_tabs (id, restaurant_id, company_id) values ('{u('d', 200)}','{RC}','{u('d', 100)}'); "
+            f"insert into receipts (id, restaurant_id, open_tab_id, status) values ('{u('d', 300)}','{RC}','{u('d', 200)}','linked'); "
+            f"insert into receipt_lines (receipt_id, description, unit_price, line_total) values ('{u('d', 300)}','x',1,1); "
+            "")
+RC_CHAIN_LOCK = REPL(f"update receipts set status='locked' where id='{u('d', 300)}'; update open_tabs set status='invoiced' where id='{u('d', 200)}'; update receipts set status='locked' where id='{u('d', 300)}';")
+TAB_INS = lambda st: f"insert into open_tabs (restaurant_id, company_id, status) values ('{RA}','{A(100)}','{st}')"
+RCP_INS = lambda st, tab: f"insert into receipts (restaurant_id, open_tab_id, status, total) values ('{RA}',{('null' if tab is None else repr(tab))},'{st}',5)"
+LINE_INS = lambda rid: f"insert into receipt_lines (receipt_id, description, unit_price, line_total) values ('{rid}','extra',1,1)"
+APR_INS = lambda rid, extra_cols="", extra_vals="": f"insert into approvals (receipt_id, company_id, method{extra_cols}) values ('{rid}','{A(100)}','pin'{extra_vals})"
+H = "REKENINGEN"
+# -- rekeningen (open_tabs)
+case("H401", H, "bediening opent een rekening (legitiem)", BED, "dml", TAB_INS("open"), True)
+case("H402", H, "owner maakt direct een gesloten rekening aan", OWNER, "dml", TAB_INS("closed"), True, False, 7)
+case("H403", H, "owner maakt direct een gefactureerde rekening aan", OWNER, "dml", TAB_INS("invoiced"), True, False, 7)
+case("H404", H, "service_role maakt direct een gefactureerde rekening aan (geen bypass)", SVC, "dml", TAB_INS("invoiced"), True, False, 7)
+case("H405", H, "keuken leest rekeningen (D1: geen leestoegang)", KEU, "select", f"select 1 from open_tabs where restaurant_id='{RA}'", True, False, 7, "besluit D1")
+case("H406", H, "keuken opent een rekening", KEU, "dml", TAB_INS("open"), True, False, 7)
+case("H407", H, "keuken wijzigt een rekening", KEU, "dml", f"update open_tabs set table_number='9' where id='{A(200)}'", True, False, 7)
+case("H408", H, "keuken verwijdert een open lege rekening", KEU, "dml", f"delete from open_tabs where id='{A(204)}'", True, False, 7)
+case("H409", H, "administratie factureert gesloten rekening (closed → invoiced, legitiem)", ADM, "dml", f"update open_tabs set status='invoiced' where id='{A(201)}'", True)
+case("H410", H, "owner factureert gesloten rekening (legitiem)", OWNER, "dml", f"update open_tabs set status='invoiced' where id='{A(201)}'", True)
+case("H411", H, "bediening factureert gesloten rekening (geen MANAGE_INVOICES)", BED, "dml", f"update open_tabs set status='invoiced' where id='{A(201)}'", True, False, 7)
+case("H412", H, "owner springt van open direct naar invoiced", OWNER, "dml", f"update open_tabs set status='invoiced' where id='{A(200)}'", True, False, 7)
+case("H413", H, "owner heropent een gefactureerde rekening naar closed", OWNER, "dml", f"update open_tabs set status='closed' where id='{A(202)}'", True, False, 7)
+case("H414", H, "owner zet gesloten rekening terug naar open", OWNER, "dml", f"update open_tabs set status='open' where id='{A(201)}'", True, False, 7)
+case("H415", H, "owner wijzigt tafelnummer van gefactureerde rekening", OWNER, "dml", f"update open_tabs set table_number='9' where id='{A(202)}'", True, False, 7)
+case("H416", H, "postgres wijzigt een gefactureerde rekening (geen bypass)", "postgres", "dml", f"update open_tabs set table_number='9' where id='{A(202)}'", True, False, 7)
+case("H417", H, "owner wijzigt tafelnummer van gesloten rekening (route staat dit toe)", OWNER, "dml", f"update open_tabs set table_number='9' where id='{A(201)}'", True)
+case("H418", H, "owner sluit open rekening (open → closed, legitiem)", OWNER, "dml", f"update open_tabs set status='closed', closed_at=now() where id='{A(200)}'", True)
+case("H419", H, "service_role sluit een rekening (service_role heeft geen rekeningovergangen)", SVC, "dml", f"update open_tabs set status='closed' where id='{A(200)}'", True, False, 7)
+case("H420", H, "owner verwijdert gefactureerde lege rekening", OWNER, "dml", f"delete from open_tabs where id='{A(203)}'", True, False, 7, setup=TAB_INV_EMPTY)
+case("H421", H, "postgres verwijdert gefactureerde lege rekening (geen bypass)", "postgres", "dml", f"delete from open_tabs where id='{A(203)}'", True, False, 7, setup=TAB_INV_EMPTY)
+case("H422", H, "owner verwijdert open lege rekening (legitiem)", OWNER, "dml", f"delete from open_tabs where id='{A(204)}'", True)
+case("H423", H, "gedeactiveerde gebruiker sluit een rekening", INA, "dml", f"update open_tabs set status='closed' where id='{A(200)}'", True, False, 7, "bevinding 11 / D9")
+case("H424", H, "gedeactiveerde gebruiker opent een rekening", INA, "dml", TAB_INS("open"), True, False, 7, "bevinding 11 / D9")
+case("H425", H, "anon leest rekeningen", "anon", "select", "select 1 from open_tabs", False)
+case("H426", H, "A-owner opent rekening in restaurant B", OWNER, "dml", f"insert into open_tabs (restaurant_id, status) values ('{RB}','open')", False)
+# -- bonnen (receipts)
+case("H430", H, "bediening koppelt een nieuwe bon aan een open rekening (legitiem)", BED, "dml", RCP_INS("linked", A(200)), True)
+case("H431", H, "owner maakt direct een bon met status pending_approval", OWNER, "dml", RCP_INS("pending_approval", A(200)), True, False, 7)
+case("H432", H, "owner maakt direct een bon met status approved", OWNER, "dml", RCP_INS("approved", A(200)), True, False, 7)
+case("H433", H, "service_role maakt direct een vergrendelde bon (geen bypass)", SVC, "dml", RCP_INS("locked", A(200)), True, False, 7)
+case("H434", H, "bon aan een gesloten rekening koppelen", OWNER, "dml", RCP_INS("linked", A(201)), True, False, 7, "route: alleen open rekening")
+case("H435", H, "bon aan een gefactureerde rekening koppelen", OWNER, "dml", RCP_INS("linked", A(202)), True, False, 7)
+case("H436", H, "bon zonder rekening (draft) aanmaken blijft kunnen", OWNER, "dml", RCP_INS("draft", None), True)
+case("H437", H, "keuken leest bonnen", KEU, "select", f"select 1 from receipts where restaurant_id='{RA}'", True, False, 7, "besluit D1")
+case("H438", H, "keuken maakt een bon", KEU, "dml", RCP_INS("linked", A(200)), True, False, 7)
+case("H439", H, "manager keurt goed: pending_approval → approved", MGR, "dml", f"update receipts set status='approved' where id='{A(301)}'", True)
+case("H440", H, "administratie (geen APPROVE_RECEIPTS) vergrendelt bon in wacht", ADM, "dml", f"update receipts set status='locked' where id='{A(301)}'", True, False, 7)
+case("H441", H, "manager wijst af: pending_approval → linked", MGR, "dml", f"update receipts set status='linked' where id='{A(301)}'", True)
+case("H442", H, "bediening wijst af: pending_approval → linked", BED, "dml", f"update receipts set status='linked' where id='{A(301)}'", True, False, 7)
+case("H443", H, "owner zet vergrendelde bon terug naar linked", OWNER, "dml", f"update receipts set status='linked' where id='{A(302)}'", True, False, 7)
+case("H444", H, "owner zet vergrendelde bon terug naar pending_approval", OWNER, "dml", f"update receipts set status='pending_approval' where id='{A(302)}'", True, False, 7)
+case("H445", H, "manager vergrendelt een goedgekeurde bon (approved → locked)", MGR, "dml", f"update receipts set status='locked' where id='{A(303)}'", True)
+case("H446", H, "owner zet goedgekeurde bon terug naar linked", OWNER, "dml", f"update receipts set status='linked' where id='{A(303)}'", True, False, 7)
+case("H447", H, "owner wijzigt notitie van goedgekeurde bon", OWNER, "dml", f"update receipts set notes='x' where id='{A(303)}'", True, False, 7)
+case("H448", H, "owner wijzigt notitie van bon in wacht op goedkeuring", OWNER, "dml", f"update receipts set notes='x' where id='{A(301)}'", True, False, 7)
+case("H449", H, "owner wijzigt totaal van bon in wacht op goedkeuring", OWNER, "dml", f"update receipts set total=1 where id='{A(301)}'", True, False, 7)
+case("H450", H, "owner wijzigt totaal van vergrendelde bon", OWNER, "dml", f"update receipts set total=1 where id='{A(302)}'", True, False, 7)
+case("H451", H, "postgres wijzigt totaal van vergrendelde bon (geen bypass)", "postgres", "dml", f"update receipts set total=1 where id='{A(302)}'", True, False, 7)
+case("H452", H, "service_role zet bon in wacht op approved (publieke link mag alleen locked of linked)", SVC, "dml", f"update receipts set status='approved' where id='{A(301)}'", True, False, 7)
+case("H453", H, "service_role zet linked bon op pending_approval", SVC, "dml", f"update receipts set status='pending_approval' where id='{A(300)}'", True, False, 7)
+case("H454", H, "service_role verwijdert vergrendelde bon", SVC, "dml", f"delete from receipts where id='{A(302)}'", True, False, 7, setup="delete from invoice_lines where receipt_id='%s'" % A(302))
+case("H455", H, "postgres verwijdert vergrendelde bon (geen bypass)", "postgres", "dml", f"delete from receipts where id='{A(302)}'", True, False, 7, setup="delete from invoice_lines where receipt_id='%s'" % A(302))
+case("H456", H, "owner verwijdert bon in wacht op goedkeuring", OWNER, "dml", f"delete from receipts where id='{A(301)}'", True, False, 7)
+case("H457", H, "owner verwijdert goedgekeurde bon", OWNER, "dml", f"delete from receipts where id='{A(303)}'", True, False, 7)
+case("H458", H, "bediening verwijdert gewone bon met regels (legitiem, cascade naar regels)", BED, "dml", f"delete from receipts where id='{A(300)}'", True)
+case("H459", H, "bon met afgewezen goedkeuring verwijderen blijft kunnen (cascade naar goedkeuring)", OWNER, "dml", f"delete from receipts where id='{A(300)}'", True,
+     setup=REPL(f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','pin','rejected');"))
+case("H460", H, "bediening wijzigt bon op gefactureerde rekening", BED, "dml", f"update receipts set notes='x' where id='{A(300)}'", True, False, 7, setup=REPL(f"update receipts set open_tab_id='{A(202)}' where id='{A(300)}';"))
+case("H461", H, "bediening verwijdert bon op gefactureerde rekening", BED, "dml", f"delete from receipts where id='{A(300)}'", True, False, 7, setup=REPL(f"update receipts set open_tab_id='{A(202)}' where id='{A(300)}';"))
+case("H462", H, "bon verhuist naar een gesloten rekening", OWNER, "dml", f"update receipts set open_tab_id='{A(201)}' where id='{A(300)}'", True, False, 7)
+case("H463", H, "bon verhuist naar een andere open rekening", OWNER, "dml", f"update receipts set open_tab_id='{A(204)}' where id='{A(300)}'", True)
+case("H464", H, "owner zet linked bon terug naar draft (vrije status, geen regel)", OWNER, "dml", f"update receipts set status='draft' where id='{A(300)}'", True)
+case("H465", H, "gedeactiveerde gebruiker dient bon in voor goedkeuring", INA, "dml", f"update receipts set status='pending_approval' where id='{A(300)}'", True, False, 7, "bevinding 11 / D9")
+case("H466", H, "anon leest bonnen", "anon", "select", "select 1 from receipts", False)
+# -- bonregels (receipt_lines)
+case("H470", H, "bediening voegt regel toe aan linked bon (legitiem)", BED, "dml", LINE_INS(A(300)), True)
+case("H471", H, "regel toevoegen aan bon in wacht op goedkeuring", OWNER, "dml", LINE_INS(A(301)), True, False, 7)
+case("H472", H, "regel toevoegen aan vergrendelde bon", OWNER, "dml", LINE_INS(A(302)), True, False, 7)
+case("H473", H, "service_role voegt regel toe aan vergrendelde bon (geen bypass)", SVC, "dml", LINE_INS(A(302)), True, False, 7)
+case("H474", H, "postgres voegt regel toe aan vergrendelde bon (geen bypass)", "postgres", "dml", LINE_INS(A(302)), True, False, 7)
+case("H475", H, "owner verwijdert regel van linked bon rechtstreeks (geen policy; app doet dit nooit)", OWNER, "dml", f"delete from receipt_lines where id='{A(310)}'", True, False, 7)
+case("H476", H, "owner wijzigt regel van linked bon rechtstreeks (geen policy; app doet dit nooit)", OWNER, "dml", f"update receipt_lines set unit_price=1 where id='{A(310)}'", True, False, 7)
+case("H477", H, "postgres wijzigt regel van linked bon (kan nog: ouder is linked)", "postgres", "dml", f"update receipt_lines set unit_price=1 where id='{A(310)}'", True)
+case("H478", H, "postgres wijzigt regel van vergrendelde bon", "postgres", "dml", f"update receipt_lines set unit_price=1 where id='{A(311)}'", True, False, 7)
+case("H479", H, "postgres verwijdert regel van vergrendelde bon", "postgres", "dml", f"delete from receipt_lines where id='{A(311)}'", True, False, 7)
+case("H480", H, "regel verhuist van linked bon naar vergrendelde bon", "postgres", "dml", f"update receipt_lines set receipt_id='{A(302)}' where id='{A(310)}'", True, False, 7)
+case("H481", H, "keuken leest bonregels", KEU, "select", f"select 1 from receipt_lines where receipt_id='{A(300)}'", True, False, 7, "besluit D1")
+case("H482", H, "manager leest bonregels", MGR, "select", f"select 1 from receipt_lines where receipt_id='{A(300)}'", True)
+case("H483", H, "A-owner voegt regel toe aan bon van restaurant B", OWNER, "dml", LINE_INS(B(300)), False)
+# -- goedkeuringen (approvals)
+case("H490", H, "bediening vraagt goedkeuring aan: pending-record toevoegen (legitiem)", BED, "dml", APR_INS(A(300)), True)
+case("H491", H, "goedkeuring direct als rejected aanmaken", OWNER, "dml", APR_INS(A(300), ", status", ",'rejected'"), True, False, 7)
+case("H492", H, "goedkeuring aanmaken met goedkeurder al ingevuld", OWNER, "dml", APR_INS(A(300), ", approved_by", ",'ik'"), True, False, 7)
+case("H493", H, "keuken maakt een goedkeuring", KEU, "dml", APR_INS(A(300)), True, False, 7)
+case("H494", H, "manager handelt goedkeuring af (pending → approved)", MGR, "dml", f"update approvals set status='approved', approved_by='M', approved_at=now() where id='{A(400)}'", True)
+case("H495", H, "owner handelt goedkeuring af (pending → approved)", OWNER, "dml", f"update approvals set status='approved', approved_by='O', approved_at=now() where id='{A(400)}'", True)
+case("H496", H, "bediening handelt goedkeuring af (geen APPROVE_RECEIPTS)", BED, "dml", f"update approvals set status='approved', approved_by='B', approved_at=now() where id='{A(400)}'", True, False, 7)
+case("H497", H, "administratie handelt goedkeuring af (geen APPROVE_RECEIPTS)", ADM, "dml", f"update approvals set status='rejected' where id='{A(400)}'", True, False, 7)
+case("H498", H, "service_role wijst af via publieke link (pending → rejected + reden)", SVC, "dml", f"update approvals set status='rejected', approved_by='Klant', approved_at=now(), metadata='{{\"reason\":\"x\"}}' where id='{A(400)}'", True)
+case("H499", H, "service_role laat goedkeuring verlopen (pending → expired)", SVC, "dml", f"update approvals set status='expired' where id='{A(400)}'", True)
+case("H500", H, "service_role vult goedkeurder in zonder status te wijzigen", SVC, "dml", f"update approvals set approved_by='x' where id='{A(400)}'", True, False, 7)
+case("H501", H, "service_role wijzigt de methode van een goedkeuring", SVC, "dml", f"update approvals set method='pin' where id='{A(400)}'", True, False, 7)
+case("H502", H, "service_role hangt goedkeuring aan een andere bon", SVC, "dml", f"update approvals set receipt_id='{A(300)}' where id='{A(400)}'", True, False, 7)
+case("H503", H, "manager wijzigt afgehandelde goedkeuring", MGR, "dml", f"update approvals set approved_by='x' where id='{A(401)}'", True, False, 7)
+case("H504", H, "postgres wijzigt afgehandelde goedkeuring (geen bypass)", "postgres", "dml", f"update approvals set approved_by='x' where id='{A(401)}'", True, False, 7)
+case("H505", H, "service_role draait afgehandelde goedkeuring om (approved → rejected)", SVC, "dml", f"update approvals set status='rejected' where id='{A(401)}'", True, False, 7)
+case("H506", H, "owner verwijdert een goedkeuring rechtstreeks", OWNER, "dml", f"delete from approvals where id='{A(400)}'", True, False, 7)
+case("H507", H, "service_role verwijdert een goedkeuring rechtstreeks", SVC, "dml", f"delete from approvals where id='{A(400)}'", True, False, 7)
+case("H508", H, "postgres verwijdert een goedkeuring rechtstreeks", "postgres", "dml", f"delete from approvals where id='{A(401)}'", True, False, 7)
+case("H509", H, "manager leest goedkeuringen", MGR, "select", f"select 1 from approvals where receipt_id='{A(301)}'", True)
+case("H510", H, "keuken leest goedkeuringen", KEU, "select", f"select 1 from approvals where receipt_id='{A(301)}'", True, False, 7, "besluit D1")
+case("H511", H, "gedeactiveerde gebruiker leest goedkeuringen", INA, "select", f"select 1 from approvals where receipt_id='{A(301)}'", True, False, 7, "bevinding 11 / D9")
+case("H512", H, "A-owner handelt goedkeuring van restaurant B af", OWNER, "dml", f"update approvals set status='approved' where id='{B(400)}'", False)
+case("H513", H, "anon leest goedkeuringen", "anon", "select", "select 1 from approvals", False)
+# -- cascade en meerdere stappen
+case("H520", H, "restaurant met vergrendelde bon, regel en gefactureerde rekening verwijderen (cascade blijft werken)", "postgres", "dml",
+     f"delete from restaurants where id='{RC}'", True, setup=RC_CHAIN + RC_CHAIN_LOCK)
+case("H521", H, "zelfde cascade door service_role", SVC, "dml",
+     f"delete from restaurants where id='{RC}'", True, setup=RC_CHAIN + RC_CHAIN_LOCK)
+case("H522", H, "na het verwijderen van het restaurant zijn rekeningen, bonnen en regels weg", "postgres", "check",
+     f"select not exists (select 1 from open_tabs where restaurant_id='{RC}') and not exists (select 1 from receipts where restaurant_id='{RC}') and not exists (select 1 from receipt_lines where receipt_id='{u('d', 300)}')", True,
+     setup=RC_CHAIN + RC_CHAIN_LOCK + f" delete from restaurants where id='{RC}';")
+# -- vorm van de beveiliging
+case("H530", H, "geen 'tenant isolation'-policy meer op de vier tabellen; 13 nieuwe policies; geen delete-policy op receipt_lines/approvals", "postgres", "check",
+     "select not exists (select 1 from pg_policies where schemaname='public' and tablename in ('open_tabs','receipts','receipt_lines','approvals') and policyname like 'tenant isolation%') "
+     "and (select count(*) from pg_policies where schemaname='public' and tablename in ('open_tabs','receipts','receipt_lines','approvals')) = 13 "
+     "and not exists (select 1 from pg_policies where schemaname='public' and tablename in ('receipt_lines','approvals') and cmd in ('ALL','DELETE')) "
+     "and not exists (select 1 from pg_policies where schemaname='public' and tablename = 'receipt_lines' and cmd in ('UPDATE')) "
+     "and not exists (select 1 from pg_policies where schemaname='public' and tablename in ('open_tabs','receipts','receipt_lines','approvals') and 'public' = any(roles))", False, True, 7)
+case("H531", H, "vier guard-triggers actief; functies zijn voor niemand rechtstreeks uitvoerbaar", "postgres", "check",
+     "select (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname in ('receipts_guard','receipt_lines_guard','open_tabs_guard','approvals_guard')) = 4 "
+     "and not has_function_privilege('authenticated','public.receipts_guard()','EXECUTE') and not has_function_privilege('service_role','public.approvals_guard()','EXECUTE') "
+     "and not has_function_privilege('anon','public.open_tabs_guard()','EXECUTE')", False, True, 7)
+case("H532", H, "tabelrechten ongewijzigd (stap 11): authenticated heeft nog DML, service_role nog UPDATE", "postgres", "check",
+     "select has_table_privilege('authenticated','public.receipts','DELETE') and has_table_privilege('authenticated','public.approvals','UPDATE') and has_table_privilege('service_role','public.receipts','UPDATE') and has_table_privilege('service_role','public.approvals','UPDATE')", True)
+case("H533", H, "bestaande data behouden (restaurant A: 5 rekeningen, 4 bonnen, 2 regels, 2 goedkeuringen)", "postgres", "check",
+     f"select (select count(*) from open_tabs where restaurant_id='{RA}') = 5 and (select count(*) from receipts where restaurant_id='{RA}') = 4 and (select count(*) from receipt_lines where receipt_id in (select id from receipts where restaurant_id='{RA}')) = 2 and (select count(*) from approvals where company_id='{A(100)}') = 2", True)
+
 # ---------------------------------------------------------------- uitvoer
 def q(x): return "'" + x.replace("'", "''") + "'"
 def b(x): return "null" if x is None else ("true" if x else "false")

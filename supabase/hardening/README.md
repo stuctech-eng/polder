@@ -41,7 +41,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 4 | H5a logs append-only | `0018_hardening_step4_logs_append_only.sql` (**lokaal getest; geen app-wijziging**) | `rollbacks/0018_rollback.sql` | `run(4)` |
 | 5 | H7 cross-reference integriteit | `0019_hardening_step5_crossref.sql` (**lokaal getest; geen app-wijziging**) | `rollbacks/0019_rollback.sql` | `run(5)` |
 | 6 | H6 storage | `0020_hardening_step6_storage.sql` (+ app: `upsert:false`; **lokaal getest; eerst app-deploy, dan migratie**) | `rollbacks/0020_rollback.sql` | `run(6)` |
-| 7 | H4a open_tabs/receipts/approvals | `0021_hardening_tabs_receipts.sql` | `rollbacks/0021_rollback.sql` | `run(7)` |
+| 7 | H4a open_tabs/receipts/receipt_lines/approvals | `0021_hardening_step7_tabs_receipts.sql` (**lokaal getest; geen app-wijziging**) | `rollbacks/0021_rollback.sql` | `run(7)` |
 | 8 | H4b invoices/payments/documents | `0022_hardening_invoices.sql` | `rollbacks/0022_rollback.sql` | `run(8)` |
 | 9 | H4c + H4d dagafsluiting/stamdata/settings/plugins | `0023_hardening_master_data.sql` | `rollbacks/0023_rollback.sql` | `run(9)` |
 | 10 | H10 PIN-geheimen | `0024_hardening_pin_secrets.sql` (+ app) | `rollbacks/0024_rollback.sql` | `run(10)` |
