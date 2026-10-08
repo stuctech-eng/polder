@@ -675,6 +675,71 @@ zijn al ✅).
 POS API, CSV/Excel-import, OCR, QR-scanner voor bonnen. Volledig nieuwe ontwikkelfase,
 bewust pas ná de bovenstaande punten — eerst de bestaande basis verder laten bewijzen.
 
+> **Research note — Integration Engine** *(nog niet gebouwd, ter voorbereiding; research only)*
+
+> Status: Voorbereiding — nog niet gebouwd
+> Datum: 2026-10-03
+>
+> De applicatie is voorbereid op toekomstige koppelingen met externe POS- en boekhoudsystemen.
+>
+> De bestaande integration_plugins-tabel is hiervoor al aanwezig. Het beoogde architectuurpatroon volgt dezelfde provider/interface-benadering die eerder is toegepast bij onder andere Approval Providers en Email Providers.
+>
+> Architectuurrichting
+>
+> POS-systemen en boekhoudsystemen worden bewust als verschillende integratierichtingen behandeld:
+>
+> * POSProvider — inbound: ontvangt verkoop-/bongegevens vanuit een kassasysteem.
+> * AccountingProvider — outbound: verstuurt bijvoorbeeld factuurgegevens naar een boekhoudsysteem.
+>
+> Er wordt dus niet één generieke IntegrationProvider gebruikt voor beide richtingen.
+>
+> De kernlogica van de applicatie moet onafhankelijk blijven van de leverancier:
+>
+> POS → Sale/Receipt → bedrijf → afdeling → project → factuur → Accounting
+>
+> De specifieke POS-connector vertaalt het leveranciersspecifieke API-formaat naar een intern genormaliseerd Sale/Receipt-model. De rest van de applicatie werkt uitsluitend met dit interne model.
+>
+> Beoogde POS-connectors zijn onder andere:
+>
+> * Eijsink / DISH POS
+> * BishPOS
+> * toekomstige POS-systemen
+>
+> Beoogde accounting-connectors zijn onder andere:
+>
+> * SnelStart
+> * toekomstige boekhoudsystemen
+>
+> Nog te onderzoeken vóór implementatie
+>
+> Per leverancier moet eerst de officiële API/documentatie worden onderzocht en vastgelegd:
+>
+> * authenticatiemethode
+> * beschikbare endpoints
+> * OAuth/API-key/credentials
+> * beschikbare verkoopgegevens
+> * bonnummer
+> * datum/tijd
+> * tafel
+> * productregels
+> * bedragen
+> * BTW
+> * betaalstatus
+> * vestiging/locatie
+> * externe referenties
+> * webhooks/event-notificaties
+> * rate limits
+> * historische gegevens
+> * foutafhandeling
+> * sandbox/testomgeving
+> * voorwaarden voor externe integraties
+>
+> Pas nadat deze research is uitgevoerd, kan worden bepaald welke concrete provider-contracten en datamodellen noodzakelijk zijn.
+>
+> Architectuurbeslissing: de Integration Engine wordt provider-gebaseerd ontworpen, zodat een POS-wissel alleen de betreffende connector raakt en niet de kern van de applicatie.
+>
+> Harde status: research only. Geen implementatie gestart.
+
 **5. Kleine verfijningen** — pas oppakken bij concrete behoefte, niet uit zichzelf plannen:
 - **Facturatie: automatische vervaldatumcontrole ("te laat"-indicatie)** — klant-overleg:
   géén nieuwe factuurstatussen toevoegen ("Openstaand"/"Afgesloten" zijn al af te leiden uit
@@ -717,6 +782,14 @@ verwerken, automatische betalingsregistratie (schrijft naar dezelfde `payments`-
 punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneringen.
 
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.48** — Documentatie: research note Integration Engine vastgelegd (geen code, geen implementatie):
+- Letterlijk opgenomen onder roadmap-punt 4 (sectie 10), status **research only**.
+- Kernbesluit: POSProvider (inbound) en AccountingProvider (outbound) zijn gescheiden
+  richtingen; géén generieke IntegrationProvider. Kern blijft leveranciersonafhankelijk via
+  een intern Sale/Receipt-model; een POS-wissel raakt alleen de connector.
+- Eerst per leverancier (Eijsink/DISH, BishPOS, SnelStart) de officiële API-documentatie
+  onderzoeken; pas daarna provider-contracten en datamodellen bepalen.
 
 **v1.47** — Bugfix: keep-alive ping gaf 401 (geen architectuurwijziging):
 - **Oorzaak**: het kale `/rest/v1/`-pad (zonder specifieke tabel) accepteert bij dit
