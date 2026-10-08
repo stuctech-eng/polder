@@ -740,6 +740,22 @@ bewust pas ná de bovenstaande punten — eerst de bestaande basis verder laten 
 >
 > Harde status: research only. Geen implementatie gestart.
 
+**Eerste onderzoeksresultaten (2026-10-08, desk research, nog niets gebouwd)**
+- **SnelStart (AccountingProvider)**: B2B API v2 (`https://b2bapi.snelstart.nl/v2`), géén OAuth.
+  Nodig: subscription key (Developer Portal) + koppelsleutel van de klant (Koppelingen >
+  Maatwerk in SnelStart) → access token (verloopt na 1 uur). Resources o.a. Verkoopboekingen en
+  Facturen. Productiegebruik vereist certificatie (±12 dagen monitoring) en
+  partnerstatus; eenmalig €250 ex. BTW per productiesleutel. Klant heeft inZicht of inControle
+  nodig. Geen echte sandbox, wel ontwikkel-/testsleutel. Rate limits: nog onbekend.
+- **Eijsink / DISH POS (POSProvider)**: geen openbare API-documentatie gevonden. DISH nam
+  Eijsink over in 2022. Vervolg: contact met DISH opnemen (partnerprogramma / API-toegang /
+  webhooks) — waarschijnlijk afhankelijk van hun goedkeuring.
+- **BishPOS (POSProvider)**: niets bruikbaars gevonden; leverancier rechtstreeks benaderen.
+- **Open actie (Te, later)**: vaststellen welke kassa het restaurant gebruikt en de leverancier
+  benaderen over API-toegang/partnerprogramma. Pas daarna Integration Engine verder uitwerken.
+- **Conclusie**: de boekhoudkant (SnelStart) is goed gedocumenteerd; de POS-kant hangt van
+  leverancierscontact af. Eerst vaststellen welke kassa het restaurant echt gebruikt.
+
 **5. Kleine verfijningen** — pas oppakken bij concrete behoefte, niet uit zichzelf plannen:
 - **Facturatie: automatische vervaldatumcontrole ("te laat"-indicatie)** — klant-overleg:
   géén nieuwe factuurstatussen toevoegen ("Openstaand"/"Afgesloten" zijn al af te leiden uit
@@ -782,6 +798,9 @@ verwerken, automatische betalingsregistratie (schrijft naar dezelfde `payments`-
 punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneringen.
 
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.49** — Documentatie: eerste desk research Integration Engine toegevoegd onder roadmap-punt 4
+(SnelStart-authenticatie en kosten, DISH/BishPOS: geen openbare API gevonden). Nog steeds geen code.
 
 **v1.48** — Documentatie: research note Integration Engine vastgelegd (geen code, geen implementatie):
 - Letterlijk opgenomen onder roadmap-punt 4 (sectie 10), status **research only**.

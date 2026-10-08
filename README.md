@@ -9,6 +9,7 @@ Zie `docs/architecture.md` voor de volledige architectuur (bron van waarheid, se
 
 1. **Waar staan we nu:** Fase 1 (MVP) is compleet. De klant-goedgekeurde uitbreiding (Approval Engine + Bedrijfsreferenties + Teambeheer + Daily Closing) is volledig gebouwd: Fase A, A.5, B en C zijn compleet, inclusief de definitieve rechtenmatrix en volledige rolbeperking op alle routes. Alleen Fase D (digitale handtekening) staat nog open, samen met een paar losse punten — zie de volledige lijst hieronder.
 2. **Eerstvolgende actie:** Fase B bouwen volgens het plan in sectie 10.7 — bouwvolgorde: migratie → interfaces → service → providers → routes → UI → lock-enforcement → events → audit → end-to-end test.
+2b. **Open actie van Te (opgepakt later):** uitzoeken welke kassa het restaurant echt gebruikt (Eijsink/DISH of BishPOS) en die leverancier benaderen over API-toegang. Daarna pas verder met de Integration Engine — zie research note in architecture.md sectie 10, punt 4. Niet bouwen vóór dit bekend is.
 3. **Werkwijze die de hele tijd is aangehouden** (belangrijk om vast te houden):
    - Elke wijziging: lokaal `npx tsc --noEmit` + `npm run build` testen vóórdat een ZIP wordt aangeboden
    - Na elke feature: **zowel** README als `docs/architecture.md` bijwerken in dezelfde stap (wijzigingshistorie ophogen, bijv. v1.23)
