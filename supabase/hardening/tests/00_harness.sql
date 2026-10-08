@@ -94,6 +94,11 @@ insert into hardening_test.permission_baseline (role, permission, allowed) value
   ('bediening','MANAGE_SETTINGS',false),
   ('keuken','MANAGE_SETTINGS',false);
 
+-- hulpfunctie voor cases die een mislukkende opdracht (bv. TRUNCATE) moeten toetsen: true = gelukt, false = geweigerd
+create or replace function hardening_test.attempt(p_sql text) returns boolean
+language plpgsql as $$
+begin execute p_sql; return true; exception when others then return false; end $$;
+
 create or replace function hardening_test.run(p_step int default 0)
 returns table (id text, category text, title text, as_user text, expected text, actual text, result text, detail text)
 language plpgsql

@@ -21,9 +21,10 @@ RC = "d0000000-0000-0000-0000-000000000001"   # leeg restaurant C (alleen voor v
 def em(l, name): return f"{l}.{name}@staging.test"
 
 cases = []
-FREE_OWNER = ("update receipts set created_by=null where created_by is not null; update daily_closings set closed_by=null, reopened_by=null; "
+FREE_OWNER = ("set local session_replication_role = replica; "   # testopzet: logs zijn vanaf stap 4 append-only, dus triggers even uit
+              "update receipts set created_by=null where created_by is not null; update daily_closings set closed_by=null, reopened_by=null; "
               "update activity_log set user_id=null; update domain_events set published_by=null; update audit_log set changed_by=null; "
-              "update notifications set recipient_user_id=null;")
+              "update notifications set recipient_user_id=null; set local session_replication_role = origin;")
 def case(id, cat, title, user, kind, sql, now, after=None, step=0, note="", setup=None):
     if step == 0: after = now
     cases.append((id, cat, title, user, kind, sql.strip(), now, after, step, note, setup))
@@ -136,6 +137,61 @@ case("LG12", "LOGS", "service_role schrijft domain_event", "service_role", "dml"
      f"insert into domain_events (restaurant_id, event_type, payload) values ('{RA}','ApprovalCompleted','{{}}')", True)
 case("LG13", "LOGS", "bediening schrijft domain_event onder naam van de owner", BED, "dml",
      f"insert into domain_events (restaurant_id, event_type, payload, published_by) values ('{RA}','X','{{}}','{A(10)}')", True, False, 4)
+
+LOGT = ["activity_log", "audit_log", "domain_events"]
+LOGROW = {"activity_log": 610, "domain_events": 611, "audit_log": 612}
+LOGACTOR = {"activity_log": "user_id", "domain_events": "published_by", "audit_log": "changed_by"}
+def ins(tbl, rest, actor):
+    a = "null" if actor is None else f"'{actor}'"
+    if tbl == "activity_log":
+        return f"insert into activity_log (restaurant_id, user_id, action) values ('{rest}',{a},'test')"
+    if tbl == "domain_events":
+        return f"insert into domain_events (restaurant_id, event_type, payload, published_by) values ('{rest}','X','{{}}',{a})"
+    return f"insert into audit_log (restaurant_id, table_name, record_id, action, changed_by) values ('{rest}','receipts','{A(300)}','insert',{a})"
+case("LG14", "LOGS", "owner wijzigt activity_log (ook de owner mag logs niet aanpassen)", OWNER, "dml",
+     f"update activity_log set action='x' where id='{A(610)}'", True, False, 4)
+case("LG15", "LOGS", "owner verwijdert uit audit_log", OWNER, "dml", f"delete from audit_log where id='{A(612)}'", True, False, 4)
+case("LG16", "LOGS", "manager wijzigt domain_events", MGR, "dml", f"update domain_events set event_type='x' where id='{A(611)}'", True, False, 4)
+case("LG17", "LOGS", "administratie verwijdert uit activity_log", ADM, "dml", f"delete from activity_log where id='{A(610)}'", True, False, 4)
+for i, t in enumerate(LOGT):
+    n = 20 + i * 10
+    case(f"LG{n}", "LOGS", f"bediening voegt {t}-regel toe onder eigen naam (normaal)", BED, "dml", ins(t, RA, A(13)), True)
+    case(f"LG{n+1}", "LOGS", f"bediening voegt {t}-regel toe onder naam van de owner (vervalsen)", BED, "dml", ins(t, RA, A(10)), True, False, 4)
+    case(f"LG{n+2}", "LOGS", f"bediening voegt {t}-regel toe voor restaurant B", BED, "dml", ins(t, RB, A(13)), False)
+    case(f"LG{n+3}", "LOGS", f"A-owner voegt {t}-regel toe voor restaurant B onder eigen naam", OWNER, "dml", ins(t, RB, A(10)), False)
+    case(f"LG{n+4}", "LOGS", f"gewone gebruiker voegt {t}-regel toe zonder naam (actor NULL)", BED, "dml", ins(t, RA, None), True, False, 4, "NULL-actor is alleen nog voor server-side schrijvers")
+    case(f"LG{n+5}", "LOGS", f"gedeactiveerde voegt {t}-regel toe", INA, "dml", ins(t, RA, A(15)), True, False, 4, "gedeactiveerde verliest schrijfrecht (my_restaurant_id() = NULL)")
+    case(f"LG{n+6}", "LOGS", f"service_role voegt {t}-regel zonder actor toe (server-side logwrite)", "service_role", "dml", ins(t, RA, None), True)
+    case(f"LG{n+7}", "LOGS", f"service_role verwijdert {t}-regel (append-only geldt ook voor service)", "service_role", "dml",
+         f"delete from {t} where id='{A(LOGROW[t])}'", True, False, 4)
+    case(f"LG{n+8}", "LOGS", f"postgres (eigenaar) wijzigt {t}-regel — geen uitzondering voor beheerders", "postgres", "dml",
+         f"update {t} set {LOGACTOR[t]}=null where id='{A(LOGROW[t])}'", True, False, 4)
+    case(f"LG{n+9}", "LOGS", f"postgres (eigenaar) kan {t} niet leegmaken (TRUNCATE)", "postgres", "check",
+         f"select hardening_test.attempt('truncate {t}')", True, False, 4)
+case("LG50", "LOGS", "A-owner leest eigen audit_log", OWNER, "select", f"select 1 from audit_log where restaurant_id='{RA}'", True)
+case("LG51", "LOGS", "A-owner leest audit_log van B niet", OWNER, "select", f"select 1 from audit_log where restaurant_id='{RB}'", False)
+case("LG52", "LOGS", "A-bediening leest eigen domain_events", BED, "select", f"select 1 from domain_events where restaurant_id='{RA}'", True)
+case("LG53", "LOGS", "gedeactiveerde leest activity_log van eigen restaurant", INA, "select",
+     f"select 1 from activity_log where restaurant_id='{RA}'", True, False, 4, "SELECT volgt nu my_restaurant_id() (fail closed voor gedeactiveerde); zie D9")
+case("LG54", "LOGS", "authenticated heeft UPDATE of DELETE op een logtabel", "postgres", "check",
+     "select exists (select 1 from unnest(array['activity_log','audit_log','domain_events']) t where has_table_privilege('authenticated','public.'||t,'UPDATE') or has_table_privilege('authenticated','public.'||t,'DELETE'))", True, False, 4)
+case("LG55", "LOGS", "authenticated behoudt SELECT en INSERT op alle drie de logtabellen", "postgres", "check",
+     "select bool_and(has_table_privilege('authenticated','public.'||t,'SELECT') and has_table_privilege('authenticated','public.'||t,'INSERT')) from unnest(array['activity_log','audit_log','domain_events']) t", True)
+case("LG56", "LOGS", "service_role behoudt SELECT en INSERT op alle drie de logtabellen", "postgres", "check",
+     "select bool_and(has_table_privilege('service_role','public.'||t,'SELECT') and has_table_privilege('service_role','public.'||t,'INSERT')) from unnest(array['activity_log','audit_log','domain_events']) t", True)
+case("LG57", "LOGS", "alle drie de logtabellen hebben de append-only triggers (UPDATE/DELETE en TRUNCATE)", "postgres", "check",
+     "select (select count(*) from pg_trigger where not tgisinternal and tgname in ('logs_append_only','logs_no_truncate') and tgrelid in ('public.activity_log'::regclass,'public.audit_log'::regclass,'public.domain_events'::regclass)) = 6", False, True, 4)
+case("LG58", "LOGS", "geen policy van het type ALL meer op de logtabellen", "postgres", "check",
+     "select not exists (select 1 from pg_policies where schemaname='public' and tablename in ('activity_log','audit_log','domain_events') and cmd in ('ALL','UPDATE','DELETE'))", False, True, 4)
+case("LG59", "LOGS", "bestaande logregels zijn nog aanwezig (data behouden)", "postgres", "check",
+     f"select (select count(*) from activity_log where id in ('{A(610)}','{B(610)}')) = 2 and (select count(*) from domain_events where id in ('{A(611)}','{B(611)}')) = 2 and (select count(*) from audit_log where id in ('{A(612)}','{B(612)}')) = 2", True)
+case("LG60", "LOGS", "restaurant verwijderen ruimt de logregels van dat restaurant mee op (cascade blijft werken)", "postgres", "dml",
+     f"delete from restaurants where id='{RC}'", True, setup=(
+     f"insert into activity_log (restaurant_id, action) values ('{RC}','x'); insert into domain_events (restaurant_id, event_type, payload) values ('{RC}','X','{{}}'); "
+     f"insert into audit_log (restaurant_id, table_name, record_id, action) values ('{RC}','receipts','{A(300)}','insert');"))
+case("LG61", "LOGS", "na het verwijderen van een restaurant zijn logregels weg", "postgres", "check",
+     f"select not exists (select 1 from activity_log where restaurant_id='{RC}') and not exists (select 1 from domain_events where restaurant_id='{RC}') and not exists (select 1 from audit_log where restaurant_id='{RC}')", True,
+     setup=(f"insert into activity_log (restaurant_id, action) values ('{RC}','x'); delete from restaurants where id='{RC}';"))
 
 # ---------------------------------------------------------------- CROSS-REFERENTIES (H7, stap 5)
 case("XR01", "CROSSREF", "open_tab in A met bedrijf uit B", OWNER, "dml",
@@ -364,8 +420,8 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants en users", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users en de drie logtabellen", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
 case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op ALLE tabellen", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",

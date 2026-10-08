@@ -38,7 +38,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 1 | H1 + H9 helpers, search_path, is_active | `0015_hardening_step1_helpers.sql` (**uitgevoerd lokaal; productie wacht op Dicks run**) | `rollbacks/0015_rollback.sql` | `run(1)` |
 | 2 | H3 restaurants + H8a privileges | `0016_hardening_step2_restaurants_privileges.sql` (**lokaal getest**) | `rollbacks/0016_rollback.sql` | `run(2)` |
 | 3 | H2 users + server-side team/uitnodiging | `0017_hardening_step3_users.sql` (**lokaal getest; eerst app-deploy, dan migratie**) | `rollbacks/0017_rollback.sql` (+ app-revert) | `run(3)` |
-| 4 | H5a logs append-only | `0018_hardening_logs.sql` | `rollbacks/0018_rollback.sql` | `run(4)` |
+| 4 | H5a logs append-only | `0018_hardening_step4_logs_append_only.sql` (**lokaal getest; geen app-wijziging**) | `rollbacks/0018_rollback.sql` | `run(4)` |
 | 5 | H7 cross-reference integriteit | `0019_hardening_crossref.sql` | `rollbacks/0019_rollback.sql` | `run(5)` |
 | 6 | H6 storage | `0020_hardening_storage.sql` (+ app: `upsert:false`) | `rollbacks/0020_rollback.sql` | `run(6)` |
 | 7 | H4a open_tabs/receipts/approvals | `0021_hardening_tabs_receipts.sql` | `rollbacks/0021_rollback.sql` | `run(7)` |

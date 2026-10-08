@@ -839,6 +839,8 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.57** — Security hardening STAP 4 (H5a): migratie `0018_hardening_step4_logs_append_only.sql` + rollback, sectie 13.12. Productie wacht op uitvoering.
+
 **v1.56** — Security hardening STAP 3 (H2): migratie `0017_hardening_step3_users.sql` + rollback, server-side teambeheer (`user-admin-repository`), sectie 13.11. Productie wacht op uitvoering.
 
 **v1.55** — Security hardening STAP 2 (H3 + H8a): migratie `0016_hardening_step2_restaurants_privileges.sql` + rollback.
@@ -1627,6 +1629,19 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
 * **App:** alle schrijfacties op `users` lopen via `lib/user-management/user-admin-repository.ts` (service-role) ná `requireRole("MANAGE_TEAM")`, elke query gescoped op het restaurant van de aanroeper. Uitnodigen: Auth-uitnodiging → profiel-check → profiel; bij fout wordt een zojuist (<120 s) aangemaakt Auth-account opgeruimd (geen wees-account). Verwijderen ruimt ook het Auth-account op (met waarschuwing als dat mislukt). Gebruikers met historie worden gedeactiveerd, niet verwijderd.
 * **Tests:** 251 cases (incl. de oorspronkelijke 168): voor 0017 251/251 PASS (stap 2), na 0017 250 PASS + 1 OPEN (TM11/D2). App-integratietest van team-service tegen echte Postgres (nep-Supabase-client): 32/32 PASS zowel vóór als ná 0017. Rollback exact, migratie idempotent, concurrency-check OK. `npm run build` OK.
 * **Beperkingen:** een verstuurde uitnodigingsmail kan niet worden teruggehaald; de echte Auth Admin API is lokaal niet te testen (nagebootst); wees-account stuctech@gmail.com blokkeert opnieuw uitnodigen van dat adres tot D4 is besloten (niet verwijderd).
+
+### 13.12 HARDENING STAP 4 — H5a logboeken append-only (migratie 0018, 2026-10-08)
+
+**Status: lokaal volledig getest; productie wacht op Dicks uitvoering. Geen app-wijziging nodig.**
+
+* **Tabellen:** `activity_log`, `audit_log`, `domain_events`. Bestaande logdata blijft ongewijzigd.
+* **Policies:** de "for all"-policies zijn vervangen door per tabel een SELECT-policy (eigen restaurant via `my_restaurant_id()`) en een INSERT-policy (eigen restaurant en onder eigen naam: `user_id` / `changed_by` / `published_by` = `auth.uid()`).
+* **Rechten:** `authenticated` verliest UPDATE en DELETE op de drie tabellen (SELECT en INSERT blijven). Service-role rechten zijn niet verlaagd (inventaris in stap 11).
+* **Append-only vangnet:** trigger `logs_append_only` (BEFORE UPDATE/DELETE, rij) en `logs_no_truncate` (BEFORE TRUNCATE) op alle drie de tabellen, geldig voor ÍEDEREEN (ook service-role en postgres). Geen algemene service-role-uitzondering. Enige smalle uitzondering: DELETE van logregels van een restaurant dat zelf al verwijderd is (cascade).
+* **Server-side logwrites** (publieke goedkeuring, service-role, actor NULL) blijven werken. Authenticated schrijvers moeten sinds deze stap een actor invullen (alle 35 bestaande insert-plekken in de app doen dat).
+* **Gevolgen om te weten:** (1) een gedeactiveerde gebruiker kan logs niet meer lezen of schrijven (volgt `my_restaurant_id()`, zie D9); (2) de app negeert fouten van log-inserts (bestaand gedrag, niet gewijzigd): een geweigerde logwrite geeft dus geen foutmelding in de UI.
+* **Niet gedaan (bewust):** H5b (alle logs via server), cross-reference-check van de actor (stap 5), service-role-rechten verlagen (stap 11).
+* **Tests:** 297 cases; vóór 0018 296 PASS + 1 OPEN (TM11/D2), na 0018 296 PASS + 1 OPEN. Rollback exact, migratie idempotent. App-test teambeheer 32/32 PASS. `npm run build` OK.
 
 ## 12. STATUS
 
