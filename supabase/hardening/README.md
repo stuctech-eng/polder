@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status: alleen voorbereiding.** Niets in deze map wijzigt productie. Er is **geen GO** voor hardening-stap 1 t/m 11.
+**Status: voorbereiding (Stap 0) afgerond; Stap 1 geschreven en lokaal getest.** Niets in deze map wijzigt productie. Er is **geen GO** voor hardening-stap 1 t/m 11.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -35,17 +35,17 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | Stap | Inhoud | Migratie (gepland) | Rollback (gepland) | Toets |
 |---|---|---|---|---|
 | 0 | voorbereiding/testharnas | — | — | `run(0)` |
-| 1 | H1 + H9 helpers, search_path, is_active | `0015_hardening_helpers.sql` | `rollback/0015_down.sql` | `run(1)` |
-| 2 | H3 restaurants + H8a privileges | `0016_hardening_restaurants_privileges.sql` | `rollback/0016_down.sql` | `run(2)` |
-| 3 | H2 users + server-side team/uitnodiging | `0017_hardening_users.sql` (+ app-wijziging) | `rollback/0017_down.sql` (+ app-revert) | `run(3)` |
-| 4 | H5a logs append-only | `0018_hardening_logs.sql` | `rollback/0018_down.sql` | `run(4)` |
-| 5 | H7 cross-reference integriteit | `0019_hardening_crossref.sql` | `rollback/0019_down.sql` | `run(5)` |
-| 6 | H6 storage | `0020_hardening_storage.sql` (+ app: `upsert:false`) | `rollback/0020_down.sql` | `run(6)` |
-| 7 | H4a open_tabs/receipts/approvals | `0021_hardening_tabs_receipts.sql` | `rollback/0021_down.sql` | `run(7)` |
-| 8 | H4b invoices/payments/documents | `0022_hardening_invoices.sql` | `rollback/0022_down.sql` | `run(8)` |
-| 9 | H4c + H4d dagafsluiting/stamdata/settings/plugins | `0023_hardening_master_data.sql` | `rollback/0023_down.sql` | `run(9)` |
-| 10 | H10 PIN-geheimen | `0024_hardening_pin_secrets.sql` (+ app) | `rollback/0024_down.sql` | `run(10)` |
-| 11 | H8b definitieve least privilege + eindtest | `0025_hardening_final_privileges.sql` | `rollback/0025_down.sql` | `run(11)` + her-audit |
+| 1 | H1 + H9 helpers, search_path, is_active | `0015_hardening_step1_helpers.sql` (**uitgevoerd lokaal; productie wacht op Dicks run**) | `rollbacks/0015_rollback.sql` | `run(1)` |
+| 2 | H3 restaurants + H8a privileges | `0016_hardening_restaurants_privileges.sql` | `rollbacks/0016_rollback.sql` | `run(2)` |
+| 3 | H2 users + server-side team/uitnodiging | `0017_hardening_users.sql` (+ app-wijziging) | `rollbacks/0017_rollback.sql` (+ app-revert) | `run(3)` |
+| 4 | H5a logs append-only | `0018_hardening_logs.sql` | `rollbacks/0018_rollback.sql` | `run(4)` |
+| 5 | H7 cross-reference integriteit | `0019_hardening_crossref.sql` | `rollbacks/0019_rollback.sql` | `run(5)` |
+| 6 | H6 storage | `0020_hardening_storage.sql` (+ app: `upsert:false`) | `rollbacks/0020_rollback.sql` | `run(6)` |
+| 7 | H4a open_tabs/receipts/approvals | `0021_hardening_tabs_receipts.sql` | `rollbacks/0021_rollback.sql` | `run(7)` |
+| 8 | H4b invoices/payments/documents | `0022_hardening_invoices.sql` | `rollbacks/0022_rollback.sql` | `run(8)` |
+| 9 | H4c + H4d dagafsluiting/stamdata/settings/plugins | `0023_hardening_master_data.sql` | `rollbacks/0023_rollback.sql` | `run(9)` |
+| 10 | H10 PIN-geheimen | `0024_hardening_pin_secrets.sql` (+ app) | `rollbacks/0024_rollback.sql` | `run(10)` |
+| 11 | H8b definitieve least privilege + eindtest | `0025_hardening_final_privileges.sql` | `rollbacks/0025_rollback.sql` | `run(11)` + her-audit |
 
 Werkwijze per stap: (1) eerst op staging/lokaal met `run(stap-1)` → migratie → `run(stap)`; (2) rollback-script op staging
 uitproberen; (3) vóór productie `prod-readonly-checks.sql` opnieuw (fingerprints); (4) migratie in productie in één

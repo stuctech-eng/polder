@@ -24,7 +24,7 @@ create table hardening_test.cases (
   id text primary key,
   category text not null,
   title text not null,
-  as_user text not null,          -- e-mail van testgebruiker, of 'service_role' / 'postgres'
+  as_user text not null,          -- e-mail van testgebruiker, of 'service_role' / 'postgres' / 'anon' / 'nosub' (auth.uid() NULL) / 'uid:<uuid>'
   kind text not null check (kind in ('select','dml','check')),
   sql text not null,
   expect_now boolean not null,
@@ -108,7 +108,9 @@ begin
 
   for c in select * from hardening_test.cases order by category, id loop
     v_allowed := null; v_err := null; v_n := null; v_uid := null;
-    if c.as_user not in ('service_role','postgres') then
+    if c.as_user like 'uid:%' then
+      v_uid := substr(c.as_user, 5)::uuid;          -- willekeurige uid (ook niet-bestaande) als geldig JWT-subject
+    elsif c.as_user not in ('service_role','postgres','anon','nosub') then
       select u.id into v_uid from auth.users u where u.email = c.as_user;
       if v_uid is null then
         id := c.id; category := c.category; title := c.title; as_user := c.as_user;
@@ -124,6 +126,14 @@ begin
         perform set_config('request.jwt.claims', v_claims, true);
         perform set_config('request.jwt.claim.sub', '', true);
         set local role service_role;
+      elsif c.as_user = 'anon' then
+        perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+        perform set_config('request.jwt.claim.sub', '', true);
+        set local role anon;
+      elsif c.as_user = 'nosub' then                -- ingelogde rol maar zonder subject: auth.uid() IS NULL
+        perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+        perform set_config('request.jwt.claim.sub', '', true);
+        set local role authenticated;
       elsif c.as_user <> 'postgres' then
         v_claims := json_build_object('sub', v_uid, 'role', 'authenticated')::text;
         perform set_config('request.jwt.claims', v_claims, true);

@@ -839,6 +839,10 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.54** — Security hardening STAP 1 (H1 + H9): migratie `0015_hardening_step1_helpers.sql` + rollback. `my_restaurant_id()` vast
+search_path + `is_active` (fail closed), nieuwe `my_role()`, `role_has_permission()`, `has_perm()`, EXECUTE alleen voor authenticated en
+service_role. Geen policy-, grant-, trigger-, storage- of app-wijziging. Sectie 13.9. Stap 2 wacht op nieuwe expliciete GO.
+
 **v1.53** — Security hardening STAP 0 (voorbereiding, geen productiewijziging): map `supabase/hardening/`
 (alleen-lezen productiecontroles, staging-seed, testharnas + 168 testcases, rechtenbaseline, README met
 migratie/rollbackstructuur voor de 11 stappen). Sectie 13.7 beschrijft de uitkomst. Geen migratie, policy,
@@ -1570,6 +1574,22 @@ gedeactiveerde), 5 bonnen, 4 facturen, 4 betalingen, 3 documenten, 2 dagafsluiti
 * **D6-indicatie:** 1 betaalde factuur zonder "sent" in het logboek — mogelijk draft → paid. Niet beslist.
 * **D4:** `stuctech@gmail.com` bestaat (aangemaakt 2026-07-05, bevestigd, nooit ingelogd, geen profiel = wees-account).
   Niets verwijderd. Relevant voor stap 3: dit e-mailadres kan niet opnieuw worden uitgenodigd zolang het auth-account bestaat.
+
+### 13.9 HARDENING STAP 1 — H1 + H9 helpers (migratie 0015, 2026-10-08)
+**Alleen functies.** Migratie `supabase/migrations/0015_hardening_step1_helpers.sql`, rollback `supabase/rollbacks/0015_rollback.sql`.
+* `my_restaurant_id()` herdefinieerd: zelfde semantiek, `set search_path = public, pg_temp`, `public.users`, `and is_active`
+  (fail closed: geen uid / geen profiel / inactief → NULL). Nieuw: `my_role()`, `role_has_permission(role, perm)` (exacte kopie van
+  PERMISSIONS; onbekende of NULL rol/permissie → `false`, nooit NULL; niet SECURITY DEFINER) en `has_perm(perm)`.
+* EXECUTE: ingetrokken voor PUBLIC/anon, alleen `authenticated` en `service_role`. `rls_auto_enable()` en alle overige functies ongemoeid.
+* Niet gewijzigd: policies, tabelrechten, triggers, storage, data (policy-fingerprint en grants-fingerprint vóór/na identiek).
+* Gevolg (bedoeld): een gedeactiveerde gebruiker verliest leesrecht op `daily_closings` en teamleden en kan zijn eigen `users`-rij niet
+  meer wijzigen; eigen profiel blijft leesbaar (middleware). Andere tabellen volgen in stap 2–9 (zie D9).
+* Gevonden en gedicht: vóór stap 1 kon een gebruiker via een eigen tijdelijke tabel `users` (pg_temp staat vooraan in het zoekpad) de
+  uitkomst van `my_restaurant_id()` omleiden en daarmee de dagafsluitingen van een ander restaurant lezen (tests HP48/HP50).
+* Tests (lokaal, schone keten + productierechten): vóór 0015 218/218 PASS (huidige stand); na 0015 `run(1)` 218/218 PASS;
+  rollback → `run(0)` 218/218; opnieuw toepassen en dubbel draaien (idempotent) 218/218. Matrix SQL ↔ TypeScript: 55/55 gelijk, direct
+  uit `role-helpers.ts` geparsed. 50 nieuwe cases (categorie HELPERS); RE08/RE10 gaan van stap 3 naar stap 1 (inactieve gebruiker kan zichzelf
+  niet meer promoveren/heractiveren). Nog te doen: Dick draait 0015 in productie en daarna de alleen-lezen controle uit het rapport.
 
 ## 12. STATUS
 

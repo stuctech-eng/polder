@@ -76,11 +76,11 @@ case("RE06", "ESCALATIE", "manager promoveert bediening tot owner", MGR, "dml",
 case("RE07", "ESCALATIE", "administratie degradeert de owner", ADM, "dml",
      f"update users set role='keuken' where id='{A(10)}'", True, False, 3)
 case("RE08", "ESCALATIE", "gedeactiveerde gebruiker maakt zichzelf owner", INA, "dml",
-     "update users set role='owner' where id = auth.uid()", True, False, 3)
+     "update users set role='owner' where id = auth.uid()", True, False, 1, "gedeactiveerde gebruiker verliest schrijfrecht al in stap 1 (H9)")
 case("RE09", "ESCALATIE", "bediening verhuist eigen profiel naar restaurant B", BED, "dml",
      f"update users set restaurant_id='{RB}' where id = auth.uid()", False)
 case("RE10", "ESCALATIE", "bediening activeert zichzelf weer (is_active) — gedeactiveerde", INA, "dml",
-     "update users set is_active=true where id = auth.uid()", True, False, 3, "gedeactiveerde mag zichzelf niet heractiveren")
+     "update users set is_active=true where id = auth.uid()", True, False, 1, "gedeactiveerde mag zichzelf niet heractiveren — dicht door H9 (stap 1)")
 
 # ---------------------------------------------------------------- TEAMBEHEER (H2, stap 3)
 case("TM01", "TEAM", "bediening verwijdert de owner", BED, "dml", f"delete from users where id='{A(10)}'", True, False, 3, "bevinding 2", setup=FREE_OWNER)
@@ -280,10 +280,76 @@ case("PR16", "PRIVILEGES", "elke public-tabel heeft RLS aan", "postgres", "check
 case("PR17", "PRIVILEGES", "geen policy van het type ALL meer in public", "postgres", "check",
      "select not exists (select 1 from pg_policies where schemaname='public' and cmd='ALL')", False, True, 9, "eindcontrole: geen 'for all'")
 
+# ---------------------------------------------------------------- HELPERS (H1 + H9, stap 1)
+OTHER_ORPHAN = "orphan@staging.test"
+for cid, usr, role in [("HP01", OWNER, "owner"), ("HP02", MGR, "manager"), ("HP03", ADM, "administratie"), ("HP04", BED, "bediening"), ("HP05", KEU, "keuken")]:
+    case(cid, "HELPERS", f"my_role() van actieve {role} = '{role}'", usr, "check", f"select public.my_role() = '{role}'", False, True, 1)
+for cid, usr in [("HP06", OWNER), ("HP07", MGR), ("HP08", ADM), ("HP09", BED), ("HP10", KEU)]:
+    case(cid, "HELPERS", f"my_restaurant_id() van actieve gebruiker ({usr.split('.')[1].split('@')[0]}) = eigen restaurant A", usr, "check",
+         f"select public.my_restaurant_id() = '{RA}'", True)
+case("HP11", "HELPERS", "my_restaurant_id() van A-gebruiker is nooit restaurant B", OWNER, "check", f"select public.my_restaurant_id() is distinct from '{RB}'", True)
+case("HP12", "HELPERS", "my_restaurant_id() van B-owner = B", em("b", "owner"), "check", f"select public.my_restaurant_id() = '{RB}'", True)
+case("HP13", "HELPERS", "gedeactiveerde gebruiker: my_restaurant_id() = NULL (fail closed)", INA, "check", "select public.my_restaurant_id() is null", False, True, 1)
+case("HP14", "HELPERS", "gedeactiveerde gebruiker: my_role() = NULL (fail closed)", INA, "check", "select public.my_role() is null", False, True, 1)
+case("HP15", "HELPERS", "gedeactiveerde gebruiker: has_perm('MANAGE_RECEIPTS') = false", INA, "check", "select public.has_perm('MANAGE_RECEIPTS') is false", False, True, 1)
+case("HP16", "HELPERS", "account zonder profiel (wees): my_restaurant_id() = NULL", OTHER_ORPHAN, "check", "select public.my_restaurant_id() is null", True)
+case("HP17", "HELPERS", "account zonder profiel (wees): my_role() = NULL", OTHER_ORPHAN, "check", "select public.my_role() is null", False, True, 1)
+case("HP18", "HELPERS", "niet-bestaande gebruiker (willekeurige uid): my_restaurant_id() = NULL", "uid:99999999-9999-9999-9999-999999999999", "check", "select public.my_restaurant_id() is null", True)
+case("HP19", "HELPERS", "niet-bestaande gebruiker: my_role() = NULL", "uid:99999999-9999-9999-9999-999999999999", "check", "select public.my_role() is null", False, True, 1)
+case("HP20", "HELPERS", "auth.uid() IS NULL: my_restaurant_id() = NULL", "nosub", "check", "select public.my_restaurant_id() is null", True)
+case("HP21", "HELPERS", "auth.uid() IS NULL: my_role() = NULL", "nosub", "check", "select public.my_role() is null", False, True, 1)
+case("HP22", "HELPERS", "auth.uid() IS NULL: has_perm('VIEW_DASHBOARD') = false", "nosub", "check", "select public.has_perm('VIEW_DASHBOARD') is false", False, True, 1)
+case("HP23", "HELPERS", "onbekende rol → geen permissie", "postgres", "check", "select public.role_has_permission('superadmin','VIEW_DASHBOARD') is false", False, True, 1)
+case("HP24", "HELPERS", "NULL-rol → false (niet NULL)", "postgres", "check", "select public.role_has_permission(null,'VIEW_DASHBOARD') is false", False, True, 1)
+case("HP25", "HELPERS", "onbekende permissie → false", "postgres", "check", "select public.role_has_permission('owner','NOPE') is false", False, True, 1)
+case("HP26", "HELPERS", "NULL-permissie → false (niet NULL)", "postgres", "check", "select public.role_has_permission('owner',null) is false", False, True, 1)
+case("HP27", "HELPERS", "has_perm('NOPE') van owner = false", OWNER, "check", "select public.has_perm('NOPE') is false", False, True, 1)
+for cid, usr, perm, exp in [("HP28", OWNER, "MANAGE_TEAM", True), ("HP29", MGR, "MANAGE_TEAM", False), ("HP30", ADM, "MANAGE_INVOICES", True),
+                            ("HP31", BED, "MANAGE_INVOICES", False), ("HP32", BED, "MANAGE_RECEIPTS", True), ("HP33", KEU, "MANAGE_RECEIPTS", False),
+                            ("HP34", MGR, "APPROVE_RECEIPTS", True), ("HP35", ADM, "APPROVE_RECEIPTS", False)]:
+    sql = f"select public.has_perm('{perm}')" + ("" if exp else " is false")
+    case(cid, "HELPERS", f"has_perm('{perm}') voor {usr.split('.')[1].split('@')[0]} = {str(exp).lower()}", usr, "check", sql, False, True, 1)
+case("HP36", "HELPERS", "geen overload my_restaurant_id(uuid): een gebruiker kan geen restaurant_id meegeven", "postgres", "check",
+     "select to_regprocedure('public.my_restaurant_id(uuid)') is null and to_regprocedure('public.my_role(uuid)') is null", True)
+case("HP37", "HELPERS", "my_restaurant_id() levert geen ander restaurant via select * (hele users-tabel eigen rij) ", OWNER, "check",
+     f"select (select count(*) from public.users where restaurant_id <> public.my_restaurant_id()) = 0", True)
+case("HP38", "HELPERS", "search_path vast op my_role()", "postgres", "check",
+     "select coalesce((select exists (select 1 from unnest(proconfig) c where c like 'search_path=%') from pg_proc where proname='my_role' and pronamespace='public'::regnamespace and proconfig is not null), false)", False, True, 1)
+case("HP39", "HELPERS", "search_path vast op has_perm()", "postgres", "check",
+     "select coalesce((select exists (select 1 from unnest(proconfig) c where c like 'search_path=%') from pg_proc where proname='has_perm' and pronamespace='public'::regnamespace and proconfig is not null), false)", False, True, 1)
+case("HP40", "HELPERS", "search_path vast op role_has_permission()", "postgres", "check",
+     "select coalesce((select exists (select 1 from unnest(proconfig) c where c like 'search_path=%') from pg_proc where proname='role_has_permission' and pronamespace='public'::regnamespace and proconfig is not null), false)", False, True, 1)
+case("HP41", "HELPERS", "my_restaurant_id/my_role/has_perm zijn SECURITY DEFINER; role_has_permission is dat NIET", "postgres", "check",
+     """select (select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in ('my_restaurant_id','my_role','has_perm') and prosecdef) = 3
+        and not coalesce((select prosecdef from pg_proc where pronamespace='public'::regnamespace and proname='role_has_permission'), true)""", False, True, 1)
+# EXECUTE-rechten
+case("HP42", "HELPERS", "PUBLIC heeft geen EXECUTE op de vier helpers", "postgres", "check",
+     "select not exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.pronamespace='public'::regnamespace and p.proname in ('my_restaurant_id','my_role','has_perm','role_has_permission') and a.grantee = 0)", False, True, 1)
+case("HP43", "HELPERS", "anon heeft geen EXECUTE op de vier helpers", "postgres", "check",
+     "select not (has_function_privilege('anon','public.my_restaurant_id()','EXECUTE') or has_function_privilege('anon','public.my_role()','EXECUTE') or has_function_privilege('anon','public.has_perm(text)','EXECUTE') or has_function_privilege('anon','public.role_has_permission(text,text)','EXECUTE'))", False, True, 1)
+case("HP44", "HELPERS", "authenticated en service_role hebben EXECUTE op de vier helpers", "postgres", "check",
+     "select bool_and(has_function_privilege(r, f, 'EXECUTE')) from unnest(array['authenticated','service_role']) r, unnest(array['public.my_restaurant_id()','public.my_role()','public.has_perm(text)','public.role_has_permission(text,text)']) f", False, True, 1)
+case("HP45", "HELPERS", "anon kan my_restaurant_id() niet aanroepen (permission denied)", "anon", "check", "select public.my_restaurant_id() is null", True, False, 1)
+case("HP46", "HELPERS", "anon kan has_perm() niet aanroepen", "anon", "check", "select public.has_perm('VIEW_DASHBOARD') is false", False, False, 1)
+case("HP47", "HELPERS", "rls_auto_enable() ongewijzigd (zelfde ACL: PUBLIC + owner, event_trigger)", "postgres", "check",
+     "select coalesce((select prorettype = 'event_trigger'::regtype and prosecdef from pg_proc where proname='rls_auto_enable'), true)", True)
+# search_path-misbruik: een gebruiker zet een eigen tijdelijke tabel 'users' neer die naar restaurant B wijst
+case("HP48", "HELPERS", "search_path-aanval: tijdelijke nep-users-tabel kan my_restaurant_id() niet omleiden", BED, "check",
+     f"select public.my_restaurant_id() = '{RA}'", False, True, 1,
+     "vóór stap 1 geeft de functie het restaurant uit de nep-tabel (B) terug",
+     setup=f"create temp table users (id uuid, restaurant_id uuid, role text, is_active boolean); grant all on pg_temp.users to authenticated; insert into pg_temp.users values ('{A(13)}','{RB}','owner',true)")
+case("HP49", "HELPERS", "search_path-aanval: nep-tabel kan my_role() niet omleiden (bediening blijft bediening)", BED, "check",
+     "select public.my_role() = 'bediening'", False, True, 1, "nieuwe functie bestaat nog niet vóór stap 1",
+     setup=f"create temp table users (id uuid, restaurant_id uuid, role text, is_active boolean); grant all on pg_temp.users to authenticated; insert into pg_temp.users values ('{A(13)}','{RB}','owner',true)")
+case("HP50", "HELPERS", "dagafsluitingen van B blijven onleesbaar voor A, ook mét nep-users-tabel", OWNER, "select",
+     f"select 1 from daily_closings where restaurant_id='{RB}'", True, False, 1, "vóór stap 1 leest A via de nep-tabel de dagafsluitingen van B",
+     setup=f"create temp table users (id uuid, restaurant_id uuid, role text, is_active boolean); grant all on pg_temp.users to authenticated; insert into pg_temp.users values ('{A(10)}','{RB}','owner',true)")
+
 # ---------------------------------------------------------------- uitvoer
 def q(x): return "'" + x.replace("'", "''") + "'"
 def b(x): return "null" if x is None else ("true" if x else "false")
 print("-- GEGENEREERD door generate_cases.py — niet met de hand bewerken.")
+print("truncate hardening_test.cases;")
 print("insert into hardening_test.cases (id, category, title, as_user, kind, sql, expect_now, expect_after, step, note, setup) values")
 rows = []
 for (id_, cat, title, user, kind, sql, now, after, step, note, setup) in cases:
