@@ -211,6 +211,66 @@ case("XR07", "CROSSREF", "factuurregel in A naar bon van B", ADM, "dml",
 case("XR08", "CROSSREF", "normale rekening aanmaken (eigen bedrijf, eigen afdeling)", OWNER, "dml",
      f"insert into open_tabs (restaurant_id, company_id, department_id) values ('{RA}','{A(100)}','{A(101)}')", True)
 
+SVC = "service_role"
+XR = [  # (id, titel, uitvoerder, sql, nu, na, noot)
+ ("XR09", "open_tab in A met bedrijf uit B (via service-role: geen bypass)", SVC, f"insert into open_tabs (restaurant_id, company_id) values ('{RA}','{B(100)}')", True, False, ""),
+ ("XR10", "open_tab zonder bedrijf maar met afdeling uit B", OWNER, f"insert into open_tabs (restaurant_id, department_id) values ('{RA}','{B(101)}')", True, False, "tenant-grens geldt ook zonder bedrijf"),
+ ("XR11", "open_tab zonder bedrijf met afdeling uit eigen restaurant (bewust toegestaan)", OWNER, f"insert into open_tabs (restaurant_id, department_id) values ('{RA}','{A(101)}')", True, True, "bewuste uitzondering: geen bedrijf om tegen te toetsen"),
+ ("XR12", "open_tab in A met kostenplaats uit B", OWNER, f"insert into open_tabs (restaurant_id, company_id, cost_center_id) values ('{RA}','{A(100)}','{B(102)}')", True, False, ""),
+ ("XR13", "open_tab in A met project uit B", OWNER, f"insert into open_tabs (restaurant_id, company_id, project_id) values ('{RA}','{A(100)}','{B(103)}')", True, False, ""),
+ ("XR14", "open_tab in A met contact uit B", OWNER, f"insert into open_tabs (restaurant_id, company_id, contact_id) values ('{RA}','{A(100)}','{B(104)}')", True, False, ""),
+ ("XR15", "rekening wisselt naar afdeling van ander bedrijf (zelfde restaurant)", OWNER, f"update open_tabs set department_id='{A(106)}' where id='{A(200)}'", True, False, "cross-company"),
+ ("XR16", "rekening wisselt van bedrijf terwijl afdeling/kostenplaats/project bij het oude bedrijf horen", OWNER, f"update open_tabs set company_id='{A(105)}' where id='{A(200)}'", True, False, "cross-company"),
+ ("XR17", "gewone wijziging van een rekening (tafelnummer) blijft werken", OWNER, f"update open_tabs set table_number='7', guest_count=3 where id='{A(200)}'", True, True, ""),
+ ("XR18", "rekening: zelfde bedrijf/afdeling opnieuw opslaan blijft werken", OWNER, f"update open_tabs set company_id='{A(100)}', department_id='{A(101)}' where id='{A(200)}'", True, True, ""),
+ ("XR19", "kostenplaats met afdeling van ander bedrijf", OWNER, f"insert into cost_centers (company_id, department_id, name) values ('{A(100)}','{A(106)}','x')", True, False, "cross-company"),
+ ("XR20", "kostenplaats met afdeling uit restaurant B", OWNER, f"insert into cost_centers (company_id, department_id, name) values ('{A(100)}','{B(101)}','x')", True, False, ""),
+ ("XR21", "kostenplaats met eigen afdeling (geldig)", OWNER, f"insert into cost_centers (company_id, department_id, name) values ('{A(100)}','{A(101)}','x')", True, True, ""),
+ ("XR22", "bon aan eigen rekening koppelen (geldig)", OWNER, f"insert into receipts (restaurant_id, open_tab_id, status) values ('{RA}','{A(200)}','draft')", True, True, ""),
+ ("XR23", "bestaande bon naar rekening van B verplaatsen", OWNER, f"update receipts set open_tab_id='{B(200)}' where id='{A(300)}'", True, False, ""),
+ ("XR24", "bon in A met rekening van B (via service-role)", SVC, f"insert into receipts (restaurant_id, open_tab_id, status) values ('{RA}','{B(200)}','draft')", True, False, ""),
+ ("XR25", "bestaande factuur naar bedrijf van B", ADM, f"update invoices set company_id='{B(100)}' where id='{A(500)}'", True, False, ""),
+ ("XR26", "factuur voor eigen bedrijf (geldig)", ADM, f"insert into invoices (restaurant_id, company_id, invoice_number) values ('{RA}','{A(105)}','X-OK')", True, True, ""),
+ ("XR27", "factuurregel met eigen bon (geldig)", ADM, f"insert into invoice_lines (invoice_id, receipt_id, description, amount) values ('{A(500)}','{A(303)}','ok',1)", True, True, ""),
+ ("XR28", "factuurregel in A naar bon van B (via service-role)", SVC, f"insert into invoice_lines (invoice_id, receipt_id, description, amount) values ('{A(500)}','{B(300)}','x',1)", True, False, ""),
+ ("XR29", "factuurregel zonder bon blijft mogelijk", ADM, f"insert into invoice_lines (invoice_id, description, amount) values ('{A(500)}','vrij',1)", True, True, ""),
+ ("XR30", "goedkeuring voor eigen bon en eigen bedrijf (geldig)", OWNER, f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','qr','pending')", True, True, ""),
+ ("XR31", "goedkeuring: bon van A met bedrijf van B (via service-role)", SVC, f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{B(100)}','qr','pending')", True, False, ""),
+ ("XR32", "configuratie in A met bedrijf van B", OWNER, f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}','{B(100)}','kx','{{}}')", True, False, ""),
+ ("XR33", "configuratie in A met eigen bedrijf (geldig)", OWNER, f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}','{A(100)}','kx','{{}}')", True, True, ""),
+ ("XR34", "configuratie zonder bedrijf (restaurantbreed) blijft mogelijk", OWNER, f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}',null,'kx','{{}}')", True, True, ""),
+ ("XR35", "workflowregel in A met bedrijf van B", OWNER, f"insert into workflow_rules (restaurant_id, company_id) values ('{RA}','{B(100)}')", True, False, ""),
+ ("XR36", "document in A dat naar factuur van B wijst", OWNER, f"insert into documents (restaurant_id, type, related_table, related_id, storage_path) values ('{RA}','invoice','invoices','{B(502)}','{RA}/invoices/x.pdf')", True, False, ""),
+ ("XR37", "document bij eigen factuur (geldig)", OWNER, f"insert into documents (restaurant_id, type, related_table, related_id, storage_path) values ('{RA}','invoice','invoices','{A(501)}','{RA}/invoices/{A(501)}.pdf')", True, True, ""),
+ ("XR38", "document met andere related_table wordt niet gecontroleerd (bewuste uitzondering)", OWNER, f"insert into documents (restaurant_id, type, related_table, related_id, storage_path) values ('{RA}','report_export','receipts','{B(300)}','{RA}/x.pdf')", True, True, "alleen related_table='invoices' wordt gebruikt en gecontroleerd"),
+ ("XR40", "bon met created_by uit restaurant B", OWNER, f"insert into receipts (restaurant_id, status, created_by) values ('{RA}','draft','{B(10)}')", True, False, ""),
+ ("XR41", "dagafsluiting met closed_by uit restaurant B", OWNER, f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', date '2031-01-01', '{B(10)}')", True, False, ""),
+ ("XR42", "notificatie voor ontvanger uit restaurant B", OWNER, f"insert into notifications (restaurant_id, recipient_user_id, type, trigger_event) values ('{RA}','{B(10)}','email','x')", True, False, ""),
+ ("XR43", "activity_log in A onder naam van gebruiker uit B (via service-role)", SVC, f"insert into activity_log (restaurant_id, user_id, action) values ('{RA}','{B(10)}','x')", True, False, ""),
+ ("XR44", "domain_event in A met published_by uit B (via service-role)", SVC, f"insert into domain_events (restaurant_id, event_type, payload, published_by) values ('{RA}','X','{{}}','{B(10)}')", True, False, ""),
+ ("XR45", "audit_log in A met changed_by uit B (via service-role)", SVC, f"insert into audit_log (restaurant_id, table_name, record_id, action, changed_by) values ('{RA}','receipts','{A(300)}','insert','{B(10)}')", True, False, ""),
+ ("XR46", "service-role logt zonder gebruiker (publieke goedkeuring) blijft werken", SVC, f"insert into activity_log (restaurant_id, user_id, action) values ('{RA}',null,'publiek')", True, True, ""),
+ ("XR47", "service-role logt onder naam van een eigen gebruiker blijft werken", SVC, f"insert into activity_log (restaurant_id, user_id, action) values ('{RA}','{A(13)}','ok')", True, True, ""),
+ ("XR50", "bedrijf verhuist naar ander restaurant (ouder-kant)", "postgres", f"update companies set restaurant_id='{RB}' where id='{A(100)}'", True, False, "ouder-sleutel onveranderlijk"),
+ ("XR51", "afdeling verhuist naar ander bedrijf", "postgres", f"update departments set company_id='{A(105)}' where id='{A(101)}'", True, False, ""),
+ ("XR52", "kostenplaats verhuist naar ander bedrijf", "postgres", f"update cost_centers set company_id='{A(105)}' where id='{A(102)}'", True, False, ""),
+ ("XR53", "project verhuist naar ander bedrijf", "postgres", f"update projects set company_id='{A(105)}' where id='{A(103)}'", True, False, ""),
+ ("XR54", "contact verhuist naar ander bedrijf", "postgres", f"update contacts set company_id='{A(105)}' where id='{A(104)}'", True, False, ""),
+ ("XR55", "rekening verhuist naar ander restaurant", "postgres", f"update open_tabs set restaurant_id='{RB}' where id='{A(204)}'", True, False, ""),
+ ("XR56", "bon verhuist naar ander restaurant", "postgres", f"update receipts set restaurant_id='{RB}' where id='{A(303)}'", True, False, ""),
+ ("XR57", "factuur verhuist naar ander restaurant", "postgres", f"update invoices set restaurant_id='{RB}' where id='{A(500)}'", True, False, ""),
+ ("XR58", "gewone wijziging van een bedrijf (naam) blijft werken", OWNER, f"update companies set name='Nieuwe naam' where id='{A(100)}'", True, True, ""),
+ ("XR59", "ouder-sleutel opnieuw met dezelfde waarde opslaan blijft werken", "postgres", f"update companies set restaurant_id='{RA}' where id='{A(100)}'", True, True, ""),
+]
+for cid, title, usr, sql, now, after, note in XR:
+    case(cid, "CROSSREF", title, usr, "dml", sql, now, after, 5 if now != after else 0, note)
+case("XR60", "CROSSREF", "alle 23 xref-triggers aanwezig", "postgres", "check",
+     "select (select count(*) from pg_trigger where not tgisinternal and tgname in ('xref_open_tabs','xref_cost_centers','xref_receipts','xref_invoices','xref_invoice_lines','xref_approvals','xref_company_scoped','xref_documents','xref_user_ref','xref_keys_immutable')) = 23", False, True, 5)
+case("XR61", "CROSSREF", "xref-functies zijn voor niemand rechtstreeks uitvoerbaar", "postgres", "check",
+     "select not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname like 'xref\\_%' and (has_function_privilege('anon',p.oid,'EXECUTE') or has_function_privilege('authenticated',p.oid,'EXECUTE') or has_function_privilege('service_role',p.oid,'EXECUTE')))", True)
+case("XR62", "CROSSREF", "bestaande seed-relaties zijn nog geldig (geen cross-reference in de data)", "postgres", "check",
+     "select not exists (select 1 from open_tabs t join companies c on c.id=t.company_id where c.restaurant_id<>t.restaurant_id) and not exists (select 1 from receipts r join open_tabs t on t.id=r.open_tab_id where t.restaurant_id<>r.restaurant_id) and not exists (select 1 from invoices i join companies c on c.id=i.company_id where c.restaurant_id<>i.restaurant_id)", True)
+
 # ---------------------------------------------------------------- STORAGE (H6, stap 6)
 pdf = f"{RA}/invoices/{A(502)}.pdf"
 case("ST01", "STORAGE", "administratie leest factuur-PDF", ADM, "select", f"select 1 from storage.objects where bucket_id='documents' and name='{pdf}'", True)

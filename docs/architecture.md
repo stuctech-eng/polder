@@ -839,6 +839,8 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.58** — Security hardening STAP 5 (H7): migratie `0019_hardening_step5_crossref.sql` + rollback, sectie 13.13. Productie wacht op uitvoering.
+
 **v1.57** — Security hardening STAP 4 (H5a): migratie `0018_hardening_step4_logs_append_only.sql` + rollback, sectie 13.12. Productie wacht op uitvoering.
 
 **v1.56** — Security hardening STAP 3 (H2): migratie `0017_hardening_step3_users.sql` + rollback, server-side teambeheer (`user-admin-repository`), sectie 13.11. Productie wacht op uitvoering.
@@ -1642,6 +1644,18 @@ Migratie `supabase/migrations/0016_hardening_step2_restaurants_privileges.sql`, 
 * **Gevolgen om te weten:** (1) een gedeactiveerde gebruiker kan logs niet meer lezen of schrijven (volgt `my_restaurant_id()`, zie D9); (2) de app negeert fouten van log-inserts (bestaand gedrag, niet gewijzigd): een geweigerde logwrite geeft dus geen foutmelding in de UI.
 * **Niet gedaan (bewust):** H5b (alle logs via server), cross-reference-check van de actor (stap 5), service-role-rechten verlagen (stap 11).
 * **Tests:** 297 cases; vóór 0018 296 PASS + 1 OPEN (TM11/D2), na 0018 296 PASS + 1 OPEN. Rollback exact, migratie idempotent. App-test teambeheer 32/32 PASS. `npm run build` OK.
+
+### 13.13 HARDENING STAP 5 — H7 cross-reference integriteit (migratie 0019, 2026-10-08)
+
+**Status: lokaal volledig getest; productie wacht op Dicks uitvoering. Geen app-wijziging, geen data-wijziging.**
+
+* **Waarom:** een gewone foreign key controleert alleen of de verwezen rij bestaat, niet van welk restaurant of bedrijf die is. Triggers (`BEFORE INSERT/UPDATE`, SECURITY DEFINER, ook voor service-role en postgres, géén bypass) toetsen dat nu wel.
+* **Beschermde relaties (kind → ouder):** `open_tabs` → bedrijf, afdeling, kostenplaats, project, contact (restaurant én bedrijf); `cost_centers.department_id` (zelfde bedrijf); `receipts.open_tab_id`; `invoices.company_id`; `invoice_lines` (factuur en bon, zelfde restaurant); `approvals` (bon en bedrijf, zelfde restaurant); `configurations` en `workflow_rules` → bedrijf; `documents` → factuur (alleen `related_table = 'invoices'`); gebruikersverwijzingen `receipts.created_by`, `daily_closings.closed_by/reopened_by`, `notifications.recipient_user_id`, en bij INSERT `activity_log.user_id`, `domain_events.published_by`, `audit_log.changed_by` → gebruiker in hetzelfde restaurant.
+* **Ouder-kant:** de sleutelkolommen waarlangs die controles lopen zijn onveranderlijk (`companies.restaurant_id`; `company_id` van afdeling, kostenplaats, project, contact; `restaurant_id` van rekening, bon, factuur). Anders kan een ouder achteraf "verhuizen" en de controle omzeilen. De app wijzigt deze kolommen nergens.
+* **Triggers:** 23 stuks (`xref_open_tabs`, `xref_cost_centers`, `xref_receipts`, `xref_invoices`, `xref_invoice_lines`, `xref_approvals`, `xref_company_scoped` ×2, `xref_documents`, `xref_user_ref` ×6, `xref_keys_immutable` ×8) met 11 functies. De functies zijn voor niemand rechtstreeks uitvoerbaar.
+* **Veiligheidsstop in de migratie:** schendt bestaande data één van de regels (zelfde checks als B30–B42 in `prod-readonly-checks.sql`), dan stopt de migratie vóór er iets verandert.
+* **Bewuste uitzonderingen (niet geblokkeerd):** (1) een rekening zónder bedrijf mét afdeling/kostenplaats/project/contact uit het eigen restaurant (er is geen bedrijf om tegen te toetsen; de tenant-grens geldt wel); (2) een bon van een ander bedrijf binnen hetzelfde restaurant op een factuur (alleen de restaurantgrens is vastgelegd in Stap 0); (3) `documents` met een andere `related_table` dan `invoices`; (4) `activity_log.target_id`, `audit_log.record_id` en andere vrije verwijzingen (geen foreign key, informatief); (5) tabellen met één ouder (`payments`, `approval_settings`, `company_codes`, `departments`, `projects`, `contacts`): daar volgt het restaurant uit de ouder, dus er is niets te vergelijken.
+* **Tests:** 348 cases; vóór 0019 347 PASS + 1 OPEN (TM11/D2), na 0019 347 PASS + 1 OPEN. 39 cases die vóór 0019 een zwakte bewezen, zijn na 0019 geweigerd; alle geldige relaties blijven werken. Rollback exact, migratie herhaalbaar, veiligheidsstop getest. App-test teambeheer 32/32 PASS. `npm run build` OK.
 
 ## 12. STATUS
 
