@@ -1557,6 +1557,12 @@ gedeactiveerde), 5 bonnen, 4 facturen, 4 betalingen, 3 documenten, 2 dagafsluiti
   vergeleken (vermoedelijk witruimte of `public.`-prefix); vóór stap 1 eerst de productietekst lezen; (2) productie
   heeft de functie `rls_auto_enable()` (SECURITY DEFINER, search_path=pg_catalog) die de repo niet kent (Supabase-
   platformfunctie die RLS op nieuwe tabellen aanzet). Niet gecorrigeerd, alleen gerapporteerd.
+* **Opgelost na aanvullende alleen-lezen query:** de productiedefinitie van `my_restaurant_id()` is inhoudelijk
+  **identiek** aan de repo (`select restaurant_id from users where id = auth.uid()`, SQL, STABLE, SECURITY DEFINER,
+  geen `search_path`). Het md5-verschil komt uitsluitend door **CRLF-regeleinden** in productie (md5 van de bron met
+  `\r\n` = `c6ceb8cf…`, bewezen). Execute-rechten: `PUBLIC` en `postgres` (dus ook `anon`). `rls_auto_enable()` is een
+  event-trigger-functie (plpgsql, SECURITY DEFINER, `search_path=pg_catalog`) die RLS aanzet op nieuwe tabellen in
+  `public`; execute: `PUBLIC` en `postgres`; alleen gedocumenteerd, niet te wijzigen of te vervangen. Geen blocker voor stap 1.
 * **Datacompatibiliteit:** owner-integriteit OK; geen cross-restaurant of cross-bedrijf verwijzingen; alle storage-paden
   conform; geen `integration_plugins`; statussen binnen de geplande state machine (receipts: linked 2, locked 5;
   facturen: draft 1, paid 3, nooit sent/overdue). WARNING: `approval_settings` bevat 1 `pin_hash` (leesbaar voor elke rol)
