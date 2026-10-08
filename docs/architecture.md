@@ -1394,3 +1394,4 @@ UI → lock-enforcement → events → audit → end-to-end test.
 
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  
+ 

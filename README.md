@@ -159,3 +159,4 @@ npm run dev
 
 Volledige details, governance-principes en de fasering (Fase 1 t/m 5): zie `docs/architecture.md`.
  
+ 
