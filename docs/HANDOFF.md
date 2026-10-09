@@ -27,3 +27,32 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok in de chat; na elke stap stoppen.
 - Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN (getest + GPT akkoord) of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.74.
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris, Step 11).
+
+## Waar staat wat (bestanden en plekken)
+
+**GitHub: stuctech-eng/polder**
+- `main` (commit 5f1966f, v1.0.74): live app incl. 7b-app. Productie (Vercel) bouwt hiervan.
+- Branch `plan-7b-0023-voorbereid` (commit 61e01d4+): ALLES wat voorbereid is maar niet live: migratie 0023, rollback, tests, controlequeries, docs, dit bestand. Ophalen: `git fetch origin +refs/heads/plan-7b-0023-voorbereid:refs/remotes/origin/plan-7b-0023-voorbereid`.
+
+**Documentatie**
+- `docs/architecture.md`: hoofddocument. Roadmap + volgorde van stappen (sectie 7, "Platformbeheer en privacyfase", "Definitieve volgorde"), audit (sectie 13), hardening per stap (13.x), 13.16 = 0022 + plan 7b (met statusblok), changelog onderaan (v1.61 = 0022, v1.62 = 7b).
+- `supabase/hardening/README.md`: tabel van alle hardening-stappen (0–11) en hun status.
+- `README.md`: "start here" (verwijst naar dit bestand).
+
+**Database (Supabase)**
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, NIET uitgevoerd. `0024` (Step 8): nog niet gemaakt, geblokkeerd.
+- `supabase/rollbacks/`: rollbacks per stap (0022, 0023 aanwezig).
+- `supabase/hardening/`: `staging-seed.sql` (testgegevens, twee restaurants A en B), `prod-step7-0022-checks.sql`, `prod-step7b-checks.sql`, `prod-step7b-preflight-verdict.sql` (alleen-lezen productiecontroles).
+
+**Tests (alles lokaal, nooit op productie)**
+- `supabase/hardening/tests/`: `00_harness.sql`, `generate_cases.py` → `10_cases.sql` (542 databasecases), `local-build.sh` (bouwt lokale Postgres met migraties), `local-stub.sql`, `local-prodgrants.sql`, `invoice-block-scenarios.json` (14 scenario's), `preflight-0023-tests.sh` (59 checks).
+- `supabase/hardening/tests/app-regression/`: app-regressie (t7 = 173 checks, t8 = 39 checks), nep-supabase-client, bouwscripts, README. Paden daarin zijn sandbox-paden (`/home/pgtest`, poort 55432, database `s3`): aanpassen in een nieuwe omgeving.
+
+**App-code die in 7b is aangeraakt**
+- `app/api/open-tabs/[id]/generate-invoice/route.ts`, `app/(dashboard)/open-tabs/[id]/page.tsx` en `receipts-section.tsx`, `lib/approval/invoice-blocking.ts`, `lib/approval/resubmit.ts`.
+
+**Buiten de repo**
+- Deze sessie: https://claude.ai/code/session_01ByhqutLa8AePgBJi8va3WH (volledige geschiedenis van 0022 en plan 7b, incl. alle GPT-reviews).
+- Productie-database: Supabase SQL-editor van Dick (alleen hij kan daar draaien; Claude geeft kopieerblokken, één stap per bericht).
+- Claude-geheugen (`/areas/polder.md`): korte statusregels over 7b en de volgende stappen.
+- Lokale sandbox (`/home/pgtest`, tijdelijk, mag verdwijnen): alles wat nodig is staat nu in de repo.
