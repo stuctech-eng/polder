@@ -707,6 +707,52 @@ case("H532", H, "tabelrechten ongewijzigd (stap 11): authenticated heeft nog DML
 case("H533", H, "bestaande data behouden (restaurant A: 5 rekeningen, 4 bonnen, 2 regels, 2 goedkeuringen)", "postgres", "check",
      f"select (select count(*) from open_tabs where restaurant_id='{RA}') = 5 and (select count(*) from receipts where restaurant_id='{RA}') = 4 and (select count(*) from receipt_lines where receipt_id in (select id from receipts where restaurant_id='{RA}')) = 2 and (select count(*) from approvals where company_id='{A(100)}') = 2", True)
 
+# -- aanscherping approvals_guard (migratie 0022): geen nieuwe/afgewezen regel op goedgekeurde of vergrendelde bon
+# Seed: bon 300 linked, 301 pending_approval (goedkeuring 400 pending), 302 locked (401 approved), 303 approved.
+PEND_302 = REPL(f"insert into approvals (id, receipt_id, company_id, method) values ('{A(402)}','{A(302)}','{A(100)}','pin');")
+PEND_303 = REPL(f"insert into approvals (id, receipt_id, company_id, method) values ('{A(403)}','{A(303)}','{A(100)}','pin');")
+U_REJ = lambda i: f"update approvals set status='rejected', approved_by='x', approved_at=now() where id='{A(i)}'"
+U_EXP = lambda i: f"update approvals set status='expired' where id='{A(i)}'"
+U_APP = lambda i: f"update approvals set status='approved', approved_by='M', approved_at=now() where id='{A(i)}'"
+for n, (who, lab) in enumerate([(OWNER, "owner"), (MGR, "manager"), (BED, "bediening"), (SVC, "service_role"), ("postgres", "postgres")]):
+    case(f"H54{n}", H, f"{lab} voegt goedkeuringsregel toe aan vergrendelde bon", who, "dml", APR_INS(A(302)), True, False, 7)
+    case(f"H55{n}", H, f"{lab} voegt goedkeuringsregel toe aan goedgekeurde bon", who, "dml", APR_INS(A(303)), True, False, 7)
+case("H560", H, "manager dient in: goedkeuringsregel op bon in wacht op goedkeuring (legitiem)", MGR, "dml", APR_INS(A(301)), True)
+case("H561", H, "service_role voegt goedkeuringsregel toe aan linked bon (legitiem)", SVC, "dml", APR_INS(A(300)), True)
+case("H562", H, "owner wijst openstaande regel af op vergrendelde bon", OWNER, "dml", U_REJ(402), True, False, 7, setup=PEND_302)
+case("H563", H, "manager wijst openstaande regel af op vergrendelde bon", MGR, "dml", U_REJ(402), True, False, 7, setup=PEND_302)
+case("H564", H, "service_role wijst openstaande regel af op vergrendelde bon (geen bypass)", SVC, "dml", U_REJ(402), True, False, 7, setup=PEND_302)
+case("H565", H, "postgres wijst openstaande regel af op vergrendelde bon (geen bypass)", "postgres", "dml", U_REJ(402), False)
+case("H566", H, "manager laat openstaande regel verlopen op vergrendelde bon", MGR, "dml", U_EXP(402), True, False, 7, setup=PEND_302)
+case("H567", H, "service_role laat openstaande regel verlopen op goedgekeurde bon", SVC, "dml", U_EXP(403), True, False, 7, setup=PEND_303)
+case("H568", H, "owner wijst openstaande regel af op goedgekeurde bon", OWNER, "dml", U_REJ(403), True, False, 7, setup=PEND_303)
+case("H569", H, "manager keurt openstaande regel goed op vergrendelde bon (goedkeur-route, blijft)", MGR, "dml", U_APP(402), True, True, 7, setup=PEND_302)
+case("H570", H, "service_role keurt openstaande regel goed op vergrendelde bon (publieke link, blijft)", SVC, "dml", U_APP(402), True, True, 7, setup=PEND_302)
+case("H571", H, "service_role keurt openstaande regel goed op goedgekeurde bon (blijft)", SVC, "dml", U_APP(403), True, True, 7, setup=PEND_303)
+case("H572", H, "bediening keurt openstaande regel goed op vergrendelde bon (geen APPROVE_RECEIPTS)", BED, "dml", U_APP(402), False, False, 7, setup=PEND_302)
+case("H573", H, "service_role wijst af op bon in wacht op goedkeuring (legitiem)", SVC, "dml", U_REJ(400), True)
+case("H574", H, "manager wijst af op bon in wacht op goedkeuring (legitiem)", MGR, "dml", U_REJ(400), True)
+case("H575", H, "service_role laat verlopen op bon in wacht op goedkeuring (legitiem)", SVC, "dml", U_EXP(400), True)
+# -- keten: afwijzen -> opnieuw indienen -> goedkeuren
+CH_PEND = REPL(f"update receipts set status='pending_approval' where id='{A(300)}'; insert into approvals (id, receipt_id, company_id, method) values ('{A(404)}','{A(300)}','{A(100)}','qr');")
+CH_REJ = REPL(f"update receipts set status='linked' where id='{A(300)}'; insert into approvals (id, receipt_id, company_id, method, status, approved_at) values ('{A(404)}','{A(300)}','{A(100)}','qr','rejected',now());")
+CH_PEND2 = REPL(f"update receipts set status='pending_approval' where id='{A(300)}'; insert into approvals (id, receipt_id, company_id, method, status, approved_at) values ('{A(404)}','{A(300)}','{A(100)}','qr','rejected',now()); insert into approvals (id, receipt_id, company_id, method) values ('{A(405)}','{A(300)}','{A(100)}','qr');")
+case("H580", H, "keten stap 1: publieke link wijst bon af (bon terug naar linked, regel rejected)", SVC, "dml",
+     f"update receipts set status='linked' where id='{A(300)}'; " + U_REJ(404), True, setup=CH_PEND)
+case("H581", H, "keten stap 2: bediening dient afgewezen bon opnieuw in (nieuwe regel)", BED, "dml",
+     f"update receipts set status='pending_approval' where id='{A(300)}'; " + APR_INS(A(300)), True, setup=CH_REJ)
+case("H582", H, "keten stap 3: manager keurt opnieuw ingediende bon goed (na eerdere afwijzing)", MGR, "dml",
+     f"update receipts set status='locked' where id='{A(300)}'; " + U_APP(405), True, setup=CH_PEND2)
+case("H583", H, "keten stap 4: na goedkeuring geen nieuwe regel meer op de bon", OWNER, "dml",
+     APR_INS(A(300)), True, False, 7, setup=CH_PEND2 + REPL(f"update receipts set status='locked' where id='{A(300)}'; update approvals set status='approved', approved_by='M', approved_at=now() where id='{A(405)}';"))
+case("H584", H, "keten stap 5: na goedkeuring een nieuwe regel direct als rejected aanmaken (was en blijft geweigerd)", SVC, "dml",
+     APR_INS(A(300), ", status", ",'rejected'"), False, setup=CH_PEND2 + REPL(f"update receipts set status='locked' where id='{A(300)}'; update approvals set status='approved', approved_by='M', approved_at=now() where id='{A(405)}';"))
+case("H590", H, "approvals_guard bevat beide nieuwe controles; trigger actief; functie niet uitvoerbaar", "postgres", "check",
+     "select position('niet meer worden afgewezen of verlopen' in pg_get_functiondef('public.approvals_guard()'::regprocedure)) > 0 "
+     "and position('geen nieuwe goedkeuring meer krijgen' in pg_get_functiondef('public.approvals_guard()'::regprocedure)) > 0 "
+     "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='approvals_guard') = 1 "
+     "and not has_function_privilege('authenticated','public.approvals_guard()','EXECUTE') and not has_function_privilege('service_role','public.approvals_guard()','EXECUTE')", False, True, 7)
+
 # ---------------------------------------------------------------- uitvoer
 def q(x): return "'" + x.replace("'", "''") + "'"
 def b(x): return "null" if x is None else ("true" if x else "false")
