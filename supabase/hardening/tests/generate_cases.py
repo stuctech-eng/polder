@@ -10,6 +10,7 @@ Testdata komt uit staging-seed.sql (vaste UUID's: restaurant A = a0000000-…, B
 Gedeactiveerde gebruiker: a.inactive@staging.test. Wees-account zonder profiel: c0000000-…0001.
 """
 
+def q(x): return "'" + x.replace("'", "''") + "'"
 def u(L, n): return f"{L}0000000-0000-0000-0000-{n:012d}"
 R = {"a": "a0000000-0000-0000-0000-000000000001", "b": "b0000000-0000-0000-0000-000000000001"}
 ORPH = "c0000000-0000-0000-0000-000000000001"
@@ -753,8 +754,59 @@ case("H590", H, "approvals_guard bevat beide nieuwe controles; trigger actief; f
      "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='approvals_guard') = 1 "
      "and not has_function_privilege('authenticated','public.approvals_guard()','EXECUTE') and not has_function_privilege('service_role','public.approvals_guard()','EXECUTE')", False, True, 7)
 
+# -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
+import json, os
+SCEN = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "invoice-block-scenarios.json")))["scenarios"]
+def scen_setup(k, sc, close=True):
+    """Zet rekening 203 (gesloten) klaar met de bonnen en goedkeuringsgeschiedenis van het scenario.
+    Gewone bonnen staan meteen op 203 (triggers uit). Een bon met "moved": true wordt EERST op de open rekening 204
+    gezet en daarna ECHT verplaatst naar 203 (triggers aan, dus de guard moet de verplaatsing toestaan);
+    daarvoor staat 203 even open. Daarna wordt 203 gesloten. Mislukt de verplaatsing, dan mislukt de hele opzet."""
+    moved = any(rc.get("moved") for rc in sc["receipts"])
+    sql = REPL(f"update open_tabs set status='open' where id='{A(203)}';") if moved else ""
+    pending_moves = []
+    for i, rc in enumerate(sc["receipts"]):
+        rid = A(7000 + k * 10 + i)
+        tab = A(204) if rc.get("moved") else A(203)
+        sql += REPL(f"insert into receipts (id, restaurant_id, open_tab_id, status, total) values ('{rid}','{RA}','{tab}','{rc['status']}',5);")
+        for j, st in enumerate(rc["approvals"]):
+            at = "null" if st == "pending" else f"now() + interval '{j} seconds'"
+            sql += REPL(f"insert into approvals (id, receipt_id, company_id, method, status, approved_at) "
+                        f"values ('{A(8000 + k * 100 + i * 10 + j)}','{rid}','{A(100)}','qr','{st}',{at});")
+        if rc.get("moved"):
+            pending_moves.append(rid)
+    for rid in pending_moves:   # echte verplaatsing, guards actief
+        sql += f"update receipts set open_tab_id='{A(203)}' where id='{rid}'; "
+    if moved and close:
+        sql += REPL(f"update open_tabs set status='closed' where id='{A(203)}';")
+    return sql
+INV_TAB = f"update open_tabs set status='invoiced' where id='{A(203)}'"
+for k, sc in enumerate(SCEN, start=1):
+    blocked = sc["expect"]["rejection"]
+    for who, lab, tag in ((OWNER, "owner", "a"), (ADM, "administratie", "b")):
+        if blocked:
+            # bewijs een weigering MET de juiste reden: een mislukte opzet of andere fout telt niet mee
+            case(f"H6{k:02d}{tag}", H, f"7b {sc['id']} {lab} factureert: {sc['title']} -> geweigerd met reden 'afgewezen bon'", who, "check",
+                 f"select hardening_test.refused_with({q(INV_TAB)}, 'afgewezen bon')", False, True, 7, setup=scen_setup(k, sc))
+        else:
+            case(f"H6{k:02d}{tag}", H, f"7b {sc['id']} {lab} factureert: {sc['title']} -> toegestaan", who, "dml",
+                 INV_TAB, True, True, 7, setup=scen_setup(k, sc))
+    if any(rc.get("moved") for rc in sc["receipts"]):
+        rid = A(7000 + k * 10)
+        case(f"H6{k:02d}m", H, f"7b {sc['id']} de bon is echt verplaatst van open rekening 204 naar 203 (opzet bewijst de verplaatsing)", "postgres", "check",
+             f"select (select open_tab_id from receipts where id='{rid}') = '{A(203)}'", True, setup=scen_setup(k, sc, close=False))
+# service_role en postgres hebben geen MANAGE_INVOICES (bestaand gedrag, geen bypass): altijd geweigerd, ook zonder afwijzing
+for k, sc in enumerate(SCEN, start=1):
+    if sc["id"] in ("S04", "S13"):
+        for who, lab, tag in ((SVC, "service_role", "c"), ("postgres", "postgres", "d")):
+            case(f"H6{k:02d}{tag}", H, f"7b {sc['id']} {lab} zet rekening op invoiced (geen bypass, altijd geweigerd)", who, "dml",
+                 INV_TAB, False, setup=scen_setup(k, sc))
+case("H690", H, "open_tabs_guard bevat de afwijzingsblokkade; trigger actief; functie niet uitvoerbaar", "postgres", "check",
+     "select position('afgewezen bon is nog niet opnieuw goedgekeurd' in pg_get_functiondef('public.open_tabs_guard()'::regprocedure)) > 0 "
+     "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='open_tabs_guard') = 1 "
+     "and not has_function_privilege('authenticated','public.open_tabs_guard()','EXECUTE') and not has_function_privilege('service_role','public.open_tabs_guard()','EXECUTE')", False, True, 7)
+
 # ---------------------------------------------------------------- uitvoer
-def q(x): return "'" + x.replace("'", "''") + "'"
 def b(x): return "null" if x is None else ("true" if x else "false")
 print("-- GEGENEREERD door generate_cases.py — niet met de hand bewerken.")
 print("truncate hardening_test.cases;")

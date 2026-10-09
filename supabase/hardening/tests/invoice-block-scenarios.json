@@ -1,0 +1,19 @@
+{
+  "_doc": "Gedeelde scenariolijst plan 7b. Wordt gelezen door generate_cases.py (database-matrix) en door de app-test (t7.ts: dezelfde scenario's door lib/approval/invoice-blocking.ts en door de echte database). approvals = geschiedenis van goedkeuringsregels in volgorde van aanmaak; 'rejected'/'approved' zijn afgehandeld. expect.rejection = afwijzingsblokkade (app EN database); expect.invoice = facturatieblokkade (alleen app: afwijzingsblokkade of pending_approval). Database weigert closed->invoiced precies als expect.rejection waar is.",
+  "scenarios": [
+    {"id": "S01", "title": "geen goedkeuringsgeschiedenis, linked", "receipts": [{"status": "linked", "approvals": []}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S02", "title": "geen goedkeuringsgeschiedenis, draft", "receipts": [{"status": "draft", "approvals": []}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S03", "title": "eerste keer ingediend, pending_approval, geen afwijzing (bekend verschil app/database)", "receipts": [{"status": "pending_approval", "approvals": ["pending"]}], "expect": {"rejection": false, "invoice": true}},
+    {"id": "S04", "title": "afgewezen, linked", "receipts": [{"status": "linked", "approvals": ["rejected"]}], "expect": {"rejection": true, "invoice": true}},
+    {"id": "S05", "title": "afgewezen, opnieuw ingediend, in afwachting", "receipts": [{"status": "pending_approval", "approvals": ["rejected", "pending"]}], "expect": {"rejection": true, "invoice": true}},
+    {"id": "S06", "title": "afgewezen, opnieuw ingediend, opnieuw afgewezen", "receipts": [{"status": "linked", "approvals": ["rejected", "rejected"]}], "expect": {"rejection": true, "invoice": true}},
+    {"id": "S07", "title": "afgewezen, opnieuw ingediend, goedgekeurd (locked)", "receipts": [{"status": "locked", "approvals": ["rejected", "approved"]}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S08", "title": "twee keer afgewezen, daarna goedgekeurd (locked)", "receipts": [{"status": "locked", "approvals": ["rejected", "rejected", "approved"]}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S09", "title": "afgewezen, opnieuw ingediend, goedgekeurd zonder auto-lock (approved)", "receipts": [{"status": "approved", "approvals": ["rejected", "approved"]}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S10", "title": "rekening met een goedgekeurde en een geblokkeerde bon", "receipts": [{"status": "locked", "approvals": ["rejected", "approved"]}, {"status": "linked", "approvals": ["rejected"]}], "expect": {"rejection": true, "invoice": true}},
+    {"id": "S11", "title": "afgewezen bon verplaatst naar een andere open rekening", "receipts": [{"status": "linked", "approvals": ["rejected"], "moved": true}], "expect": {"rejection": true, "invoice": true}},
+    {"id": "S12", "title": "alleen een expired regel, linked", "receipts": [{"status": "linked", "approvals": ["expired"]}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S13", "title": "direct goedgekeurd zonder afwijzing (locked)", "receipts": [{"status": "locked", "approvals": ["approved"]}], "expect": {"rejection": false, "invoice": false}},
+    {"id": "S14", "title": "goedgekeurde bon en een bon die voor het eerst in afwachting staat", "receipts": [{"status": "locked", "approvals": ["approved"]}, {"status": "pending_approval", "approvals": ["pending"]}], "expect": {"rejection": false, "invoice": true}}
+  ]
+}

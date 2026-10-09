@@ -99,6 +99,14 @@ create or replace function hardening_test.attempt(p_sql text) returns boolean
 language plpgsql as $$
 begin execute p_sql; return true; exception when others then return false; end $$;
 
+-- hulpfunctie voor cases die een weigering met een bepaalde reden moeten bewijzen: true = de opdracht faalde EN de foutmelding bevat p_msg.
+-- Een mislukte testopzet (andere fout) telt dus niet als geslaagde weigering.
+create or replace function hardening_test.refused_with(p_sql text, p_msg text) returns boolean
+language plpgsql as $$
+begin execute p_sql; return false; exception when others then return position(p_msg in sqlerrm) > 0; end $$;
+grant usage on schema hardening_test to public;
+grant execute on function hardening_test.refused_with(text, text) to public;
+
 create or replace function hardening_test.run(p_step int default 0)
 returns table (id text, category text, title text, as_user text, expected text, actual text, result text, detail text)
 language plpgsql
