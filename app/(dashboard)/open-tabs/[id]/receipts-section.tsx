@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { requestResubmit } from "@/lib/approval/resubmit";
 
 type ReceiptLine = {
   description: string;
@@ -28,6 +29,7 @@ type Receipt = {
   approved_by?: string | null;
   rejected_by?: string | null;
   rejection_reason?: string | null;
+  rejection_blocked?: boolean;
   notes?: string | null;
 };
 
@@ -282,6 +284,7 @@ function ReceiptItem({
   onDeleted: () => void;
   onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [receiptNumber, setReceiptNumber] = useState(receipt.receipt_number ?? "");
   const [receiptDate, setReceiptDate] = useState(receipt.receipt_date ?? "");
@@ -313,6 +316,31 @@ function ReceiptItem({
 
     onUpdated({ id: receipt.id, receipt_number: receiptNumber || null, receipt_date: receiptDate, notes: notes || null });
     setEditing(false);
+  }
+
+  async function handleResubmit() {
+    setLoading(true);
+    setError(null);
+
+    // requestResubmit geeft nooit een exception terug (ook niet bij een netwerkfout); finally zet
+    // de laadstatus in elk geval terug.
+    try {
+      const result = await requestResubmit((url, init) => fetch(url, init), receipt.id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      onUpdated({
+        id: receipt.id,
+        status: "pending_approval",
+        approval_token: result.approvalToken,
+        rejection_blocked: false,
+      });
+      if (result.approvalWarning) setError(result.approvalWarning);
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete() {
@@ -360,6 +388,11 @@ function ReceiptItem({
         <div className="text-xs font-medium text-red-600 mt-1">
           ⚠ eerder afgewezen door {receipt.rejected_by}
           {receipt.rejection_reason ? `: "${receipt.rejection_reason}"` : ""} — nu weer bewerkbaar
+        </div>
+      )}
+      {!editing && receipt.rejection_blocked && receipt.status !== "pending_approval" && (
+        <div className="text-xs text-red-600 mt-1">
+          Kan pas gefactureerd worden nadat de bon opnieuw is ingediend en goedgekeurd, of is verwijderd.
         </div>
       )}
 
@@ -417,6 +450,15 @@ function ReceiptItem({
             </>
           ) : (
             <>
+              {receipt.rejection_blocked && (receipt.status === "linked" || receipt.status === "draft") && (
+                <button
+                  onClick={handleResubmit}
+                  disabled={loading}
+                  className="text-xs text-neutral-900 font-medium underline disabled:opacity-50"
+                >
+                  {loading ? "Bezig..." : "Opnieuw indienen"}
+                </button>
+              )}
               <button
                 onClick={() => setEditing(true)}
                 className="text-xs text-neutral-600 underline"

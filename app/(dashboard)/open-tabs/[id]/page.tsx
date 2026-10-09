@@ -7,6 +7,7 @@ import { ReceiptsSection } from "./receipts-section";
 import GenerateInvoiceButton from "./generate-invoice-button";
 import DownloadInvoiceButton from "./download-invoice-button";
 import TabEditControls from "./tab-edit-controls";
+import { isRejectionBlocked } from "@/lib/approval/invoice-blocking";
 import Link from "next/link";
 
 export default async function OpenTabDetailPage({
@@ -64,8 +65,11 @@ export default async function OpenTabDetailPage({
       approved_by: resolved?.status === "approved" ? resolved.approved_by : null,
       rejected_by: resolved?.status === "rejected" ? resolved.approved_by : null,
       rejection_reason: resolved?.status === "rejected" ? resolved.metadata?.reason ?? null : null,
+      // Plan 7b: dezelfde definitie als de facturatie-controle en de database (lib/approval/invoice-blocking.ts)
+      rejection_blocked: isRejectionBlocked(r, r.approvals ?? []),
     };
   });
+  const blockedReceiptCount = (receipts ?? []).filter((r: any) => r.rejection_blocked).length;
 
   const approvalSettings = tab.company_id
     ? await getApprovalSettings(supabase, tab.company_id)
@@ -136,6 +140,14 @@ export default async function OpenTabDetailPage({
         <div className="mt-6">
           <CloseTabButton tabId={tab.id} />
         </div>
+      )}
+
+      {tab.status === "closed" && blockedReceiptCount > 0 && (
+        <p className="mt-6 text-sm text-red-600" role="alert">
+          ⚠ {blockedReceiptCount === 1 ? "Eén bon is" : `${blockedReceiptCount} bonnen zijn`} afgewezen en nog niet
+          opnieuw goedgekeurd. Deze rekening kan pas gefactureerd worden nadat {blockedReceiptCount === 1 ? "die bon" : "die bonnen"} opnieuw
+          {" "}is ingediend en goedgekeurd, of verwijderd is.
+        </p>
       )}
 
       {tab.status === "closed" && canManageInvoices && (
