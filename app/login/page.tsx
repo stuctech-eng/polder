@@ -9,6 +9,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/";
   const isDeactivated = searchParams.get("deactivated") === "1";
+  const isRestaurantUit = searchParams.get("restaurant_uit") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,6 +50,11 @@ function LoginForm() {
         {isDeactivated && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4" role="alert">
             Dit account is gedeactiveerd. Neem contact op met de eigenaar.
+          </p>
+        )}
+        {isRestaurantUit && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4" role="alert">
+            Dit restaurant staat uit. Neem contact op met de beheerder.
           </p>
         )}
 

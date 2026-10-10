@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { blockedReason, hasAccess } from "@/lib/user-management/access";
 
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/approve", "/api/public-approve", "/api/ping-supabase"];
 // Reset-password gebruikt zelf een (tijdelijke) sessie via de e-maillink —
@@ -7,7 +8,8 @@ const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/approve
 const REDIRECT_IF_AUTHENTICATED = ["/login", "/forgot-password"];
 
 export async function middleware(request: NextRequest) {
-  const { response, user, isActive } = await updateSession(request);
+  const { response, user, access } = await updateSession(request);
+  const blocked = user ? blockedReason(access) : null;
 
   const isPublicPath = PUBLIC_PATHS.some((path) =>
     request.nextUrl.pathname.startsWith(path)
@@ -20,10 +22,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Gedeactiveerd account: wel een geldige sessie, maar geen toegang meer (Fase A.5)
-  if (user && !isActive && !isPublicPath) {
+  // Gedeactiveerd account of uitgezet restaurant: wel een geldige sessie, maar geen toegang meer.
+  // Alleen navigatie met een melding; de beveiliging zelf zit in requireRole en RLS.
+  if (blocked && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("deactivated", "1");
+    loginUrl.searchParams.set(blocked, "1");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -32,7 +35,7 @@ export async function middleware(request: NextRequest) {
   const isRedirectIfAuthPath = REDIRECT_IF_AUTHENTICATED.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
-  if (user && isActive && isRedirectIfAuthPath) {
+  if (user && hasAccess(access) && isRedirectIfAuthPath) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

@@ -1,5 +1,6 @@
 import { getCurrentUserContext } from "./session-context";
 import { roleHasPermission, type Permission, type UserRole } from "./role-helpers";
+import { accessMessage, hasAccess } from "./access";
 
 export class PermissionError extends Error {
   status: number;
@@ -32,8 +33,9 @@ export async function requireRole(permission: Permission): Promise<AuthorizedCon
   if (!ctx) {
     throw new PermissionError("Niet ingelogd of geen restaurantprofiel gevonden", 401);
   }
-  if (!ctx.isActive) {
-    throw new PermissionError("Account is gedeactiveerd", 403);
+  // Alleen my_access() = "ok" geeft toegang; elke andere uitkomst (ook een fout) weigert.
+  if (!hasAccess(ctx.access)) {
+    throw new PermissionError(accessMessage(ctx.access) ?? "Geen toegang", 403);
   }
   if (!roleHasPermission(ctx.role, permission)) {
     throw new PermissionError(

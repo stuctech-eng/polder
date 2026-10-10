@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
+type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
+const ONGELDIG = { error: "Ongeldige of verlopen link" };
+
+/**
+ * Service-role omzeilt RLS, dus deze route controleert ZELF of het restaurant aan staat (migratie 0025).
+ * Fail closed: ontbrekend restaurant, fout of onbekende waarde = niet actief. Bij een uitgezet restaurant
+ * geeft de link dezelfde melding als een ongeldige link en wordt er niets gelezen of geschreven.
+ */
+async function restaurantActief(supabase: AdminClient, restaurantId: string | null | undefined): Promise<boolean> {
+  if (!restaurantId) return false;
+  const { data, error } = await supabase.from("restaurants").select("is_active").eq("id", restaurantId).maybeSingle();
+  return !error && data?.is_active === true;
+}
+
 /**
  * Publieke route — bewust GEEN requireRole(), want er is geen sessie.
  * De beveiliging zit in de token zelf (niet-raadbaar, eenmalig, gekoppeld
@@ -20,14 +34,18 @@ export async function GET(
     .maybeSingle();
 
   if (!approval) {
-    return NextResponse.json({ error: "Ongeldige of verlopen link" }, { status: 404 });
+    return NextResponse.json(ONGELDIG, { status: 404 });
   }
 
   const { data: receipt } = await supabase
     .from("receipts")
-    .select("id, status, total, receipt_number, receipt_date, receipt_lines(*)")
+    .select("id, status, total, receipt_number, receipt_date, restaurant_id, receipt_lines(*)")
     .eq("id", approval.receipt_id)
     .single();
+
+  if (!(await restaurantActief(supabase, receipt?.restaurant_id))) {
+    return NextResponse.json(ONGELDIG, { status: 404 });
+  }
 
   const { data: company } = await supabase
     .from("companies")
@@ -35,9 +53,11 @@ export async function GET(
     .eq("id", approval.company_id)
     .single();
 
+  // restaurant_id was alleen nodig voor de controle; niet naar buiten geven
+  const { restaurant_id: _restaurantId, ...openbareBon } = receipt ?? {};
   return NextResponse.json({
     approvalStatus: approval.status,
-    receipt,
+    receipt: receipt ? openbareBon : receipt,
     companyName: company?.name ?? "Onbekend bedrijf",
   });
 }
@@ -64,13 +84,7 @@ export async function POST(
     .maybeSingle();
 
   if (!approval) {
-    return NextResponse.json({ error: "Ongeldige of verlopen link" }, { status: 404 });
-  }
-  if (approval.status !== "pending") {
-    return NextResponse.json(
-      { error: `Deze goedkeuring is al verwerkt (status: ${approval.status})` },
-      { status: 400 }
-    );
+    return NextResponse.json(ONGELDIG, { status: 404 });
   }
 
   const { data: receipt } = await supabase
@@ -78,6 +92,18 @@ export async function POST(
     .select("id, status, restaurant_id")
     .eq("id", approval.receipt_id)
     .single();
+
+  // Vóór elke andere controle en vóór elke schrijfactie
+  if (!(await restaurantActief(supabase, receipt?.restaurant_id))) {
+    return NextResponse.json(ONGELDIG, { status: 404 });
+  }
+
+  if (approval.status !== "pending") {
+    return NextResponse.json(
+      { error: `Deze goedkeuring is al verwerkt (status: ${approval.status})` },
+      { status: 400 }
+    );
+  }
 
   if (!receipt || receipt.status !== "pending_approval") {
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { parseAccess, type AccessStatus } from "@/lib/user-management/access";
 
 /**
  * Ververst de Supabase-sessie op elk request en geeft de bijgewerkte
@@ -37,17 +38,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let isActive = true;
+  // Alleen voor navigatie (doorsturen met een melding). De beveiligingsgrens zit in requireRole (fail closed) en RLS.
+  // Bij een fout of onbekende status sturen we hier NIET door: de pagina's weigeren dan zelf via requireRole.
+  let access: AccessStatus = "onbekend";
   if (user) {
-    const { data: profile } = await supabase
-      .from("users")
-      .select("is_active")
-      .eq("id", user.id)
-      .maybeSingle();
-    // Onbekend profiel (bijv. net uitgenodigd, nog niet gekoppeld) blokkeert niet vooraf —
-    // dat wordt al elders afgevangen (bijv. "Geen restaurantprofiel gevonden" in routes).
-    isActive = profile?.is_active !== false;
+    const { data, error } = await supabase.rpc("my_access");
+    access = parseAccess(data, error);
   }
 
-  return { response, user, isActive };
+  return { response, user, access };
 }
