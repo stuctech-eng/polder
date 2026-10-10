@@ -617,10 +617,10 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users en de drie logtabellen", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
-case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op ALLE tabellen", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen en de platformtabellen (0026)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platformtabellen (0026, bewust smaller: zie PA-cases)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
      "select has_table_privilege('authenticated','public.restaurants','select') and not has_table_privilege('authenticated','public.restaurants','insert,update,delete')", False, True, 2)
 case("PR27", "PRIVILEGES", "standaardrechten voor nieuwe tabellen bevatten geen TRUNCATE/TRIGGER/REFERENCES voor anon/authenticated/service_role", "postgres", "check",
@@ -853,6 +853,62 @@ case("H590", H, "approvals_guard bevat beide nieuwe controles; trigger actief; f
      "and position('geen nieuwe goedkeuring meer krijgen' in pg_get_functiondef('public.approvals_guard()'::regprocedure)) > 0 "
      "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='approvals_guard') = 1 "
      "and not has_function_privilege('authenticated','public.approvals_guard()','EXECUTE') and not has_function_privilege('service_role','public.approvals_guard()','EXECUTE')", False, True, 7)
+
+# ---------------------------------------------------------------- PLATFORMBEHEER (migratie 0026)
+# Beheerderslijst en logboek: alleen de server (service_role) leest; het logboek kan alleen aangevuld worden.
+# Logregels ontstaan alleen samen met de actie, in één transactie (functies uit 0027).
+# Een platformbeheerder heeft GEEN restaurantprofiel en ziet dus geen restaurantdata. Vóór 0026 falen de positieve cases.
+PL = "PLATFORM"
+PADM = f"uid:{ORPH}"
+MAAK_ADMIN = f"insert into platform_admins (user_id) values ('{ORPH}');"
+LOGREGEL = "insert into platform_log (admin_user_id, action) values ('" + ORPH + "', 'restaurant_aan');"
+case("PA01", PL, "owner A leest beheerderslijst", OWNER, "select", "select 1 from platform_admins", False, setup=MAAK_ADMIN)
+case("PA02", PL, "owner A leest platformlogboek", OWNER, "select", "select 1 from platform_log", False, setup=LOGREGEL)
+case("PA03", PL, "owner A schrijft in platformlogboek", OWNER, "dml", "insert into platform_log (admin_user_id, action) values (auth.uid(), 'restaurant_aan')", False)
+case("PA04", PL, "owner A maakt zichzelf beheerder", OWNER, "dml", "insert into platform_admins (user_id) values (auth.uid())", False)
+case("PA05", PL, "anon leest platformlogboek", "anon", "select", "select 1 from platform_log", False, setup=LOGREGEL)
+case("PA06", PL, "beheerder zelf leest beheerderslijst (alleen via de server)", PADM, "select", "select 1 from platform_admins", False, setup=MAAK_ADMIN)
+case("PA07", PL, "service_role leest beheerderslijst", "service_role", "select", "select 1 from platform_admins", True, setup=MAAK_ADMIN)
+case("PA08", PL, "service_role schrijft rechtstreeks in platformlogboek (alleen via de actiefuncties van 0027)", "service_role", "dml", "insert into platform_log (admin_user_id, action) values ('" + ORPH + "', 'restaurant_uit')", False)
+case("PA09", PL, "service_role wijzigt platformlogboek", "service_role", "dml", "update platform_log set action = 'restaurant_uit'", False, setup=LOGREGEL)
+case("PA10", PL, "service_role wist platformlogboek", "service_role", "dml", "delete from platform_log", False, setup=LOGREGEL)
+case("PA11", PL, "service_role voegt beheerder toe (alleen met SQL)", "service_role", "dml", f"insert into platform_admins (user_id) values ('{ORPH}')", False)
+case("PA12", PL, "logboek weigert onbekende actie", "postgres", "check",
+     "select hardening_test.refused_with($$insert into platform_log (admin_user_id, action) values ('" + ORPH + "', 'alles_wissen')$$, 'check')", True)
+case("PF01", PL, "is_platform_admin = waar voor beheerder", PADM, "check", "select coalesce(public.is_platform_admin(), false)", True, setup=MAAK_ADMIN)
+case("PF02", PL, "is_platform_admin = onwaar voor owner A", OWNER, "check", "select not public.is_platform_admin()", True, setup=MAAK_ADMIN)
+case("PF03", PL, "is_platform_admin = onwaar voor uitgezette beheerder", PADM, "check", "select not public.is_platform_admin()", True,
+     setup=MAAK_ADMIN + f" update platform_admins set is_active = false where user_id = '{ORPH}';")
+case("PF04", PL, "anon kan is_platform_admin niet uitvoeren; authenticated wel", "postgres", "check",
+     "select to_regprocedure('public.is_platform_admin()') is not null and not has_function_privilege('anon','public.is_platform_admin()','EXECUTE') "
+     "and has_function_privilege('authenticated','public.is_platform_admin()','EXECUTE')", True)
+case("PF05", PL, "beheerder ziet geen facturen van restaurant A", PADM, "select", f"select 1 from invoices where restaurant_id = '{RA}'", False, setup=MAAK_ADMIN)
+case("PF06", PL, "beheerder ziet geen restaurants via de database", PADM, "select", "select 1 from restaurants", False, setup=MAAK_ADMIN)
+case("PF07", PL, "beheerder: my_access = geen_profiel", PADM, "check", "select public.my_access() = 'geen_profiel'", True, setup=MAAK_ADMIN)
+# 0027: acties alleen via functies (alleen service_role), met beheerderscontrole, en actie + logregel samen of geen van beide
+FUNCS = ("public.platform_restaurant_aanmaken(uuid,text)", "public.platform_restaurant_status(uuid,uuid,boolean)", "public.platform_eigenaar_koppelen(uuid,uuid,uuid,text,text)")
+case("PX01", PL, "actiefuncties: alleen service_role mag uitvoeren (niet anon/authenticated)", "postgres", "check",
+     "select " + " and ".join(f"to_regprocedure('{f}') is not null and has_function_privilege('service_role','{f}','EXECUTE') "
+                               f"and not has_function_privilege('authenticated','{f}','EXECUTE') and not has_function_privilege('anon','{f}','EXECUTE')" for f in FUNCS), True)
+case("PX02", PL, "owner A zet via de functie een restaurant uit", OWNER, "dml", f"select public.platform_restaurant_status('{ORPH}', '{RB}', false)", False, setup=MAAK_ADMIN)
+case("PX03", PL, "service_role met een niet-beheerder: geweigerd", "service_role", "check",
+     "select hardening_test.refused_with($$select public.platform_restaurant_status((select id from auth.users where email = 'a.owner@staging.test'), '" + RA + "', false)$$, 'geen platformbeheerder')", True)
+case("PX04", PL, "service_role met beheerder: A uit + logregel restaurant_uit", "service_role", "check",
+     "select hardening_test.daarna($$select public.platform_restaurant_status('" + ORPH + "', '" + RA + "', false)$$, "
+     "$$select not (select is_active from restaurants where id = '" + RA + "') and (select action from platform_log order by id desc limit 1) = 'restaurant_uit'$$)", True, setup=MAAK_ADMIN)
+GEEN_LOG = "alter table platform_log add constraint proef_log_faalt check (false) not valid;"
+case("PX05", PL, "logregel faalt -> uitzetten teruggedraaid (A blijft aan)", "service_role", "check",
+     "select hardening_test.refused_with($$select public.platform_restaurant_status('" + ORPH + "', '" + RA + "', false)$$, 'proef_log_faalt') "
+     f"and (select is_active from restaurants where id = '{RA}')", True, setup=MAAK_ADMIN + GEEN_LOG)
+case("PX06", PL, "logregel faalt -> aanmaken teruggedraaid (geen nieuw restaurant)", "service_role", "check",
+     "select hardening_test.refused_with($$select public.platform_restaurant_aanmaken('" + ORPH + "', 'Proef')$$, 'proef_log_faalt') "
+     "and not exists (select 1 from restaurants where name = 'Proef')", True, setup=MAAK_ADMIN + GEEN_LOG)
+case("PX07", PL, "logregel faalt -> eigenaar koppelen teruggedraaid (geen profiel)", "service_role", "check",
+     "select hardening_test.refused_with($$select public.platform_eigenaar_koppelen('" + ORPH + "', '" + RC + "', '" + ORPH + "', 'X', 'x@x')$$, 'proef_log_faalt') "
+     f"and not exists (select 1 from users where id = '{ORPH}')", True, setup=MAAK_ADMIN + GEEN_LOG)
+case("PX08", PL, "onbekend restaurant: geweigerd, geen logregel", "service_role", "check",
+     "select hardening_test.refused_with($$select public.platform_restaurant_status('" + ORPH + "', 'e0000000-0000-0000-0000-000000000099', false)$$, 'niet gevonden') "
+     "and not exists (select 1 from platform_log)", True, setup=MAAK_ADMIN)
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
 # Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):

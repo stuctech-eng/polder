@@ -104,8 +104,13 @@ begin execute p_sql; return true; exception when others then return false; end $
 create or replace function hardening_test.refused_with(p_sql text, p_msg text) returns boolean
 language plpgsql as $$
 begin execute p_sql; return false; exception when others then return position(p_msg in sqlerrm) > 0; end $$;
+-- voer p_sql uit en toets daarna (nieuwe opdracht, ziet het effect) p_check; geeft de uitkomst van p_check
+create or replace function hardening_test.daarna(p_sql text, p_check text) returns boolean
+language plpgsql as $$
+declare v boolean; begin execute p_sql; execute p_check into v; return v; end $$;
 grant usage on schema hardening_test to public;
 grant execute on function hardening_test.refused_with(text, text) to public;
+grant execute on function hardening_test.daarna(text, text) to public;
 
 create or replace function hardening_test.run(p_step int default 0)
 returns table (id text, category text, title text, as_user text, expected text, actual text, result text, detail text)

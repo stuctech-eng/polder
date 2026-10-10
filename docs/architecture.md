@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); niet in productie.
+
 **v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (push A v1.0.79, migratie, push B v1.0.80), app-test geslaagd, akkoord.
 
 **v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (v1.0.77, compacte versie), akkoord.
@@ -1833,3 +1835,56 @@ Terugdraaien in omgekeerde volgorde: eerst de app, dan de rollback.
 **Voor een nieuwe sessie/instantie:** begin bij `README.md` sectie "🚦 Start hier" — die bevat de volledige overdracht (huidige stand, eerstvolgende actie, aangehouden werkwijze, bekende valkuilen).
  
     
+
+### 13.19 PLATFORMBEHEER — beheerscherm voor restaurants (migraties 0026 + 0027 + app, 2026-10-10)
+
+> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.**
+> Ronde 2 (na beoordeling GPT): beheeractie en logregel in EEN databasetransactie (migratie 0027); het logboek is alleen via die functies aan te vullen.
+
+**Doel.** Een apart beheerscherm `/platform` waarmee de platformbeheerder restaurants ziet (naam, aan/uit, aantal gebruikers,
+eigenaar met e-mail), een restaurant aanmaakt, aan/uit zet (in plaats van SQL) en de eerste eigenaar uitnodigt; elke actie komt
+in een platformlogboek. Restaurantinhoud (bonnen, facturen, omzet) is voor de beheerder bewust NIET zichtbaar (fase B uit
+roadmap-punt 7 meteen aangehouden; supporttoegang komt later als aparte, gelogde handeling).
+
+**Migratie 0026** (`0026_platformbeheer.sql`, 2.919 tekens; rollback `0026_rollback.sql`, weigert zolang 0027 er is): tabellen
+`platform_admins` (user_id, is_active, created_at) en `platform_log` (id, created_at, admin_user_id, action met vaste lijst,
+restaurant_id, details), beide RLS aan en GEEN policies; alle rechten ingetrokken voor anon/authenticated/service_role, daarna
+alleen SELECT voor `service_role` (op beide). Niemand kan dus rechtstreeks een beheerder toevoegen (alleen met SQL in de editor)
+of het logboek schrijven, wijzigen of wissen. Bewust smaller dan "service_role behoudt alles" (PR25): nieuwe tabellen, er wordt
+niets bestaands ingetrokken. Functie `is_platform_admin()` (SECURITY DEFINER, `search_path = public, pg_temp`; uitvoeren alleen
+authenticated en service_role). Voorcontrole: `my_access` heeft de 0025-vingerafdruk en 0026 bestaat nog niet. Nacontrole: RLS,
+geen policies, rechten, lege beheerderslijst.
+
+**Migratie 0027** (`0027_platform_acties.sql`, 2.983 tekens; rollback `0027_rollback.sql`): drie functies (SECURITY DEFINER,
+`search_path = public, pg_temp`, uitvoeren ALLEEN service_role) die elk eerst controleren dat `p_admin` een actieve beheerder is
+(anders fout 42501), dan de actie doen en daarna de logregel schrijven, in één transactie: `platform_restaurant_aanmaken`,
+`platform_restaurant_status` (onbekend restaurant: fout P0002, geen logregel) en `platform_eigenaar_koppelen` (profiel owner +
+logregel). Mislukt de logregel, dan wordt de actie teruggedraaid. Bij "eigenaar uitnodigen" gaat de uitnodigingsmail van
+Supabase Auth vóór de transactie de deur uit (extern, niet terug te draaien); mislukt de koppeling, dan ruimt de bestaande
+opruimregel het zojuist aangemaakte inlogaccount op, waardoor de link in die mail niet meer werkt.
+
+**Beheerder (B1).** Apart account zonder restaurantprofiel: `stuctech@gmail.com` (het losse account D4 wordt hiervoor gebruikt,
+niet verwijderd). Toevoegen met `supabase/hardening/prod-platform-beheerder.sql` (weigert een account met restaurantprofiel).
+`my_access()` geeft voor dit account `geen_profiel`, dus alle restaurantroutes en RLS blijven dicht. Er bestaat geen app-code die
+`platform_admins` schrijft; registreren, inloggen of een restaurant aanmaken kan nooit beheerder maken.
+
+**App.** `lib/platform/platform-access.ts` (`isPlatformAdmin` fail closed: alleen een expliciet `true`; `requirePlatformAdmin`
+401/403), `lib/platform/platform-service.ts` (service-role, alleen na `requirePlatformAdmin`; acties via de 0027-functies,
+foutvertaling 42501 → 403, P0002 → 404, anders 500 met melding), `lib/platform/route-errors.ts`, routes
+`/api/platform/restaurants` (GET/POST), `/api/platform/restaurants/[id]` (PATCH), `/api/platform/restaurants/[id]/owner` (POST),
+`/api/platform/log` (GET), pagina `app/platform` (layout, page, platform-ui). `app/page.tsx` stuurt een beheerder naar `/platform`.
+De uitnodigingsstap uit teambeheer is gedeeld als `inviteProfile()` in `team-service.ts` (optioneel met eigen profielaanmaak;
+gedrag teambeheer ongewijzigd, getest tegen oude en nieuwe code).
+
+**Tests.** Harnas: 27 PLATFORM-cases (PA01–PA12, PF01–PF07, PX01–PX08; o.a. PX05–PX07: logregel faalt → actie teruggedraaid);
+PR24/PR25 sluiten de platformtabellen uit; nieuwe hulpfunctie `hardening_test.daarna()`. Op 0027: `run(9)` 907 PASS + 1 OPEN;
+op 0026 zonder 0027 falen precies PX01, PX03–PX08. Mutaties: 0026 zonder rechtenregels → PA09–PA11 en PR22 FAIL; 0027 met
+ingeslikte logfout → PX05 FAIL. `tests/platform-tests.sh` 22/22 (0026 en 0027: migratie, tweede keer afgebroken, rollbacks exact
+terug, 0026-rollback weigert met 0027 aanwezig, afwijkende uitgangsstand afgebroken). App-test t10 31/31 (PG16 en PG17), mutaties:
+route zonder beheerderscheck 5 FAIL, fail-open bij fout 1 FAIL, niet-atomaire aan/uit 6 FAIL. t7 (159 + 14 bekend), t8 39/39,
+t9 23/23 per regel identiek aan de oude code. `aanuit-tests` 19/19, `tenantswitch-tests` 22/22, `tsc` schoon, `next build` OK.
+
+**Uitrol.** (1) push A = database-bestanden, tests en docs; (2) `prod-platform-checks.sql` (verwacht 0025/nee/nee/nee/leeg/leeg/nee/leeg);
+(3) migratie 0026; (4) migratie 0027; (5) leesblok opnieuw (verwacht 0025/ja/ja/ja/ja/true/ja/0); (6) beheerder toevoegen;
+(7) push B = app; (8) app-test: inloggen als stuctech@gmail.com → beheerscherm, testrestaurant aanmaken, aan/uit, logboek;
+owner-account ziet `/platform` niet. Rollback: eerst de app terug, dan `0027_rollback.sql`, dan `0026_rollback.sql`.

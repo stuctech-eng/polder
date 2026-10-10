@@ -27,17 +27,20 @@ function builder(role, sub, table){
     lte(c,v){ q.conds.push((P)=>{P.push(v);return `"${c}"<=$${P.length}`}); return b; },
     not(c,op,v){ q.conds.push((P)=>{ if(op==="is") return `"${c}" is not null`; P.push(v); return `"${c}"<>$${P.length}`; }); return b; },
     order(c,o){ q.order=`"${c}" ${o&&o.ascending===false?"desc":"asc"}`; return b; },
+    limit(n){ q.limit=+n; return b; },
     maybeSingle(){ q.single="maybe"; return b; }, single(){ q.single="one"; return b; },
     then(res,rej){ return exec().then(res,rej); },
   };
   async function exec(){
+    // cfg.writeFault = "<tabel>": elke insert/update/delete op die tabel geeft een fout (zichtbaarheid van schrijffouten)
+    if(cfg.writeFault===table && q.op!=="select") return {data:null,error:{message:"boom"},count:null};
     if(cfg.fault && cfg.fault.table===table && q.op==="select"){ if(cfg.fault.mode==="throw") throw new Error("boom"); return {data:null,error:{message:"boom"},count:null}; }
     const P=[]; const w=q.conds.map(f=>f(P)).join(" and ");
     const toks=splitTop(q.cols); const embeds=[]; const base=[];
     for(const t of toks){ const m=t.match(/^(\w+)\((.*)\)$/s); if(m&&REL[table]&&REL[table][m[1]]) embeds.push([m[1],m[2]]); else base.push(t); }
     const cols = (embeds.length||!base.length)?"*":base.join(",");
     let sql;
-    if(q.op==="select") sql = q.head? `select count(*)::int as n from public.${table}${w?" where "+w:""}` : `select ${cols} from public.${table}${w?" where "+w:""}${q.order?" order by "+q.order:""}`;
+    if(q.op==="select") sql = q.head? `select count(*)::int as n from public.${table}${w?" where "+w:""}` : `select ${cols} from public.${table}${w?" where "+w:""}${q.order?" order by "+q.order:""}${q.limit?" limit "+q.limit:""}`;
     if(q.op==="insert"){ const rows=Array.isArray(q.data)?q.data:[q.data]; const ks=Object.keys(rows[0]);
       const vals=rows.map(r=>"("+ks.map(k=>{P.push(typeof r[k]==="object"&&r[k]!==null?JSON.stringify(r[k]):r[k]);return "$"+P.length}).join(",")+")").join(",");
       sql=`insert into public.${table} (${ks.map(k=>`"${k}"`).join(",")}) values ${vals}${q.ret?" returning "+(base.length?base.join(","):"*"):""}`; }
@@ -69,9 +72,21 @@ function createClient(url,key){
   const role = key==="service"?"service_role":"authenticated"; const sub = key.startsWith("user:")?key.slice(5):null;
   return { from:t=>builder(role,sub,t),
     // rpc: roept public.<fn>() aan als deze gebruiker; cfg.rpcFault = "<fn>" geeft een fout terug (fail-closed-test)
-    rpc: async (fn)=>{ if(cfg.rpcFault===fn) return {data:null,error:{message:"boom"}};
-      const r=await runAs(role,sub,`select public.${fn}() as v`,[]); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
-    auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }) },
+    // met argumenten: rpc(fn, { p_a: 1, p_b: 2 }) -> select public.fn(p_a => $1, p_b => $2)
+    rpc: async (fn,args)=>{ if(cfg.rpcFault===fn) return {data:null,error:{message:"boom"}};
+      const ks=Object.keys(args||{}); const named=ks.map((k,i)=>`${k} => $${i+1}`).join(", ");
+      const r=await runAs(role,sub,`select public.${fn}(${named}) as v`,ks.map(k=>args[k])); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
+    auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }),
+      // admin-API (alleen met de service-sleutel); schrijft rechtstreeks in auth.users zoals Supabase Auth dat doet
+      admin: role!=="service_role" ? undefined : {
+        getUserById: async (id)=>{ const c=await db(); const r=await c.query("select id, email, created_at from auth.users where id=$1",[id]);
+          return r.rows[0]?{data:{user:r.rows[0]},error:null}:{data:{user:null},error:{message:"User not found"}}; },
+        inviteUserByEmail: async (email)=>{ const c=await db(); const e=await c.query("select 1 from auth.users where email=$1",[email]);
+          if(e.rowCount) return {data:null,error:{message:"A user with this email address has already been registered",code:"email_exists"}};
+          const r=await c.query("insert into auth.users (instance_id,id,aud,role,email,created_at,updated_at) values ('00000000-0000-0000-0000-000000000000',gen_random_uuid(),'authenticated','authenticated',$1,now(),now()) returning id, email, created_at",[email]);
+          cfg.invites=(cfg.invites||[]).concat(email); return {data:{user:r.rows[0]},error:null}; },
+        deleteUser: async (id)=>{ const c=await db(); await c.query("delete from auth.users where id=$1",[id]); return {error:null}; },
+      } },
     storage:{ from:(bucket)=>({ upload: async (path,bytes,opt)=>{ cfg.uploads.push({bucket,path,opt}); return {error:null}; } }) } };
 }
 module.exports={createClient, cfg, end:async()=>pool&&pool.end()};

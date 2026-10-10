@@ -1,6 +1,6 @@
 # HANDOFF — waar we gebleven zijn (bijgewerkt 10 okt 2026)
 
-Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.64) en `supabase/hardening/README.md`.
+Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.65) en `supabase/hardening/README.md`.
 
 ## Wat staat LIVE
 - Hardening stappen 0–7a + migratie 0022 (approvals_guard aangescherpt) in productie, akkoord.
@@ -9,12 +9,15 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Fase 2 meerdere restaurants — restaurant aan/uit (migratie 0025, v1.0.80)**: in productie sinds 10 okt 16:28 (migratie) / 16:29 (app). Controle 0025/0025/ja/ja/0/false/leeg; app-test door Dick geslaagd (normaal werken; restaurant uit → inlogscherm met "Dit restaurant staat uit"; weer aan → werkt). Aan/uit gaat voorlopig met SQL: `update public.restaurants set is_active = false|true where id = '…';` (productie heeft één restaurant: Café Restaurant Polder, `374a9aa4-a34e-4ec0-ab24-78988a38b0fb`).
 - Productie-database staat op **migratie 0025** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
+## Wat is GEBOUWD maar NIET gepusht / NIET in productie
+- **Platformbeheer (migraties 0026 + 0027, beheerscherm `/platform`)**: lokaal getest op PG16 en PG17 (zie architecture 13.19). Beheerder = apart account stuctech@gmail.com (zonder restaurantprofiel). Beheeractie + logregel in één transactie. Uitrol in DEZE volgorde: push A (database/tests/docs) → `prod-platform-checks.sql` → migratie 0026 → migratie 0027 → leesblok → `prod-platform-beheerder.sql` → push B (app) → app-test.
+
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 ## Volgende stappen (elk met eigen expliciete GO)
-1. Platformbeheer: `platform_admins` + platform-auditlog (met expliciete `revoke` van anon/authenticated), samen met de beheerschermen.
-2. Restaurantbeheer (aanmaken, eigenaar uitnodigen, aan/uit, logboek), featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
+1. Platformbeheer naar productie — gebouwd, zie hierboven.
+2. Featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
 3. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 10–13), privacyfase, gecontroleerde supporttoegang.
 
 ## Open punten (niet vergeten)
@@ -41,8 +44,8 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**
-- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt).
-- `supabase/rollbacks/`: rollbacks per stap (0022, 0023, 0024, 0025).
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026`/`0027`: gebouwd, niet uitgevoerd.
+- `supabase/rollbacks/`: rollbacks per stap (0022–0027).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 
 **Tests (alles lokaal, nooit op productie)**
