@@ -22,11 +22,26 @@ export async function listTeam(supabase: SupabaseClient, restaurantId: string) {
   return userRepository.listByRestaurant(supabase, restaurantId);
 }
 
-export async function inviteUser(
-  supabase: SupabaseClient,
-  ctx: AuthorizedContext,
-  params: { email: string; fullName: string; role: UserRole }
-) {
+type InsertedProfile = Awaited<ReturnType<typeof userAdmin.insertProfile>>;
+
+/**
+ * Uitnodiging + profiel in één stap, gedeeld door teambeheer (inviteUser) en platformbeheer (eerste eigenaar).
+ * Alleen aanroepen NA een autorisatiecheck (requireRole of requirePlatformAdmin); gebruikt de service-role.
+ * Maakt het Auth-account aan, koppelt het profiel aan `restaurantId` en ruimt bij een fout een zojuist aangemaakt account op.
+ * De uitnodigingsmail gaat vóór de profielaanmaak de deur uit; die kan geen transactie terugdraaien.
+ */
+export async function inviteProfile(
+  params: { restaurantId: string; email: string; fullName: string; role: UserRole }
+): Promise<InsertedProfile>;
+export async function inviteProfile<T>(
+  params: { restaurantId: string; email: string; fullName: string; role: UserRole },
+  /** Eigen profielaanmaak (platformbeheer koppelt profiel + logregel in één databasetransactie). */
+  createProfile: (authUserId: string) => Promise<T>
+): Promise<T>;
+export async function inviteProfile<T>(
+  params: { restaurantId: string; email: string; fullName: string; role: UserRole },
+  createProfile?: (authUserId: string) => Promise<T>
+): Promise<T | InsertedProfile> {
   if (!userAdmin.isUserRole(params.role)) throw new Error("Ongeldige rol");
   const admin = createSupabaseAdminClient();
 
@@ -38,11 +53,11 @@ export async function inviteUser(
     throw new Error("Dit e-mailadres is al in gebruik");
   }
 
-  let newUser;
   try {
-    newUser = await userAdmin.insertProfile(admin, {
+    if (createProfile) return await createProfile(authUserId);
+    return await userAdmin.insertProfile(admin, {
       id: authUserId,
-      restaurantId: ctx.restaurantId,
+      restaurantId: params.restaurantId,
       fullName: params.fullName,
       role: params.role,
     });
@@ -58,6 +73,15 @@ export async function inviteUser(
     }
     throw new Error(`Gebruiker kon niet worden aangemaakt: ${err?.message ?? "onbekende fout"}.${cleanupNote}`);
   }
+}
+
+export async function inviteUser(
+  supabase: SupabaseClient,
+  ctx: AuthorizedContext,
+  params: { email: string; fullName: string; role: UserRole }
+) {
+  const newUser = await inviteProfile({ restaurantId: ctx.restaurantId, ...params });
+  const authUserId = newUser.id;
 
   await publishUserEvent(supabase, {
     restaurantId: ctx.restaurantId,

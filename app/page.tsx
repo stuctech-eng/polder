@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserContext } from "@/lib/user-management/session-context";
 import { hasPermission } from "@/lib/user-management/permission-service";
+import { isPlatformAdmin } from "@/lib/platform/platform-access";
 
 export default async function RootPage() {
   const ctx = await getCurrentUserContext();
@@ -14,6 +15,9 @@ export default async function RootPage() {
     if (hasPermission(ctx.role, "MANAGE_OPEN_TABS")) {
       redirect("/open-tabs");
     }
+  } else if (await isPlatformAdmin()) {
+    // Platformbeheerder: apart account zonder restaurantprofiel (B1) — naar het beheerscherm.
+    redirect("/platform");
   }
 
   redirect("/dashboard"); // middleware stuurt niet-ingelogde gebruikers alsnog naar /login
