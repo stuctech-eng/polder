@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt); stap 9 (restaurant aan/uit, 0025) gebouwd en lokaal getest, wacht op GO.** Niets in deze map wijzigt productie zonder expliciete GO.
+**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt); stap 9 (restaurant aan/uit, 0025) in productie en akkoord (10 okt, app v1.0.80).** Niets in deze map wijzigt productie zonder expliciete GO.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -49,7 +49,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 7+ | aanscherping `approvals_guard` | `0022_hardening_step7_approvals_guard.sql` (**in productie, akkoord**) | `rollbacks/0022_rollback.sql` | `run(7)` |
 | 7b | afgewezen bon niet factureren | `0023_hardening_plan7b_invoice_block.sql` + app-wijziging (**app live sinds v1.0.74; migratie 0023 voorbereid en lokaal getest, NIET uitgevoerd in productie**) | `rollbacks/0023_rollback.sql` | `run(99)` (cases staan sinds 10 okt op eigen stap 99; alleen zinvol op een database MET 0023) |
 | 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**in productie, akkoord — 10 okt 2026**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
-| 9 | **Restaurant aan/uit (fase 2)**: `restaurants.is_active`, `my_restaurant_id()`/`my_role()` met restaurantcontrole, `my_access()` | `0025_restaurant_aan_uit.sql` + app (**gebouwd en lokaal getest op PG16 + PG17; wacht op GO**) | `rollbacks/0025_rollback.sql` (eerst app terug) | `run(9)` + `tests/aanuit-tests.sh` + app-test t9 + `prod-aanuit-checks.sql` |
+| 9 | **Restaurant aan/uit (fase 2)**: `restaurants.is_active`, `my_restaurant_id()`/`my_role()` met restaurantcontrole, `my_access()` | `0025_restaurant_aan_uit.sql` + app (**in productie sinds 10 okt; controle 0025/0025/ja/ja/0/false/leeg; app-test geslaagd**) | `rollbacks/0025_rollback.sql` (eerst app terug) | `run(9)` + `tests/aanuit-tests.sh` + app-test t9 + `prod-aanuit-checks.sql` |
 | 10 | H4b invoices/payments/documents (rolrechten) | gepland | gepland | `run(10)` |
 | 11 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland | gepland | `run(11)` |
 | 12 | H10 PIN-geheimen | gepland (+ app) | gepland | `run(12)` |

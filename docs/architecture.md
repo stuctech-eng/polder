@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); niet in productie.
+**v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (push A v1.0.79, migratie, push B v1.0.80), app-test geslaagd, akkoord.
 
 **v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (v1.0.77, compacte versie), akkoord.
 
@@ -1783,7 +1783,7 @@ Dick (bedrijven, rekening, factureren, betaling, factuur-PDF), (5) STOP.
 
 ### 13.18 FASE 2 MEERDERE RESTAURANTS — restaurant aan/uit (migratie 0025 + app, 2026-10-10)
 
-> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.**
+> **STATUS (10 okt 2026, 16:29): IN PRODUCTIE en akkoord.** Push A (v1.0.79, alleen database/tests/docs). Vooraf: `prod-aanuit-checks.sql` 0015/0015/nee/nee/0. Migratie 0025 (exact het bestand) "Success". Nacontrole 0025/0025/ja/ja/0/false/leeg. Push B (v1.0.80, app-code). App-test door Dick: normaal werken OK; restaurant uit → inlogscherm met "Dit restaurant staat uit"; weer aan → werkt. Productie-database staat op **0025**. Lokaal getest op PostgreSQL 16.15 en 17.6.
 
 **Doel.** Een restaurant uitzetten: de database geeft dan niemand van dat restaurant nog iets te zien of te wijzigen, de app
 toont "Dit restaurant staat uit", en de publieke goedkeuringslink werkt niet meer. Platformbeheerders-tabel en logboek komen
