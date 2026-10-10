@@ -8,13 +8,17 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Fase 1 meerdere restaurants — tenantswitch (migratie 0024, v1.0.77)**: in productie sinds 10 okt 12:38, akkoord (controle 15 × "nieuw", app-test geslaagd). Een gedeactiveerde gebruiker kan nu in geen enkele tabel meer iets zien of wijzigen.
 - Productie-database staat op **migratie 0024** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
+## Wat is GEBOUWD maar NIET gepusht / NIET in productie
+- **Fase 2 — restaurant aan/uit (migratie 0025 + app)**: lokaal getest op PG16 en PG17 (zie architecture 13.18). Wacht op beoordeling en GO. Uitrol, in DEZE volgorde: push A (alleen database-bestanden/tests/docs) → migratie 0025 → `prod-aanuit-checks.sql` → push B (app-code = live) → app-test. De app-code eerder live zetten zou iedereen buitensluiten: de nieuwe app heeft `my_access()` nodig.
+
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 ## Volgende stappen (elk met eigen expliciete GO)
-1. Platformbasis: `restaurants.status`, `my_restaurant_id()` NULL bij inactief restaurant, `platform_admins` + platform-auditlog (met expliciete `revoke` van anon/authenticated), publieke goedkeuringslink weigeren bij inactief restaurant, app-melding. Eerst inventaris service-role-gebruik.
-2. Restaurantbeheer (aanmaken, eigenaar uitnodigen, aan/uit, logboek), featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-3. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 9–12), privacyfase, gecontroleerde supporttoegang.
+1. Fase 2 (restaurant aan/uit) naar productie — gebouwd, zie hierboven.
+2. Platformbeheer: `platform_admins` + platform-auditlog (met expliciete `revoke` van anon/authenticated), samen met de beheerschermen.
+3. Restaurantbeheer (aanmaken, eigenaar uitnodigen, aan/uit, logboek), featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
+4. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 9–12), privacyfase, gecontroleerde supporttoegang.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.

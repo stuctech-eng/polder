@@ -332,8 +332,29 @@ begin
   return coalesce(h, '(weg)');
 end $$;
 
+-- Fase 2 (0025): met p_restaurant_uit = true wordt restaurant A vlak vóór stap 4 uitgezet en voert p_weiger (standaard de
+-- gedeactiveerde gebruiker; voor fase 2 de actieve owner van A) de opdracht uit. Bestaat de kolom is_active nog niet
+-- (vóór 0025), dan blijft A aan en heeft de opdracht dus effect (= FAIL om de juiste reden).
+drop function if exists hardening_test.inactief_dml(text, text, text);
+-- zet restaurant A uit (alleen als de kolom bestaat, dus vanaf 0025); altijd binnen een teruggedraaide (sub)transactie gebruiken
+create or replace function hardening_test.restaurant_a_uit() returns void language plpgsql as $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'restaurants' and column_name = 'is_active') then
+    execute 'update public.restaurants set is_active = false where id = ''a0000000-0000-0000-0000-000000000001''';
+  end if;
+end $$;
+grant execute on function hardening_test.restaurant_a_uit() to public;
+create or replace function hardening_test.restaurant_a_aan() returns void language plpgsql as $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'restaurants' and column_name = 'is_active') then
+    execute 'update public.restaurants set is_active = true where id = ''a0000000-0000-0000-0000-000000000001''';
+  end if;
+end $$;
+grant execute on function hardening_test.restaurant_a_aan() to public;
+
 create or replace function hardening_test.inactief_dml(p_tbl text, p_op text,
-  p_actief text default 'a.owner@staging.test', out opzet_ok boolean, out geweigerd boolean, out detail text)
+  p_actief text default 'a.owner@staging.test', p_weiger text default 'a.inactive@staging.test',
+  p_restaurant_uit boolean default false, out opzet_ok boolean, out geweigerd boolean, out detail text)
 language plpgsql as $fn$
 declare
   d record; ids jsonb; s text; a record; i record; h0 text; h1 text; h2 text;
@@ -358,7 +379,8 @@ begin
                 when 'INSERT' then hardening_test.dml_vul('select exists (select 1 from public.' || p_tbl || ' where id = {N})', ids)
                 else null end);
     h1 := hardening_test.dml_rij(p_tbl, (ids->>'R')::uuid);
-    select * into i from hardening_test.dml_probeer('a.inactive@staging.test', s, p_op = 'SELECT', null);
+    if p_restaurant_uit then perform hardening_test.restaurant_a_uit(); end if;
+    select * into i from hardening_test.dml_probeer(p_weiger, s, p_op = 'SELECT', null);
     h2 := hardening_test.dml_rij(p_tbl, (ids->>'R')::uuid);
     opzet_ok := h0 <> '(weg)' and a.fout is null and a.n = 1 and coalesce(a.effect, true) and h1 = h0 and h2 = h0;
     geweigerd := opzet_ok and case when p_op = 'INSERT' then coalesce(i.fout, '') like '%row-level security%'

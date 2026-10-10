@@ -1,6 +1,6 @@
 const { Client } = require("pg");
 let pool; const cfg = global.__cfg = global.__cfg || { uploads: [] };
-async function db(){ if(!pool){ pool=new Client({host:"/home/pgtest",port:55432,database:process.env.TESTDB||"s3",user:"pgtest"}); await pool.connect(); } return pool; }
+async function db(){ if(!pool){ pool=new Client({host:process.env.PGHOST||"/home/pgtest",port:+(process.env.PGPORT||55432),database:process.env.TESTDB||"s3",user:process.env.PGUSER||"pgtest"}); await pool.connect(); } return pool; }
 async function runAs(role, sub, sql, params){
   const c = await db();
   await c.query("begin");
@@ -67,6 +67,11 @@ function builder(role, sub, table){
 }
 function createClient(url,key){
   const role = key==="service"?"service_role":"authenticated"; const sub = key.startsWith("user:")?key.slice(5):null;
-  return { from:t=>builder(role,sub,t), storage:{ from:(bucket)=>({ upload: async (path,bytes,opt)=>{ cfg.uploads.push({bucket,path,opt}); return {error:null}; } }) } };
+  return { from:t=>builder(role,sub,t),
+    // rpc: roept public.<fn>() aan als deze gebruiker; cfg.rpcFault = "<fn>" geeft een fout terug (fail-closed-test)
+    rpc: async (fn)=>{ if(cfg.rpcFault===fn) return {data:null,error:{message:"boom"}};
+      const r=await runAs(role,sub,`select public.${fn}() as v`,[]); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
+    auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }) },
+    storage:{ from:(bucket)=>({ upload: async (path,bytes,opt)=>{ cfg.uploads.push({bucket,path,opt}); return {error:null}; } }) } };
 }
 module.exports={createClient, cfg, end:async()=>pool&&pool.end()};

@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt).** Niets in deze map wijzigt productie zonder expliciete GO.
+**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt); stap 9 (restaurant aan/uit, 0025) gebouwd en lokaal getest, wacht op GO.** Niets in deze map wijzigt productie zonder expliciete GO.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -16,6 +16,8 @@ Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 
 | `permission-baseline.json` | — | Exacte kopie van de TypeScript-rechtenmatrix (11 rechten × 5 rollen = 55 rijen) |
 | `prod-tenantswitch-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van de 15 tenant-policies: vóór 0024 15 × "oud", na 0024 15 × "nieuw" |
 | `tests/tenantswitch-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie- en rollbacktests voor 0024 (22 checks) |
+| `tests/aanuit-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie- en rollbacktests voor 0025 (19 checks) |
+| `prod-aanuit-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van 0025: functies, kolom, my_access, dekking (lokaal staat email_settings erbij; bestaat niet in productie) |
 
 ## Testharnas gebruiken
 
@@ -47,12 +49,13 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 7+ | aanscherping `approvals_guard` | `0022_hardening_step7_approvals_guard.sql` (**in productie, akkoord**) | `rollbacks/0022_rollback.sql` | `run(7)` |
 | 7b | afgewezen bon niet factureren | `0023_hardening_plan7b_invoice_block.sql` + app-wijziging (**app live sinds v1.0.74; migratie 0023 voorbereid en lokaal getest, NIET uitgevoerd in productie**) | `rollbacks/0023_rollback.sql` | `run(99)` (cases staan sinds 10 okt op eigen stap 99; alleen zinvol op een database MET 0023) |
 | 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**in productie, akkoord — 10 okt 2026**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
-| 9 | H4b invoices/payments/documents (rolrechten) | gepland: `0025_…` | gepland | `run(9)` |
-| 10 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland: `0026_…` | gepland | `run(10)` |
-| 11 | H10 PIN-geheimen | gepland: `0027_…` (+ app) | gepland | `run(11)` |
-| 12 | H8b definitieve least privilege + eindtest | gepland: `0028_…` | gepland | `run(12)` + her-audit |
+| 9 | **Restaurant aan/uit (fase 2)**: `restaurants.is_active`, `my_restaurant_id()`/`my_role()` met restaurantcontrole, `my_access()` | `0025_restaurant_aan_uit.sql` + app (**gebouwd en lokaal getest op PG16 + PG17; wacht op GO**) | `rollbacks/0025_rollback.sql` (eerst app terug) | `run(9)` + `tests/aanuit-tests.sh` + app-test t9 + `prod-aanuit-checks.sql` |
+| 10 | H4b invoices/payments/documents (rolrechten) | gepland | gepland | `run(10)` |
+| 11 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland | gepland | `run(11)` |
+| 12 | H10 PIN-geheimen | gepland (+ app) | gepland | `run(12)` |
+| 13 | H8b definitieve least privilege + eindtest | gepland | gepland | `run(13)` + her-audit |
 
-Hernummering 10 okt: de tenantswitch werd stap 8; de oude stappen 8–11 schoven naar 9–12 (27 cases, verder ongewijzigd — bewezen tegen de 542 cases van daarvoor). De migratienummers van de latere stappen liggen pas vast als ze gebouwd worden.
+Hernummering 10 okt: de tenantswitch werd stap 8 (oude 8–11 → 9–12, bewezen tegen 542 cases); daarna werd restaurant aan/uit stap 9 (9–12 → 10–13, bewezen tegen 693 cases). De migratienummers van de latere stappen liggen pas vast als ze gebouwd worden.
 
 Lokaal bouwen: `PSQL="psql -X -q -h <socket> -p <poort> -U postgres" DB=<naam> TOT=0022|0024 [MET_0023=1] bash tests/local-build.sh`.
 De seed wordt geladen met `session_replication_role = replica` (de guards van stap 7 weigeren anders bijvoorbeeld een direct aangemaakte gesloten rekening).

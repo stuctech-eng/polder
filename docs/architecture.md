@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); niet in productie.
+
 **v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (v1.0.77, compacte versie), akkoord.
 
 **v1.62** — PLAN 7b (afgewezen bon niet factureren): `lib/approval/invoice-blocking.ts` (afwijzingsblokkade en facturatieblokkade als pure functies), precheck in `generate-invoice` vóór elke schrijfactie, knop "Opnieuw indienen" met uitleg en waarschuwing op de rekening, migratie `0023_hardening_plan7b_invoice_block.sql` + rollback (`open_tabs_guard`, alleen `closed → invoiced`), gedeelde scenariolijst `invoice-block-scenarios.json`, sectie 13.16. App live (v1.0.74); migratie 0023 voorbereid maar NIET uitgevoerd (zie 13.16).
@@ -1779,7 +1781,52 @@ vervallen, omdat de tekstcontrole alle 91 onderzochte foutvarianten al vangt.
 het bestand, (3) `supabase/hardening/prod-tenantswitch-checks.sql` (alleen lezen; verwacht 15 × "nieuw"), (4) app-test door
 Dick (bedrijven, rekening, factureren, betaling, factuur-PDF), (5) STOP.
 
-## 12. STATUS
+### 13.18 FASE 2 MEERDERE RESTAURANTS — restaurant aan/uit (migratie 0025 + app, 2026-10-10)
+
+> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.**
+
+**Doel.** Een restaurant uitzetten: de database geeft dan niemand van dat restaurant nog iets te zien of te wijzigen, de app
+toont "Dit restaurant staat uit", en de publieke goedkeuringslink werkt niet meer. Platformbeheerders-tabel en logboek komen
+in de volgende fase, samen met de schermen die ze gebruiken (nu zou het ongebruikte code zijn). Tot dan zet Dick een
+restaurant aan/uit met SQL (`update restaurants set is_active = … where id = …`).
+
+**Migratie 0025** (`0025_restaurant_aan_uit.sql`, 2.678 tekens; rollback `0025_rollback.sql`): kolom `restaurants.is_active`
+(standaard aan); `my_restaurant_id()` en `my_role()` geven NULL als de gebruiker óf het restaurant uit staat (daardoor ook
+`has_perm()` onwaar); nieuwe `my_access()` (SECURITY DEFINER, alleen authenticated/service_role) met precies vijf uitkomsten:
+niet_ingelogd, geen_profiel, gebruiker_uit, restaurant_uit, ok. Vooraf: functies exact de 0015-versie (fingerprints), kolom en
+my_access bestaan nog niet; achteraf: eigenschappen, rechten, alle restaurants aan. De rollback draait alleen vanuit de exacte
+0025-stand en weigert als er een restaurant uit staat (geen stille heractivering); daarna exact 0015. Rollback-volgorde: eerst
+de app terug, dan de database. Een eigenaar kan zijn restaurant niet zelf aan/uit zetten (geen UPDATE-recht op restaurants).
+
+**Dekking (gecontroleerd met een catalogusquery, ook als harnas-case RC01 en in `prod-aanuit-checks.sql`).** Alle policies in
+public en storage lopen via `my_restaurant_id()`/`has_perm()`, met één bewuste uitzondering: "users can see own profile"
+(`id = auth.uid()`), zodat de app de reden kan tonen. Service-role-routes: teambeheer en uitnodigen gaan eerst door
+`requireRole`; de publieke goedkeuringslink heeft een eigen controle; de keep-alive geeft geen data.
+
+**App.** `lib/user-management/access.ts` (status, `hasAccess`, `blockedReason`, meldingen; fout of onbekende waarde =
+"onbekend" = geen toegang). `session-context` haalt `my_access()` op; `requireRole` laat alleen "ok" door (fail closed, ook bij
+een fout). De middleware stuurt alleen door met een melding bij gebruiker_uit/restaurant_uit (navigatie, geen
+beveiligingsgrens). Inlogscherm: melding "Dit restaurant staat uit". Publieke goedkeuringslink: controleert vóór lezen en
+schrijven of het restaurant aan staat (fail closed), geeft anders "Ongeldige of verlopen link" en geeft `restaurant_id` niet
+naar buiten.
+
+**Tests (PG16 én PG17).** Harnas 881 cases (693 + 188 nieuw; stap 9 = restaurant aan/uit, oude stappen 9–12 → 10–13,
+bewezen: alle 693 aanwezig, niets gewijzigd behalve de bedoelde stappen). Op 0024: `run(8)` 880 PASS + 1 OPEN, `run(9)`
+precies de 94 stap-9-cases FAIL (owner ziet/wijzigt nog, my_access bestaat nog niet). Op 0025: `run(9)` 880 PASS + 1 OPEN.
+Gedekt: lezen in alle 25 tabellen en opslag, upload, schrijven (15 tabellen × 4 bewerkingen met positieve controle),
+functiecontracten en alle vijf my_access-uitkomsten, restaurant B blijft werken, A weer aan = toegang terug, eigenaar kan niet
+zelf aan/uit, dekking. `aanuit-tests.sh` 19/19 (slagen, tweede keer, afwijkende functie, rollback met restaurant uit, afwijkende
+0025-stand, rollback exact terug, telkens "niets gewijzigd"). App-test t9 23/23 (poort met echte database, fail closed bij
+fout, twee routes, publieke link lezen/goedkeuren/afwijzen zonder schrijfacties); met de oude linkcode falen precies de 5
+linktests. t7/t8 per regel identiek aan fase 1. `tsc` schoon, `next build` geslaagd.
+
+**Uitrol (na GO, één stap per bericht) — volgorde is hier belangrijk:** een push zet de app direct live (Vercel), en de nieuwe
+app heeft `my_access()` nodig (fail closed: zonder die functie komt niemand binnen). Daarom twee pushes: (1) push A = alleen
+database-bestanden, tests en docs (geen app-wijziging, veilig), (2) migratie 0025 als kopieerblok exact gelijk aan het bestand
+op main (de oude app blijft werken, want zolang alle restaurants aan staan verandert er niets), (3) `prod-aanuit-checks.sql`,
+(4) push B = de app-code (app live), (5) app-test: inloggen, een testrestaurant tijdelijk uit (SQL), melding zien, weer aan.
+Terugdraaien in omgekeerde volgorde: eerst de app, dan de rollback.
+
 
 **Architectuur: BEVROREN — v1.0** (kernblueprint) + **v1.21 goedgekeurde uitbreiding** (Approval Engine + Bedrijfsreferenties, sectie 8) + **Daily Closing Engine** (sectie 9) + **drie-fasen-roadmap** (sectie 10: Administratieplatform ✅ → Integratieplatform → Financieel platform). **Implementatie: Fase 1 (Administratieplatform) COMPLEET** — Fase 1 kernmodules, Fase A/A.5/B/C, Daily Closing, rechtenmatrix, Factuurstatus + Betalingen (v1.42), alle bekende RLS/GRANT-gaten gedicht. **Fase 0 (audit) en baseline (0014) zijn klaar (sectie 13); volgende gebouwde stap: security hardening (na expliciete GO, roadmap-punt 7).** Eerder: Resend-domein activeren (wacht op restauranthouder), daarna Fase D (digitale handtekening) — daarna pas Fase 2 (Integratieplatform) en Fase 3 (Financieel platform/Payment Engine, v1.43).** Dit document staat per sectie 3 boven aannames.
 
