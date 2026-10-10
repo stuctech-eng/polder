@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) gebouwd en lokaal getest, wacht op GO.** Niets in deze map wijzigt productie zonder expliciete GO.
+**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt).** Niets in deze map wijzigt productie zonder expliciete GO.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -46,7 +46,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 7 | H4a open_tabs/receipts/receipt_lines/approvals | `0021_hardening_step7_tabs_receipts.sql` (**in productie, akkoord**) | `rollbacks/0021_rollback.sql` | `run(7)` |
 | 7+ | aanscherping `approvals_guard` | `0022_hardening_step7_approvals_guard.sql` (**in productie, akkoord**) | `rollbacks/0022_rollback.sql` | `run(7)` |
 | 7b | afgewezen bon niet factureren | `0023_hardening_plan7b_invoice_block.sql` + app-wijziging (**app live sinds v1.0.74; migratie 0023 voorbereid en lokaal getest, NIET uitgevoerd in productie**) | `rollbacks/0023_rollback.sql` | `run(99)` (cases staan sinds 10 okt op eigen stap 99; alleen zinvol op een database MET 0023) |
-| 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**gebouwd en lokaal getest op PG16 + PG17; productie wacht op GO**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
+| 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**in productie, akkoord — 10 okt 2026**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
 | 9 | H4b invoices/payments/documents (rolrechten) | gepland: `0025_…` | gepland | `run(9)` |
 | 10 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland: `0026_…` | gepland | `run(10)` |
 | 11 | H10 PIN-geheimen | gepland: `0027_…` (+ app) | gepland | `run(11)` |

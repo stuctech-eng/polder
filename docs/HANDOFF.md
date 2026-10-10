@@ -5,21 +5,16 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 ## Wat staat LIVE
 - Hardening stappen 0–7a + migratie 0022 (approvals_guard aangescherpt) in productie, akkoord.
 - **Plan 7b app (v1.0.74)**: een afgewezen bon kan niet gefactureerd worden totdat hij opnieuw is ingediend en goedgekeurd; knop "Opnieuw indienen".
-- Productie-database staat op **migratie 0022**. Productie bevat alleen testdata.
-
-## Wat is GEBOUWD maar NIET UITGEVOERD
-- **Migratie 0024 — tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies lopen via `my_restaurant_id()`, zodat een gedeactiveerde gebruiker nergens meer bij kan en een restaurant later uit te zetten is. Lokaal getest op PostgreSQL 16 én 17 (zie 13.17). **Wacht op GO voor productie.**
-  - Bestanden: `supabase/migrations/0024_tenantswitch_inline_policies.sql`, `supabase/rollbacks/0024_rollback.sql`, `supabase/hardening/prod-tenantswitch-checks.sql` (alleen lezen), `supabase/hardening/tests/tenantswitch-tests.sh`.
-  - Uitrol: (1) push, (2) migratie als kopieerblok exact gelijk aan het bestand, (3) `prod-tenantswitch-checks.sql` → verwacht 15 × "nieuw", (4) app-test door Dick, (5) STOP.
+- **Fase 1 meerdere restaurants — tenantswitch (migratie 0024, v1.0.77)**: in productie sinds 10 okt 12:38, akkoord (controle 15 × "nieuw", app-test geslaagd). Een gedeactiveerde gebruiker kan nu in geen enkele tabel meer iets zien of wijzigen.
+- Productie-database staat op **migratie 0024** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 ## Volgende stappen (elk met eigen expliciete GO)
-1. Fase 1 naar productie (zie hierboven).
-2. Platformbasis: `restaurants.status`, `my_restaurant_id()` NULL bij inactief restaurant, `platform_admins` + platform-auditlog (met expliciete `revoke` van anon/authenticated), publieke goedkeuringslink weigeren bij inactief restaurant, app-melding. Eerst inventaris service-role-gebruik.
-3. Restaurantbeheer (aanmaken, eigenaar uitnodigen, aan/uit, logboek), featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-4. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 9–12), privacyfase, gecontroleerde supporttoegang.
+1. Platformbasis: `restaurants.status`, `my_restaurant_id()` NULL bij inactief restaurant, `platform_admins` + platform-auditlog (met expliciete `revoke` van anon/authenticated), publieke goedkeuringslink weigeren bij inactief restaurant, app-melding. Eerst inventaris service-role-gebruik.
+2. Restaurantbeheer (aanmaken, eigenaar uitnodigen, aan/uit, logboek), featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
+3. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 9–12), privacyfase, gecontroleerde supporttoegang.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
@@ -32,7 +27,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
-- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.75.
+- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.78.
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris).
 
 ## Waar staat wat (bestanden en plekken)
@@ -45,7 +40,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**
-- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024`: gebouwd, wacht op GO.
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024`: in productie (10 okt).
 - `supabase/rollbacks/`: rollbacks per stap (0022, 0023, 0024).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 

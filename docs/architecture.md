@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); NIET uitgevoerd in productie.
+**v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (v1.0.77, compacte versie), akkoord.
 
 **v1.62** — PLAN 7b (afgewezen bon niet factureren): `lib/approval/invoice-blocking.ts` (afwijzingsblokkade en facturatieblokkade als pure functies), precheck in `generate-invoice` vóór elke schrijfactie, knop "Opnieuw indienen" met uitleg en waarschuwing op de rekening, migratie `0023_hardening_plan7b_invoice_block.sql` + rollback (`open_tabs_guard`, alleen `closed → invoiced`), gedeelde scenariolijst `invoice-block-scenarios.json`, sectie 13.16. App live (v1.0.74); migratie 0023 voorbereid maar NIET uitgevoerd (zie 13.16).
 
@@ -1735,7 +1735,7 @@ Migratie `supabase/migrations/0021_hardening_step7_tabs_receipts.sql`, rollback 
 
 ### 13.17 FASE 1 MEERDERE RESTAURANTS — tenantswitch (migratie 0024, 2026-10-10)
 
-> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET uitgevoerd in productie; wacht op GO.**
+> **STATUS (10 okt 2026, 12:38): IN PRODUCTIE en akkoord.** Vooraf: productiecontrole 15 × "oud". Migratie (compacte versie, v1.0.77) "Success". Nacontrole 15 × "nieuw" (1 policy, vorm ok, RLS aan). App-test door Dick (bedrijven, rekening, factureren, betaling, PDF) geslaagd. Productie-database staat op migratie **0024** (0023 niet uitgevoerd).
 
 **Aanleiding (audit 9–10 okt, productie read-only bevestigd).** 15 tabellen gebruikten nog de oude controle uit 0003/0006
 (`… in (select restaurant_id from users where users.id = auth.uid())`, zonder `is_active`): companies, invoices, documents,
