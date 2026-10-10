@@ -15,7 +15,7 @@ select
     not has_table_privilege('authenticated', 'public.platform_admins', 'SELECT,INSERT,UPDATE,DELETE')
     and not has_table_privilege('authenticated', 'public.platform_log', 'SELECT,INSERT,UPDATE,DELETE')
     and not has_table_privilege('anon', 'public.platform_log', 'SELECT,INSERT,UPDATE,DELETE')
-    and not has_table_privilege('service_role', 'public.platform_log', 'UPDATE,DELETE,TRUNCATE')
+    and not has_table_privilege('service_role', 'public.platform_log', 'INSERT,UPDATE,DELETE,TRUNCATE')
     and not has_function_privilege('anon', 'public.is_platform_admin()', 'EXECUTE') end as rechten_ok,
   case when to_regprocedure('public.platform_restaurant_status(uuid,uuid,boolean)') is null then 'nee'
     when (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'platform\_%'

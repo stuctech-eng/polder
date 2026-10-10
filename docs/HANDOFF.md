@@ -1,6 +1,6 @@
 # HANDOFF — waar we gebleven zijn (bijgewerkt 10 okt 2026)
 
-Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.65) en `supabase/hardening/README.md`.
+Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.66) en `supabase/hardening/README.md`.
 
 ## Wat staat LIVE
 - Hardening stappen 0–7a + migratie 0022 (approvals_guard aangescherpt) in productie, akkoord.
@@ -11,6 +11,8 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 
 ## Wat is GEBOUWD maar NIET gepusht / NIET in productie
 - **Platformbeheer (migraties 0026 + 0027, beheerscherm `/platform`)**: lokaal getest op PG16 en PG17 (zie architecture 13.19). Beheerder = apart account stuctech@gmail.com (zonder restaurantprofiel). Beheeractie + logregel in één transactie. Uitrol in DEZE volgorde: push A (database/tests/docs) → `prod-platform-checks.sql` → migratie 0026 → migratie 0027 → leesblok → `prod-platform-beheerder.sql` → push B (app) → app-test.
+
+- **Mail-links (13.20)**: herstel- en uitnodigingslinks werkten niet als Mail ze in een ander venster opende (PKCE). Nieuwe route `/auth/confirm`; na de push moeten in Supabase 2 e-mailsjablonen worden aangepast (tekst in 13.20).
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.

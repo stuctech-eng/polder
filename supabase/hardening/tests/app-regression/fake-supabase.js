@@ -77,6 +77,9 @@ function createClient(url,key){
       const ks=Object.keys(args||{}); const named=ks.map((k,i)=>`${k} => $${i+1}`).join(", ");
       const r=await runAs(role,sub,`select public.${fn}(${named}) as v`,ks.map(k=>args[k])); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
     auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }),
+      // verifyOtp: token_hash "geldig-<type>" is geldig voor dat type, al het andere is ongeldig/verlopen (zoals Supabase)
+      verifyOtp: async ({type, token_hash})=>{ cfg.verifyCalls=(cfg.verifyCalls||[]).concat([{type,token_hash}]);
+        return token_hash===`geldig-${type}` ? {data:{user:{id:"u"},session:{}},error:null} : {data:{user:null,session:null},error:{message:"Email link is invalid or has expired",code:"otp_expired"}}; },
       // admin-API (alleen met de service-sleutel); schrijft rechtstreeks in auth.users zoals Supabase Auth dat doet
       admin: role!=="service_role" ? undefined : {
         getUserById: async (id)=>{ const c=await db(); const r=await c.query("select id, email, created_at from auth.users where id=$1",[id]);

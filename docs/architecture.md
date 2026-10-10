@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.66** — MAIL-LINKS: route `/auth/confirm` (server controleert herstel- en uitnodigingslinks met token_hash), `lib/auth/email-link.ts`, `/reset-password` met vooraf-controle en zichtbare fouten, app-test t11; sectie 13.20. Lokaal getest; niet gepusht.
+
 **v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); niet in productie.
 
 **v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (push A v1.0.79, migratie, push B v1.0.80), app-test geslaagd, akkoord.
@@ -1888,3 +1890,28 @@ t9 23/23 per regel identiek aan de oude code. `aanuit-tests` 19/19, `tenantswitc
 (3) migratie 0026; (4) migratie 0027; (5) leesblok opnieuw (verwacht 0025/ja/ja/ja/ja/true/ja/0); (6) beheerder toevoegen;
 (7) push B = app; (8) app-test: inloggen als stuctech@gmail.com → beheerscherm, testrestaurant aanmaken, aan/uit, logboek;
 owner-account ziet `/platform` niet. Rollback: eerst de app terug, dan `0027_rollback.sql`, dan `0026_rollback.sql`.
+
+### 13.20 MAIL-LINKS — wachtwoord herstellen en uitnodiging server-side controleren (2026-10-10)
+
+> **STATUS (10 okt 2026): gebouwd en lokaal getest. NIET gepusht.** Gevonden tijdens de app-test van platformbeheer.
+
+**Probleem.** De browserclient (`@supabase/ssr` 0.5.2) gebruikt de PKCE-flow: een herstel-link werkt alleen in exact de
+browser waarin hij is aangevraagd (daar staat de geheime sleutel). Op een iPhone opent Mail de link vaak elders (ander
+venster, privévenster); dan faalt het herstel met "Kon wachtwoord niet wijzigen". Uitnodigingen (team en platform) hebben
+hetzelfde probleem. De foutmelding verborg bovendien de echte oorzaak.
+
+**Oplossing.** Route `app/auth/confirm/route.ts`: de server controleert de link met `verifyOtp({ type, token_hash })`, zet de
+sessie (cookies) en stuurt door naar `/reset-password`; dat werkt in elke browser en op elk toestel. Alleen `recovery` en
+`invite`; `next` alleen een eigen pad (geen open redirect); een ongeldige of verlopen link gaat naar `/reset-password` met een
+zichtbare reden en de technische melding. Helpers in `lib/auth/email-link.ts`. `/auth/confirm` is een publiek pad in
+`middleware.ts`. `/reset-password` controleert vooraf of er een geldige sessie is (anders meteen een melding met knop
+"Nieuwe link aanvragen"), toont bij een fout de echte melding en stuurt na het wijzigen naar `/` (juiste plek per account).
+Oude links (`?code=`) blijven werken zoals voorheen.
+
+**Supabase-instelling (eenmalig, dashboard → Authentication → Email Templates).** "Reset password":
+`https://polder.vercel.app/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`; "Invite user":
+`https://polder.vercel.app/auth/confirm?token_hash={{ .TokenHash }}&type=invite`. Eerst de app pushen, daarna de sjablonen.
+
+**Tests.** App-test t11 12/12 (geldige herstel-link en uitnodiging, verlopen link met melding, ander type, ontbrekende token,
+onbekend type, `next` naar eigen pad en geweigerde externe sites); mutatie (foutcontrole weg) → 2 FAIL. t10 31/31, `tsc`,
+`next build` OK. Ook: `prod-platform-checks.sql` controleert nu ook dat de server niets rechtstreeks in het logboek kan schrijven.
