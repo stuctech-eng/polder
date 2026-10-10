@@ -200,3 +200,172 @@ $$;
 create or replace view hardening_test.known_weaknesses as
 select id, category, title, as_user, step as opgelost_in_stap, note
 from hardening_test.cases where expect_now = true and expect_after is false order by step, id;
+
+-- ============================================================
+-- Fase 1 (migratie 0024): bewijs dat een GEDEACTIVEERDE gebruiker op de 15 tenant-tabellen niets kan,
+-- terwijl een ACTIEVE gebruiker met EXACT dezelfde opdracht wel effect heeft. Per tabel en bewerking:
+--   1. verse doelrij (+ verse ouders) als postgres, met bekend id; rij bestaat aantoonbaar
+--   2. actieve gebruiker voert de opdracht uit -> precies 1 rij en het effect wordt nagemeten
+--   3. teruggedraaid; rij exact gelijk aan stap 1 (md5 van de hele rij)
+--   4. gedeactiveerde gebruiker voert DEZELFDE opdracht uit (zelfde SQL, zelfde id, zelfde WHERE)
+--   5. rij exact gelijk aan stap 1
+-- opzet_ok  = 1, 2, 3 en 5 kloppen (een fout in de test zelf geeft dus nooit een vals PASS)
+-- geweigerd = opzet_ok én stap 4 weigert: 0 rijen (SELECT/UPDATE/DELETE) of RLS-fout (INSERT)
+-- Alles in subtransacties die altijd worden teruggedraaid.
+-- ============================================================
+drop table if exists hardening_test.dml_def cascade;
+create table hardening_test.dml_def (tbl text primary key, setup text, ins text, upd text, gewijzigd text);
+-- tokens: {R} doelrij, {N} nieuw id, {FC}/{FC2} verse bedrijven, {FI} verse factuur, {RA} restaurant A
+insert into hardening_test.dml_def values
+ ('companies',
+  'insert into public.companies (id, restaurant_id, name) values ({R},{RA},''proef'')',
+  'insert into public.companies (id, restaurant_id, name) values ({N},{RA},''proef-n'')',
+  'update public.companies set name = ''proef-gewijzigd'' where id = {R}',
+  'select name = ''proef-gewijzigd'' from public.companies where id = {R}'),
+ ('invoices',
+  'insert into public.invoices (id, restaurant_id, company_id, invoice_number, status) values ({R},{RA},{FC},''P-1'',''draft'')',
+  'insert into public.invoices (id, restaurant_id, company_id, invoice_number, status) values ({N},{RA},{FC},''P-2'',''draft'')',
+  'update public.invoices set invoice_number = ''proef-gewijzigd'' where id = {R}',
+  'select invoice_number = ''proef-gewijzigd'' from public.invoices where id = {R}'),
+ ('documents',
+  'insert into public.documents (id, restaurant_id, type, related_table, related_id, storage_path) values ({R},{RA},''report_export'',''invoices'',{FI},''a/proef.pdf'')',
+  'insert into public.documents (id, restaurant_id, type, related_table, related_id, storage_path) values ({N},{RA},''report_export'',''invoices'',{FI},''a/proef-n.pdf'')',
+  'update public.documents set storage_path = ''proef-gewijzigd'' where id = {R}',
+  'select storage_path = ''proef-gewijzigd'' from public.documents where id = {R}'),
+ ('workflow_rules',
+  'insert into public.workflow_rules (id, restaurant_id, company_id, invoice_frequency, requires_approval) values ({R},{RA},{FC},''weekly'',false)',
+  'insert into public.workflow_rules (id, restaurant_id, company_id, invoice_frequency, requires_approval) values ({N},{RA},{FC2},''weekly'',false)',
+  'update public.workflow_rules set invoice_frequency = ''monthly'' where id = {R}',
+  'select invoice_frequency = ''monthly'' from public.workflow_rules where id = {R}'),
+ ('configurations',
+  'insert into public.configurations (id, restaurant_id, company_id, key, value) values ({R},{RA},{FC},''proef'',''{}'')',
+  'insert into public.configurations (id, restaurant_id, company_id, key, value) values ({N},{RA},{FC2},''proef'',''{}'')',
+  'update public.configurations set value = ''{"proef":1}'' where id = {R}',
+  'select value = ''{"proef":1}'' from public.configurations where id = {R}'),
+ ('notifications',
+  'insert into public.notifications (id, restaurant_id, type, trigger_event) values ({R},{RA},''email'',''proef'')',
+  'insert into public.notifications (id, restaurant_id, type, trigger_event) values ({N},{RA},''email'',''proef-n'')',
+  'update public.notifications set trigger_event = ''proef-gewijzigd'' where id = {R}',
+  'select trigger_event = ''proef-gewijzigd'' from public.notifications where id = {R}'),
+ ('integration_plugins',
+  'insert into public.integration_plugins (id, restaurant_id, plugin_type, plugin_name, plugin_version, min_core_version) values ({R},{RA},''pos'',''proef'',''1'',''1'')',
+  'insert into public.integration_plugins (id, restaurant_id, plugin_type, plugin_name, plugin_version, min_core_version) values ({N},{RA},''pos'',''proef-n'',''1'',''1'')',
+  'update public.integration_plugins set plugin_name = ''proef-gewijzigd'' where id = {R}',
+  'select plugin_name = ''proef-gewijzigd'' from public.integration_plugins where id = {R}'),
+ ('contacts',
+  'insert into public.contacts (id, company_id, full_name) values ({R},{FC},''proef'')',
+  'insert into public.contacts (id, company_id, full_name) values ({N},{FC},''proef-n'')',
+  'update public.contacts set full_name = ''proef-gewijzigd'' where id = {R}',
+  'select full_name = ''proef-gewijzigd'' from public.contacts where id = {R}'),
+ ('departments',
+  'insert into public.departments (id, company_id, name) values ({R},{FC},''proef'')',
+  'insert into public.departments (id, company_id, name) values ({N},{FC},''proef-n'')',
+  'update public.departments set name = ''proef-gewijzigd'' where id = {R}',
+  'select name = ''proef-gewijzigd'' from public.departments where id = {R}'),
+ ('cost_centers',
+  'insert into public.cost_centers (id, company_id, name) values ({R},{FC},''proef'')',
+  'insert into public.cost_centers (id, company_id, name) values ({N},{FC},''proef-n'')',
+  'update public.cost_centers set name = ''proef-gewijzigd'' where id = {R}',
+  'select name = ''proef-gewijzigd'' from public.cost_centers where id = {R}'),
+ ('projects',
+  'insert into public.projects (id, company_id, name) values ({R},{FC},''proef'')',
+  'insert into public.projects (id, company_id, name) values ({N},{FC},''proef-n'')',
+  'update public.projects set name = ''proef-gewijzigd'' where id = {R}',
+  'select name = ''proef-gewijzigd'' from public.projects where id = {R}'),
+ ('company_codes',
+  'insert into public.company_codes (id, company_id, type, code) values ({R},{FC},''routecode'',''P1'')',
+  'insert into public.company_codes (id, company_id, type, code) values ({N},{FC},''routecode'',''P2'')',
+  'update public.company_codes set code = ''proef-gewijzigd'' where id = {R}',
+  'select code = ''proef-gewijzigd'' from public.company_codes where id = {R}'),
+ ('approval_settings',
+  'insert into public.approval_settings (id, company_id) values ({R},{FC})',
+  'insert into public.approval_settings (id, company_id) values ({N},{FC2})',
+  'update public.approval_settings set method = ''email'' where id = {R}',
+  'select method = ''email'' from public.approval_settings where id = {R}'),
+ ('invoice_lines',
+  'insert into public.invoice_lines (id, invoice_id, description, amount) values ({R},{FI},''proef'',1)',
+  'insert into public.invoice_lines (id, invoice_id, description, amount) values ({N},{FI},''proef-n'',1)',
+  'update public.invoice_lines set description = ''proef-gewijzigd'' where id = {R}',
+  'select description = ''proef-gewijzigd'' from public.invoice_lines where id = {R}'),
+ ('payments',
+  'insert into public.payments (id, invoice_id, amount) values ({R},{FI},1)',
+  'insert into public.payments (id, invoice_id, amount) values ({N},{FI},1)',
+  'update public.payments set amount = 99 where id = {R}',
+  'select amount = 99 from public.payments where id = {R}');
+
+create or replace function hardening_test.dml_vul(p_sql text, ids jsonb) returns text language plpgsql immutable as $$
+declare k text; s text := p_sql;
+begin
+  for k in select jsonb_object_keys(ids) loop s := replace(s, '{' || k || '}', quote_literal(ids->>k)); end loop;
+  return s;
+end $$;
+
+-- voert p_sql uit als p_email (null = postgres); altijd teruggedraaid; geeft rijen, fout en nagemeten effect
+create or replace function hardening_test.dml_probeer(p_email text, p_sql text, p_select boolean, p_check text,
+  out n bigint, out fout text, out effect boolean) language plpgsql as $$
+declare v uuid;
+begin
+  n := null; fout := null; effect := null;
+  begin
+    if p_email is not null then
+      select id into v from auth.users where email = p_email;
+      if v is null then raise exception 'testgebruiker % bestaat niet', p_email; end if;
+      perform set_config('request.jwt.claims', json_build_object('sub', v, 'role', 'authenticated')::text, true);
+      perform set_config('request.jwt.claim.sub', v::text, true);
+      execute 'set local role authenticated';
+    end if;
+    if p_select then execute 'select count(*) from (' || p_sql || ') q' into n;
+    else execute p_sql; get diagnostics n = row_count; end if;
+    execute 'set local role postgres';
+    if p_check is not null then execute p_check into effect; effect := coalesce(effect, false); end if;
+    raise exception using errcode = 'P0999';
+  exception
+    when sqlstate 'P0999' then null;
+    when others then fout := sqlerrm; n := 0;
+  end;
+end $$;
+
+create or replace function hardening_test.dml_rij(p_tbl text, p_id uuid) returns text language plpgsql as $$
+declare h text;
+begin
+  execute format('select md5(t::text) from public.%I t where id = %L', p_tbl, p_id) into h;
+  return coalesce(h, '(weg)');
+end $$;
+
+create or replace function hardening_test.inactief_dml(p_tbl text, p_op text,
+  p_actief text default 'a.owner@staging.test', out opzet_ok boolean, out geweigerd boolean, out detail text)
+language plpgsql as $fn$
+declare
+  d record; ids jsonb; s text; a record; i record; h0 text; h1 text; h2 text;
+begin
+  opzet_ok := false; geweigerd := false;
+  select * into d from hardening_test.dml_def where tbl = p_tbl;
+  if d.tbl is null or p_op not in ('SELECT','INSERT','UPDATE','DELETE') then detail := 'onbekende tabel/bewerking'; return; end if;
+  begin
+    ids := jsonb_build_object('R', gen_random_uuid(), 'N', gen_random_uuid(), 'FC', gen_random_uuid(), 'FC2', gen_random_uuid(),
+                              'FI', gen_random_uuid(), 'RA', 'a0000000-0000-0000-0000-000000000001');
+    execute hardening_test.dml_vul('insert into public.companies (id, restaurant_id, name) values ({FC},{RA},''proef-bedrijf''), ({FC2},{RA},''proef-bedrijf-2'')', ids);
+    execute hardening_test.dml_vul('insert into public.invoices (id, restaurant_id, company_id, invoice_number, status) values ({FI},{RA},{FC},''P-0'',''draft'')', ids);
+    execute hardening_test.dml_vul(d.setup, ids);
+    h0 := hardening_test.dml_rij(p_tbl, (ids->>'R')::uuid);
+    s := case p_op when 'SELECT' then hardening_test.dml_vul('select 1 from public.' || p_tbl || ' where id = {R}', ids)
+                   when 'INSERT' then hardening_test.dml_vul(d.ins, ids)
+                   when 'UPDATE' then hardening_test.dml_vul(d.upd, ids)
+                   else hardening_test.dml_vul('delete from public.' || p_tbl || ' where id = {R}', ids) end;
+    select * into a from hardening_test.dml_probeer(p_actief, s, p_op = 'SELECT',
+      case p_op when 'UPDATE' then hardening_test.dml_vul(d.gewijzigd, ids)
+                when 'DELETE' then hardening_test.dml_vul('select not exists (select 1 from public.' || p_tbl || ' where id = {R})', ids)
+                when 'INSERT' then hardening_test.dml_vul('select exists (select 1 from public.' || p_tbl || ' where id = {N})', ids)
+                else null end);
+    h1 := hardening_test.dml_rij(p_tbl, (ids->>'R')::uuid);
+    select * into i from hardening_test.dml_probeer('a.inactive@staging.test', s, p_op = 'SELECT', null);
+    h2 := hardening_test.dml_rij(p_tbl, (ids->>'R')::uuid);
+    opzet_ok := h0 <> '(weg)' and a.fout is null and a.n = 1 and coalesce(a.effect, true) and h1 = h0 and h2 = h0;
+    geweigerd := opzet_ok and case when p_op = 'INSERT' then coalesce(i.fout, '') like '%row-level security%'
+                                   else i.fout is null and i.n = 0 end;
+    detail := 'actief: ' || coalesce(a.fout, 'rijen=' || a.n) || ' | gedeactiveerd: ' || coalesce(i.fout, 'rijen=' || i.n);
+    raise exception using errcode = 'P0999';
+  exception when sqlstate 'P0999' then null;
+  end;
+end
+$fn$;

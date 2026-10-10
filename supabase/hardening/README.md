@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status: voorbereiding (Stap 0) afgerond; Stap 1 geschreven en lokaal getest.** Niets in deze map wijzigt productie. Er is **geen GO** voor hardening-stap 1 t/m 11.
+**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) gebouwd en lokaal getest, wacht op GO.** Niets in deze map wijzigt productie zonder expliciete GO.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -14,6 +14,8 @@ Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 
 | `tests/generate_cases.py` | lokaal | Bron van de testcases; hergenereert `10_cases.sql` |
 | `tests/local-*.sql`, `tests/local-build.sh` | Alleen lokale Postgres | Nabootsing van auth/storage/standaardrechten + bouwscript |
 | `permission-baseline.json` | — | Exacte kopie van de TypeScript-rechtenmatrix (11 rechten × 5 rollen = 55 rijen) |
+| `prod-tenantswitch-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van de 15 tenant-policies: vóór 0024 15 × "oud", na 0024 15 × "nieuw" |
+| `tests/tenantswitch-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie- en rollbacktests voor 0024 (22 checks) |
 
 ## Testharnas gebruiken
 
@@ -43,11 +45,17 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 6 | H6 storage | `0020_hardening_step6_storage.sql` (+ app: `upsert:false`; **lokaal getest; eerst app-deploy, dan migratie**) | `rollbacks/0020_rollback.sql` | `run(6)` |
 | 7 | H4a open_tabs/receipts/receipt_lines/approvals | `0021_hardening_step7_tabs_receipts.sql` (**in productie, akkoord**) | `rollbacks/0021_rollback.sql` | `run(7)` |
 | 7+ | aanscherping `approvals_guard` | `0022_hardening_step7_approvals_guard.sql` (**in productie, akkoord**) | `rollbacks/0022_rollback.sql` | `run(7)` |
-| 7b | afgewezen bon niet factureren | `0023_hardening_plan7b_invoice_block.sql` + app-wijziging (**app live sinds v1.0.74; migratie 0023 voorbereid en lokaal getest, NIET uitgevoerd in productie**) | `rollbacks/0023_rollback.sql` | `run(7)` |
-| 8 | H4b invoices/payments/documents | `0022_hardening_invoices.sql` | `rollbacks/0022_rollback.sql` | `run(8)` |
-| 9 | H4c + H4d dagafsluiting/stamdata/settings/plugins | `0023_hardening_master_data.sql` | `rollbacks/0023_rollback.sql` | `run(9)` |
-| 10 | H10 PIN-geheimen | `0024_hardening_pin_secrets.sql` (+ app) | `rollbacks/0024_rollback.sql` | `run(10)` |
-| 11 | H8b definitieve least privilege + eindtest | `0025_hardening_final_privileges.sql` | `rollbacks/0025_rollback.sql` | `run(11)` + her-audit |
+| 7b | afgewezen bon niet factureren | `0023_hardening_plan7b_invoice_block.sql` + app-wijziging (**app live sinds v1.0.74; migratie 0023 voorbereid en lokaal getest, NIET uitgevoerd in productie**) | `rollbacks/0023_rollback.sql` | `run(99)` (cases staan sinds 10 okt op eigen stap 99; alleen zinvol op een database MET 0023) |
+| 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**gebouwd en lokaal getest op PG16 + PG17; productie wacht op GO**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
+| 9 | H4b invoices/payments/documents (rolrechten) | gepland: `0025_…` | gepland | `run(9)` |
+| 10 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland: `0026_…` | gepland | `run(10)` |
+| 11 | H10 PIN-geheimen | gepland: `0027_…` (+ app) | gepland | `run(11)` |
+| 12 | H8b definitieve least privilege + eindtest | gepland: `0028_…` | gepland | `run(12)` + her-audit |
+
+Hernummering 10 okt: de tenantswitch werd stap 8; de oude stappen 8–11 schoven naar 9–12 (27 cases, verder ongewijzigd — bewezen tegen de 542 cases van daarvoor). De migratienummers van de latere stappen liggen pas vast als ze gebouwd worden.
+
+Lokaal bouwen: `PSQL="psql -X -q -h <socket> -p <poort> -U postgres" DB=<naam> TOT=0022|0024 [MET_0023=1] bash tests/local-build.sh`.
+De seed wordt geladen met `session_replication_role = replica` (de guards van stap 7 weigeren anders bijvoorbeeld een direct aangemaakte gesloten rekening).
 
 Werkwijze per stap: (1) eerst op staging/lokaal met `run(stap-1)` → migratie → `run(stap)`; (2) rollback-script op staging
 uitproberen; (3) vóór productie `prod-readonly-checks.sql` opnieuw (fingerprints); (4) migratie in productie in één

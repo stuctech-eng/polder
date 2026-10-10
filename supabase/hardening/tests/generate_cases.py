@@ -349,58 +349,86 @@ case("AC18", "BOEKHOUDING", "service_role keurt approval goed (pending → appro
 case("AC19", "BOEKHOUDING", "service_role wijzigt verification_code van approval", "service_role", "dml", f"update approvals set verification_code='x' where id='{A(400)}'", True, False, 7)
 case("AC20", "BOEKHOUDING", "bediening wijzigt bestaande goedgekeurde approval", BED, "dml", f"update approvals set approved_by='ik' where id='{A(401)}'", True, False, 7)
 
-case("AC30", "FACTUREN", "bediening leest facturen", BED, "select", f"select 1 from invoices where restaurant_id='{RA}'", True, False, 8)
+case("AC30", "FACTUREN", "bediening leest facturen", BED, "select", f"select 1 from invoices where restaurant_id='{RA}'", True, False, 9)
 case("AC31", "FACTUREN", "manager leest facturen (VIEW_REVENUE)", MGR, "select", f"select 1 from invoices where restaurant_id='{RA}'", True)
-case("AC32", "FACTUREN", "bediening registreert betaling", BED, "dml", f"insert into payments (invoice_id, amount) values ('{A(501)}', 5)", True, False, 8)
+case("AC32", "FACTUREN", "bediening registreert betaling", BED, "dml", f"insert into payments (invoice_id, amount) values ('{A(501)}', 5)", True, False, 9)
 case("AC33", "FACTUREN", "administratie registreert betaling (legitiem)", ADM, "dml", f"insert into payments (invoice_id, amount) values ('{A(501)}', 5)", True)
-case("AC34", "FACTUREN", "administratie wijzigt totaal van betaalde factuur", ADM, "dml", f"update invoices set total=1 where id='{A(502)}'", True, False, 8)
-case("AC35", "FACTUREN", "administratie zet betaalde factuur terug naar sent", ADM, "dml", f"update invoices set status='sent' where id='{A(502)}'", True, False, 8)
-case("AC36", "FACTUREN", "administratie verwijdert factuur", ADM, "dml", f"delete from invoices where id='{A(500)}'", True, False, 8)
-case("AC37", "FACTUREN", "administratie wijzigt bedrag van bestaande betaling", ADM, "dml", f"update payments set amount=0.01 where id='{A(520)}'", True, False, 8)
-case("AC38", "FACTUREN", "administratie verwijdert bestaande betaling", ADM, "dml", f"delete from payments where id='{A(520)}'", True, False, 8)
+case("AC34", "FACTUREN", "administratie wijzigt totaal van betaalde factuur", ADM, "dml", f"update invoices set total=1 where id='{A(502)}'", True, False, 9)
+case("AC35", "FACTUREN", "administratie zet betaalde factuur terug naar sent", ADM, "dml", f"update invoices set status='sent' where id='{A(502)}'", True, False, 9)
+case("AC36", "FACTUREN", "administratie verwijdert factuur", ADM, "dml", f"delete from invoices where id='{A(500)}'", True, False, 9)
+case("AC37", "FACTUREN", "administratie wijzigt bedrag van bestaande betaling", ADM, "dml", f"update payments set amount=0.01 where id='{A(520)}'", True, False, 9)
+case("AC38", "FACTUREN", "administratie verwijdert bestaande betaling", ADM, "dml", f"delete from payments where id='{A(520)}'", True, False, 9)
 case("AC39", "FACTUREN", "administratie zet factuur draft → sent (legitiem)", ADM, "dml", f"update invoices set status='sent' where id='{A(500)}'", True)
 case("AC40", "FACTUREN", "administratie zet factuur sent → paid (legitiem)", ADM, "dml", f"update invoices set status='paid' where id='{A(501)}'", True)
-case("AC41", "FACTUREN", "OPEN BESLISPUNT D6: factuur draft → paid rechtstreeks", ADM, "dml", f"update invoices set status='paid' where id='{A(500)}'", True, None, 8, "D6 — niet zelf beslissen")
-case("AC42", "FACTUREN", "bediening wijzigt factuurregel", BED, "dml", f"update invoice_lines set amount=1 where id='{A(510)}'", True, False, 8)
-case("AC43", "FACTUREN", "bediening verwijdert document-record", BED, "dml", f"delete from documents where id='{A(530)}'", True, False, 8)
+case("AC41", "FACTUREN", "OPEN BESLISPUNT D6: factuur draft → paid rechtstreeks", ADM, "dml", f"update invoices set status='paid' where id='{A(500)}'", True, None, 9, "D6 — niet zelf beslissen")
+case("AC42", "FACTUREN", "bediening wijzigt factuurregel", BED, "dml", f"update invoice_lines set amount=1 where id='{A(510)}'", True, False, 9)
+case("AC43", "FACTUREN", "bediening verwijdert document-record", BED, "dml", f"delete from documents where id='{A(530)}'", True, False, 9)
 
 case("AC50", "DAGAFSLUITING", "bediening maakt dagafsluiting", BED, "dml",
-     f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', current_date, '{A(13)}')", True, False, 9)
+     f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', current_date, '{A(13)}')", True, False, 10)
 case("AC51", "DAGAFSLUITING", "administratie maakt dagafsluiting (alleen bekijken)", ADM, "dml",
-     f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', current_date, '{A(12)}')", True, False, 9)
+     f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', current_date, '{A(12)}')", True, False, 10)
 case("AC52", "DAGAFSLUITING", "manager maakt dagafsluiting (legitiem)", MGR, "dml",
      f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', current_date, '{A(11)}')", True)
-case("AC53", "DAGAFSLUITING", "manager wijzigt bestaande dagafsluiting", MGR, "dml", f"update daily_closings set total_revenue=1 where id='{A(600)}'", True, False, 9)
-case("AC54", "DAGAFSLUITING", "owner verwijdert dagafsluiting", OWNER, "dml", f"delete from daily_closings where id='{A(600)}'", True, False, 9)
+case("AC53", "DAGAFSLUITING", "manager wijzigt bestaande dagafsluiting", MGR, "dml", f"update daily_closings set total_revenue=1 where id='{A(600)}'", True, False, 10)
+case("AC54", "DAGAFSLUITING", "owner verwijdert dagafsluiting", OWNER, "dml", f"delete from daily_closings where id='{A(600)}'", True, False, 10)
 
-case("AC60", "STAMDATA", "bediening wijzigt bedrijf", BED, "dml", f"update companies set name='x' where id='{A(100)}'", True, False, 9)
+case("AC60", "STAMDATA", "bediening wijzigt bedrijf", BED, "dml", f"update companies set name='x' where id='{A(100)}'", True, False, 10)
 case("AC61", "STAMDATA", "administratie wijzigt bedrijf (legitiem)", ADM, "dml", f"update companies set name='ok' where id='{A(100)}'", True)
-case("AC62", "STAMDATA", "manager maakt bedrijf aan (geen MANAGE_COMPANIES)", MGR, "dml", f"insert into companies (restaurant_id, name) values ('{RA}','x')", True, False, 9)
-case("AC63", "STAMDATA", "bediening wijzigt configuratie", BED, "dml", f"update configurations set value='[]' where id='{A(620)}'", True, False, 9)
-case("AC64", "STAMDATA", "bediening wijzigt workflowregel", BED, "dml", f"update workflow_rules set requires_approval=false where id='{A(621)}'", True, False, 9)
+case("AC62", "STAMDATA", "manager maakt bedrijf aan (geen MANAGE_COMPANIES)", MGR, "dml", f"insert into companies (restaurant_id, name) values ('{RA}','x')", True, False, 10)
+case("AC63", "STAMDATA", "bediening wijzigt configuratie", BED, "dml", f"update configurations set value='[]' where id='{A(620)}'", True, False, 10)
+case("AC64", "STAMDATA", "bediening wijzigt workflowregel", BED, "dml", f"update workflow_rules set requires_approval=false where id='{A(621)}'", True, False, 10)
 case("AC65", "STAMDATA", "administratie wijzigt workflowregel (legitiem)", ADM, "dml", f"update workflow_rules set requires_approval=false where id='{A(621)}'", True)
 case("AC66", "STAMDATA", "bediening leest bedrijven (nodig voor rekening openen)", BED, "select", f"select 1 from companies where restaurant_id='{RA}'", True)
-case("AC67", "STAMDATA", "bediening leest integration_plugins (incl. config)", BED, "select", f"select 1 from integration_plugins where restaurant_id='{RA}'", True, False, 9, "bevinding 7")
-case("AC68", "STAMDATA", "bediening wijzigt integration_plugins.config", BED, "dml", f"update integration_plugins set config='{{}}' where id='{A(630)}'", True, False, 9)
+case("AC67", "STAMDATA", "bediening leest integration_plugins (incl. config)", BED, "select", f"select 1 from integration_plugins where restaurant_id='{RA}'", True, False, 10, "bevinding 7")
+case("AC68", "STAMDATA", "bediening wijzigt integration_plugins.config", BED, "dml", f"update integration_plugins set config='{{}}' where id='{A(630)}'", True, False, 10)
 case("AC69", "STAMDATA", "keuken leest bonnen (D1: geen leestoegang)", KEU, "select", f"select 1 from receipts where restaurant_id='{RA}'", True, False, 7, "besluit D1")
 case("AC70", "STAMDATA", "bediening leest approvals incl. verification_code (D5: bewust zichtbaar)", BED, "select", f"select verification_code from approvals where receipt_id='{A(301)}'", True)
 
 # ---------------------------------------------------------------- PIN-GEHEIMEN (H10, stap 10)
-case("PN01", "PIN", "bediening leest pin_hash/pin_salt", BED, "select", f"select pin_hash, pin_salt from approval_settings where company_id='{A(100)}'", True, False, 10, "bevinding 12")
-case("PN02", "PIN", "owner leest pin_hash via eigen verbinding", OWNER, "select", f"select pin_hash from approval_settings where company_id='{A(100)}'", True, False, 10)
+case("PN01", "PIN", "bediening leest pin_hash/pin_salt", BED, "select", f"select pin_hash, pin_salt from approval_settings where company_id='{A(100)}'", True, False, 11, "bevinding 12")
+case("PN02", "PIN", "owner leest pin_hash via eigen verbinding", OWNER, "select", f"select pin_hash from approval_settings where company_id='{A(100)}'", True, False, 11)
 case("PN03", "PIN", "bediening leest niet-geheime goedkeuringsinstelling (methode)", BED, "select", f"select method, is_required from approval_settings where company_id='{A(100)}'", True)
-case("PN04", "PIN", "bediening wijzigt pin_hash", BED, "dml", f"update approval_settings set pin_hash='x' where id='{A(410)}'", True, False, 9)
+case("PN04", "PIN", "bediening wijzigt pin_hash", BED, "dml", f"update approval_settings set pin_hash='x' where id='{A(410)}'", True, False, 10)
 case("PN05", "PIN", "service_role leest pin_hash (server-verificatie)", "service_role", "select", f"select pin_hash from approval_settings where company_id='{A(100)}'", True)
 
 # ---------------------------------------------------------------- GEDEACTIVEERDE GEBRUIKER (H9)
 case("IN01", "INACTIEF", "gedeactiveerde leest bonnen", INA, "select", f"select 1 from receipts where restaurant_id='{RA}'", True, False, 7, "bevinding 11 — zie open beslispunt D9")
 case("IN02", "INACTIEF", "gedeactiveerde leest facturen", INA, "select", f"select 1 from invoices where restaurant_id='{RA}'", True, False, 8)
-case("IN03", "INACTIEF", "gedeactiveerde leest bedrijven", INA, "select", f"select 1 from companies where restaurant_id='{RA}'", True, False, 9)
+case("IN03", "INACTIEF", "gedeactiveerde leest bedrijven", INA, "select", f"select 1 from companies where restaurant_id='{RA}'", True, False, 8)
 case("IN04", "INACTIEF", "gedeactiveerde leest dagafsluitingen (policy gebruikt my_restaurant_id)", INA, "select", f"select 1 from daily_closings where restaurant_id='{RA}'", True, False, 1)
 case("IN05", "INACTIEF", "gedeactiveerde leest teamleden (policy gebruikt my_restaurant_id)", INA, "select", f"select 1 from users where id <> auth.uid() and restaurant_id='{RA}'", True, False, 1)
 case("IN06", "INACTIEF", "gedeactiveerde leest EIGEN profiel (nodig voor middleware)", INA, "select", "select 1 from users where id = auth.uid()", True)
 case("IN07", "INACTIEF", "gedeactiveerde schrijft logregel", INA, "dml", f"insert into activity_log (restaurant_id, user_id, action) values ('{RA}','{A(15)}','x')", True, False, 4)
 case("IN08", "INACTIEF", "gedeactiveerde wijzigt bon", INA, "dml", f"update receipts set notes='x' where id='{A(300)}'", True, False, 7)
+
+# ---------------------------------------------------------------- TENANTSWITCH (fase 1, migratie 0024, stap 8)
+# De 15 tabellen met de oude inline-controle. Per tabel en bewerking twee cases (zie hardening_test.inactief_dml):
+#   TOxx = de testopzet klopt (rij bestaat, actieve gebruiker heeft met dezelfde SQL effect, rij daarna exact hersteld) — altijd waar
+#   TSxx = de gedeactiveerde gebruiker wordt geweigerd om de juiste reden — waar vanaf stap 8
+STAP_TENANT = 8
+TS_TABELLEN = ["companies", "invoices", "documents", "workflow_rules", "configurations", "notifications", "integration_plugins",
+               "contacts", "departments", "cost_centers", "projects", "company_codes", "approval_settings", "invoice_lines", "payments"]
+for n, tbl in enumerate(TS_TABELLEN, start=1):
+    for op, letter in (("SELECT", "S"), ("INSERT", "I"), ("UPDATE", "U"), ("DELETE", "D")):
+        case(f"TO{n:02d}{letter}", "TENANTSWITCH", f"opzet {tbl} {op}: actieve owner heeft effect met dezelfde SQL, rij hersteld", "postgres", "check",
+             f"select (hardening_test.inactief_dml('{tbl}','{op}')).opzet_ok", True)
+        case(f"TS{n:02d}{letter}", "TENANTSWITCH", f"gedeactiveerde {op} op {tbl} geweigerd (0 rijen / RLS-fout), actieve gebruiker niet", "postgres", "check",
+             f"select (hardening_test.inactief_dml('{tbl}','{op}')).geweigerd", False, True, STAP_TENANT)
+# actieve bediening (geen owner) wordt door de tenantswitch niet beperkt: zelfde opzet, andere actieve rol
+for n, tbl in enumerate(TS_TABELLEN, start=1):
+    case(f"TB{n:02d}", "TENANTSWITCH", f"actieve bediening leest {tbl} met dezelfde opzet (niet beperkt)", "postgres", "check",
+         f"select (hardening_test.inactief_dml('{tbl}','SELECT','{BED}')).opzet_ok", True)
+# isolatie aanvullen voor de tabellen zonder TENANT-case; met positieve controle (B-owner ziet zijn eigen rij)
+OWNER_B = em("b", "owner")
+for cid, tbl, where in [
+    ("TI40", "contacts", f"company_id = '{B(100)}'"), ("TI41", "departments", f"company_id = '{B(100)}'"),
+    ("TI42", "cost_centers", f"company_id = '{B(100)}'"), ("TI43", "projects", f"company_id = '{B(100)}'"),
+    ("TI44", "invoice_lines", f"invoice_id = '{B(502)}'"), ("TI45", "workflow_rules", f"restaurant_id = '{RB}'"),
+    ("TI46", "company_codes", f"company_id = '{B(100)}'"), ("TI47", "notifications", f"restaurant_id = '{RB}'"),
+]:
+    case(cid, "TENANT", f"A-owner kan {tbl} van B niet lezen", OWNER, "select", f"select 1 from {tbl} where {where}", False)
+    case(cid + "p", "TENANT", f"controle: B-owner leest eigen {tbl}", OWNER_B, "select", f"select 1 from {tbl} where {where}", True)
 
 # ---------------------------------------------------------------- PRIVILEGES / FUNCTIES (H1, H8, H9)
 for cid, role, priv in [("PR01", "authenticated", "TRUNCATE"), ("PR02", "anon", "TRUNCATE"), ("PR03", "authenticated", "TRIGGER"),
@@ -410,7 +438,7 @@ for cid, role, priv in [("PR01", "authenticated", "TRUNCATE"), ("PR02", "anon", 
 case("PR06", "PRIVILEGES", "anon heeft SELECT op receipts", "postgres", "check", "select has_table_privilege('anon','public.receipts','SELECT')", False)
 case("PR07", "PRIVILEGES", "anon heeft INSERT op receipts", "postgres", "check", "select has_table_privilege('anon','public.receipts','INSERT')", False)
 case("PR08", "PRIVILEGES", "authenticated heeft DELETE op payments (geen route gebruikt dit)", "postgres", "check",
-     "select has_table_privilege('authenticated','public.payments','DELETE')", True, False, 11, "least privilege (stap 11)")
+     "select has_table_privilege('authenticated','public.payments','DELETE')", True, False, 12, "least privilege (stap 11)")
 case("PR09", "PRIVILEGES", "authenticated heeft UPDATE op restaurants", "postgres", "check",
      "select has_table_privilege('authenticated','public.restaurants','UPDATE')", True, False, 2)
 case("PR10", "PRIVILEGES", "anon mag my_restaurant_id() uitvoeren", "postgres", "check",
@@ -431,7 +459,7 @@ case("PR15", "PRIVILEGES", "service_role heeft UPDATE op receipts (publieke goed
 case("PR16", "PRIVILEGES", "elke public-tabel heeft RLS aan", "postgres", "check",
      "select not exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity and c.relname not like '\\_%')", True)
 case("PR17", "PRIVILEGES", "geen policy van het type ALL meer in public", "postgres", "check",
-     "select not exists (select 1 from pg_policies where schemaname='public' and cmd='ALL')", False, True, 9, "eindcontrole: geen 'for all'")
+     "select not exists (select 1 from pg_policies where schemaname='public' and cmd='ALL')", False, True, 10, "eindcontrole: geen 'for all'")
 
 # ---------------------------------------------------------------- HELPERS (H1 + H9, stap 1)
 OTHER_ORPHAN = "orphan@staging.test"
@@ -755,6 +783,9 @@ case("H590", H, "approvals_guard bevat beide nieuwe controles; trigger actief; f
      "and not has_function_privilege('authenticated','public.approvals_guard()','EXECUTE') and not has_function_privilege('service_role','public.approvals_guard()','EXECUTE')", False, True, 7)
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
+# Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):
+# run(n) voor de echte stappen verwacht het gedrag zonder 0023; run(99) toetst een database MET 0023.
+STAP_0023 = 99
 import json, os
 SCEN = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "invoice-block-scenarios.json")))["scenarios"]
 def scen_setup(k, sc, close=True):
@@ -787,10 +818,10 @@ for k, sc in enumerate(SCEN, start=1):
         if blocked:
             # bewijs een weigering MET de juiste reden: een mislukte opzet of andere fout telt niet mee
             case(f"H6{k:02d}{tag}", H, f"7b {sc['id']} {lab} factureert: {sc['title']} -> geweigerd met reden 'afgewezen bon'", who, "check",
-                 f"select hardening_test.refused_with({q(INV_TAB)}, 'afgewezen bon')", False, True, 7, setup=scen_setup(k, sc))
+                 f"select hardening_test.refused_with({q(INV_TAB)}, 'afgewezen bon')", False, True, STAP_0023, setup=scen_setup(k, sc))
         else:
             case(f"H6{k:02d}{tag}", H, f"7b {sc['id']} {lab} factureert: {sc['title']} -> toegestaan", who, "dml",
-                 INV_TAB, True, True, 7, setup=scen_setup(k, sc))
+                 INV_TAB, True, True, STAP_0023, setup=scen_setup(k, sc))
     if any(rc.get("moved") for rc in sc["receipts"]):
         rid = A(7000 + k * 10)
         case(f"H6{k:02d}m", H, f"7b {sc['id']} de bon is echt verplaatst van open rekening 204 naar 203 (opzet bewijst de verplaatsing)", "postgres", "check",
@@ -804,7 +835,7 @@ for k, sc in enumerate(SCEN, start=1):
 case("H690", H, "open_tabs_guard bevat de afwijzingsblokkade; trigger actief; functie niet uitvoerbaar", "postgres", "check",
      "select position('afgewezen bon is nog niet opnieuw goedgekeurd' in pg_get_functiondef('public.open_tabs_guard()'::regprocedure)) > 0 "
      "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='open_tabs_guard') = 1 "
-     "and not has_function_privilege('authenticated','public.open_tabs_guard()','EXECUTE') and not has_function_privilege('service_role','public.open_tabs_guard()','EXECUTE')", False, True, 7)
+     "and not has_function_privilege('authenticated','public.open_tabs_guard()','EXECUTE') and not has_function_privilege('service_role','public.open_tabs_guard()','EXECUTE')", False, True, STAP_0023)
 
 # ---------------------------------------------------------------- uitvoer
 def b(x): return "null" if x is None else ("true" if x else "false")

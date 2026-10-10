@@ -837,7 +837,20 @@ punt 1 — geen apart, parallel systeem), betalingshistorie, optioneel herinneri
   10. Privacy en productieklaar
   Tot platformbeheer er is maakt Dick restaurants aan met SQL.
 
+**Meerdere restaurants — productdoel en ontwerpbesluiten (10 okt 2026, voorlopig, besluit Dick na advies GPT):**
+Eén centraal Polder-platform en één codebasis voor meerdere restaurants; een Default Restaurant met alle features aan als
+referentie- en testomgeving; features, modules, instellingen en integraties per restaurant instelbaar; UI volgt configuratie én
+rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 13.17.
+- **B1** Voorlopig één account per restaurant; platformbeheer krijgt een apart account. Lidmaatschappen voor meerdere restaurants kunnen later.
+- **B2** Eerst de tenantswitch (fase 1, migratie 0024), daarna de platformbasis. Rolrechten (hardening-stappen 9–12) afronden vóór het eerste echte tweede restaurant.
+- **B3** Default Restaurant uiteindelijk ook in productie, alleen met herkenbare testdata en duidelijk als test gemarkeerd; eerst isolatie en beveiliging testen.
+- **B4** Features afdwingen in UI én server-routes. De database blijft tenantgrenzen en gegevensrechten afdwingen. `requireFeature()` vervangt nooit `requireRole()`.
+- **B5** Factuurnummer uniek en oplopend per restaurant, met databasegarantie. **Open:** per kalenderjaar opnieuw beginnen of niet.
+- **B6** Eerst een instelbare afzendernaam per restaurant; eigen domeinen later.
+
 ## 11. WIJZIGINGSHISTORIE
+
+**v1.63** — FASE 1 MEERDERE RESTAURANTS (tenantswitch): migratie `0024_tenantswitch_inline_policies.sql` + rollback, `prod-tenantswitch-checks.sql`, harnas stap 8 (`inactief_dml`, 151 nieuwe cases), hernummering 8–11 → 9–12 en 0023-cases → stap 99, seed met company_codes/notifications, `local-build.sh` (TOT/MET_0023, seed met replica), `tenantswitch-tests.sh`; ontwerpbesluiten B1–B6 bij roadmap-punt 7; sectie 13.17. Lokaal getest (PG16 + PG17); NIET uitgevoerd in productie.
 
 **v1.62** — PLAN 7b (afgewezen bon niet factureren): `lib/approval/invoice-blocking.ts` (afwijzingsblokkade en facturatieblokkade als pure functies), precheck in `generate-invoice` vóór elke schrijfactie, knop "Opnieuw indienen" met uitleg en waarschuwing op de rekening, migratie `0023_hardening_plan7b_invoice_block.sql` + rollback (`open_tabs_guard`, alleen `closed → invoiced`), gedeelde scenariolijst `invoice-block-scenarios.json`, sectie 13.16. App live (v1.0.74); migratie 0023 voorbereid maar NIET uitgevoerd (zie 13.16).
 
@@ -1719,6 +1732,49 @@ Migratie `supabase/migrations/0021_hardening_step7_tabs_receipts.sql`, rollback 
 **Tests:** gedeelde scenariolijst `supabase/hardening/tests/invoice-block-scenarios.json` (14 scenario's, drie verwachtingen: afwijzingsblokkade, facturatieblokkade, uitkomst van de database). Database: 34 nieuwe cases (542 totaal: 541 PASS + 1 OPEN TM11/D2; vóór 0023 faalden precies de 11 cases die het nieuwe gedrag toetsen), rollback byte-identiek, herhaalbaar. Preflight-tests `supabase/hardening/tests/preflight-0023-tests.sh` (alleen lokaal, overschrijft bewust de functie met afwijkende varianten): 59 checks (versie 8: commentaarloze varianten M33–M36, R16–R17; versie 6 voegt toe: fingerprint-controle van approvals_guard() uit 0022 M22–M26, trigger via de catalogus M27–M32/R13–R15; versie 5: ACL-gevallen toegevoegd: anon, service_role, lege ACL, erven via rollidmaatschap, tijdelijke niet-standaardrol M19/R11, productievariant M20/M21/R12, rollback met public/anon/authenticated), o.a. uitgangsversie en alleen-witruimte-verschil gaan door; extra opmerking, extra opdracht, SECURITY DEFINER, andere search_path, extra uitvoerrechten (authenticated, public, service_role), uitgeschakelde of afwijkende of dubbele of ontbrekende trigger breken af; de rollback breekt af bij 'al teruggedraaid' en bij dezelfde afwijkingen; bij elke afbreking zijn functie, trigger, rechten en data na afloop ongewijzigd. Zonder de preflight faalden in versie 4 alle 16 afbreektests; in versie 5 falen zonder de rechtencontrole de rechtentests (M8, M9, M15–M18, R5, R7–R10; gemeten); met de oude, smallere ACL-controle falen precies M19 en R11 (de tests kunnen dus falen). Geblokkeerde scenario's gebruiken `hardening_test.refused_with(...)`: alleen een weigering MET de melding 'afgewezen bon' telt, dus een mislukte testopzet geeft nooit een valse PASS; scenario S11 verplaatst de bon echt (van open rekening 204 naar 203, guards actief) en een aparte case bewijst dat de verplaatsing is gebeurd. App-regressie langs de echte route-handlers tegen de lokale database: 173/173 PASS (56 bestaand + 117 nieuw: per scenario app-functie, app-functie op echte databaserijen, route (juiste reden, nul schrijfacties, rekening blijft gesloten), directe databasepoging; plus een rekening zonder bonnen (geen nieuwe blokkade) en de echte stroom afwijzen, factureren geweigerd, opnieuw indienen op gesloten rekening, opnieuw afwijzen, goedkeuren, factureren; en de uitweg via verwijderen; plus `requestResubmit`: succes, serverfouten met uitleg, onleesbaar antwoord en netwerkfout). Zonder 0023 falen 13 van die checks (de tests kunnen dus falen). `tsc --noEmit` schoon.
 
 **Uitrolvolgorde (besluit):** (1) app-release, (2) read-only productiecontrole `prod-step7b-checks.sql` (levert een lijst op, geen foutmelding), (3) migratie 0023, (4) nacontrole en app-test (afgewezen bon laten staan en proberen te factureren; corrigeren, opnieuw indienen, goedkeuren, wel factureren). App eerst, want de database weigert anders pas nadat de oude app al factuur, regels en pdf heeft aangemaakt (een half gemaakte factuur).
+
+### 13.17 FASE 1 MEERDERE RESTAURANTS — tenantswitch (migratie 0024, 2026-10-10)
+
+> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET uitgevoerd in productie; wacht op GO.**
+
+**Aanleiding (audit 9–10 okt, productie read-only bevestigd).** 15 tabellen gebruikten nog de oude controle uit 0003/0006
+(`… in (select restaurant_id from users where users.id = auth.uid())`, zonder `is_active`): companies, invoices, documents,
+workflow_rules, configurations, notifications, integration_plugins (direct) en contacts, departments, cost_centers, projects,
+company_codes, approval_settings, invoice_lines, payments (via de ouder; deze hebben geen eigen `restaurant_id`). Gevolg: een
+gedeactiveerde gebruiker kon via de directe API nog bij deze tabellen van zijn eigen restaurant, en een restaurant zou later
+niet volledig uit te zetten zijn. Overige auditpunten (geen statuskolom, afzender "Polder", factuurnummer zonder unieke sleutel,
+nieuwe tabellen krijgen standaard rechten voor `authenticated`, publieke goedkeuringslink via service-role) staan in het
+fase-0-rapport en komen in latere fasen aan bod.
+
+**Migratie 0024** (`supabase/migrations/0024_tenantswitch_inline_policies.sql`, rollback `0024_rollback.sql`): alleen de
+USING-uitdrukking van de 15 policies (`ALTER POLICY`): direct `restaurant_id = public.my_restaurant_id()`, kind
+`exists (select 1 from public.<ouder> x where x.id = <tabel>.<fk> and x.restaurant_id = public.my_restaurant_id())`. Naam,
+commando (ALL), rol (public) en het ontbreken van WITH CHECK blijven gelijk; geen rol-, grant-, trigger- of app-wijziging.
+Controles in dezelfde transactie: vooraf (my_restaurant_id() SECURITY DEFINER; per tabel RLS aan, precies 1 policy, vorm,
+exact de oude tekst; "al uitgevoerd" en een gemengde stand breken af) en achteraf (per tabel exact de nieuwe tekst en
+dezelfde vorm). Tekst = `pg_get_expr(polqual, polrelid)` onder `search_path = ''` (gemeten gelijk op PG16 en PG17).
+`lock_timeout = 5s`. De rollback draait alleen als alle 15 exact in de 0024-stand staan en controleert na herstel exact de
+oude tekst. Bewust eenvoudig gehouden (productie bevat alleen testdata): een eerder overwogen boomfingerprint is na meting
+vervallen, omdat de tekstcontrole alle 91 onderzochte foutvarianten al vangt.
+
+**Tests (lokaal, PG16 én PG17):**
+- Harnas: 693 cases (542 bestaand + 120 tenantswitch + 15 actieve bediening + 16 isolatie met positieve controle). Op 0022:
+  `run(7)` 692 PASS + 1 OPEN; `run(8)` faalt voor precies de 60 nieuwe TS-cases + IN02/IN03 (gedeactiveerde had nog effect).
+  Op 0024: `run(8)` 692 PASS + 1 OPEN (TM11).
+- Elke DML-case (`hardening_test.inactief_dml`): verse doelrij, actieve gebruiker met exact dezelfde SQL heeft aantoonbaar
+  effect, rij daarna exact hersteld, gedeactiveerde gebruiker 0 rijen of RLS-fout, rij weer exact hersteld. Een opzetfout geeft
+  een FAIL op de bijbehorende TO-case, nooit een vals PASS.
+- Hernummering: de tenantswitch werd harnas-stap 8, oude stappen 8–11 → 9–12; de 29 0023-cases (plan 7b) → eigen stap 99.
+  Bewezen tegen de 542 cases van daarvoor: geen case verdwenen, geen sql/verwachting gewijzigd, alleen de bedoelde stappen.
+  Met 0023 erbij: alle 29 stap-99-cases PASS; zonder: 11 FAIL (de tests kunnen dus falen).
+- `tests/tenantswitch-tests.sh`: 22/22 (slagen, tweede keer afbreken, rollback exact terug, mengvorm, extra policy,
+  onbekende tekst, foute uitdrukking door de nacontrole gevangen, bezette tabel → lock_timeout; telkens "niets gewijzigd").
+- App-regressie vóór/na 0024 per regel identiek: t8 39/39; t7 159 PASS + 14 FAIL (alle 14 = de 7b-keten zonder 0023;
+  eerder als 13 gedocumenteerd). `tsc --noEmit` schoon.
+
+**Uitrol (na GO, één stap per bericht):** (1) push (geen app-wijziging), (2) migratie 0024 als kopieerblok exact gelijk aan
+het bestand, (3) `supabase/hardening/prod-tenantswitch-checks.sql` (alleen lezen; verwacht 15 × "nieuw"), (4) app-test door
+Dick (bedrijven, rekening, factureren, betaling, factuur-PDF), (5) STOP.
 
 ## 12. STATUS
 

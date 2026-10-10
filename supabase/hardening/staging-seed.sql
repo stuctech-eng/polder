@@ -108,6 +108,10 @@ insert into configurations (id, restaurant_id, company_id, key, value) values ('
 insert into workflow_rules (id, restaurant_id, company_id, invoice_frequency, requires_approval) values ('a0000000-0000-0000-0000-000000000621','a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000100','immediate',true);
 insert into integration_plugins (id, restaurant_id, plugin_type, plugin_name, plugin_version, min_core_version, is_active, config) values
   ('a0000000-0000-0000-0000-000000000630','a0000000-0000-0000-0000-000000000001','pos','TestPOS','0.0.1','1.0',false,'{"api_key":"seed-secret-a"}');
+-- fase 1 (0024): ook company_codes en notifications hebben testrijen, zodat "0 rijen" iets bewijst
+insert into company_codes (id, company_id, type, code) values ('a0000000-0000-0000-0000-000000000640','a0000000-0000-0000-0000-000000000100','routecode','R-1');
+insert into notifications (id, restaurant_id, recipient_user_id, type, trigger_event) values
+  ('a0000000-0000-0000-0000-000000000641','a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000010','email','seed');
 
 -- ===== data restaurant B =====
 insert into companies (id, restaurant_id, name) values ('b0000000-0000-0000-0000-000000000100','b0000000-0000-0000-0000-000000000001','Bedrijf 1 (B)'), ('b0000000-0000-0000-0000-000000000105','b0000000-0000-0000-0000-000000000001','Bedrijf 2 (B)');
@@ -151,3 +155,7 @@ insert into configurations (id, restaurant_id, company_id, key, value) values ('
 insert into workflow_rules (id, restaurant_id, company_id, invoice_frequency, requires_approval) values ('b0000000-0000-0000-0000-000000000621','b0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000100','immediate',true);
 insert into integration_plugins (id, restaurant_id, plugin_type, plugin_name, plugin_version, min_core_version, is_active, config) values
   ('b0000000-0000-0000-0000-000000000630','b0000000-0000-0000-0000-000000000001','pos','TestPOS','0.0.1','1.0',false,'{"api_key":"seed-secret-b"}');
+-- fase 1 (0024): ook company_codes en notifications hebben testrijen, zodat "0 rijen" iets bewijst
+insert into company_codes (id, company_id, type, code) values ('b0000000-0000-0000-0000-000000000640','b0000000-0000-0000-0000-000000000100','routecode','R-1');
+insert into notifications (id, restaurant_id, recipient_user_id, type, trigger_event) values
+  ('b0000000-0000-0000-0000-000000000641','b0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000010','email','seed');
