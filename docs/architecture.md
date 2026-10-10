@@ -1750,9 +1750,12 @@ fase-0-rapport en komen in latere fasen aan bod.
 USING-uitdrukking van de 15 policies (`ALTER POLICY`): direct `restaurant_id = public.my_restaurant_id()`, kind
 `exists (select 1 from public.<ouder> x where x.id = <tabel>.<fk> and x.restaurant_id = public.my_restaurant_id())`. Naam,
 commando (ALL), rol (public) en het ontbreken van WITH CHECK blijven gelijk; geen rol-, grant-, trigger- of app-wijziging.
-Controles in dezelfde transactie: vooraf (my_restaurant_id() SECURITY DEFINER; per tabel RLS aan, precies 1 policy, vorm,
-exact de oude tekst; "al uitgevoerd" en een gemengde stand breken af) en achteraf (per tabel exact de nieuwe tekst en
-dezelfde vorm). Tekst = `pg_get_expr(polqual, polrelid)` onder `search_path = ''` (gemeten gelijk op PG16 en PG17).
+Eén DO-blok (= één transactie, ~3.000 tekens): vooraf (my_restaurant_id() SECURITY DEFINER; per tabel RLS aan, precies
+1 policy, vorm, exact de oude tekst; "al uitgevoerd" en een gemengde stand breken af), dan de 15 `ALTER POLICY`'s, dan
+achteraf (per tabel exact de nieuwe tekst en dezelfde vorm). Tekst = `pg_get_expr(polqual, polrelid)` onder
+`search_path = ''` met witruimte samengevoegd (deze policies bevatten geen tekstconstanten; gemeten gelijk op PG16 en PG17).
+Compact gemaakt op 10 okt nadat de eerste versie (9.300 tekens) bij plakken in de Supabase-editor op de iPhone na ±3.800
+tekens werd afgekapt (syntaxfout, niets uitgevoerd); de compacte versie geeft exact dezelfde policies.
 `lock_timeout = 5s`. De rollback draait alleen als alle 15 exact in de 0024-stand staan en controleert na herstel exact de
 oude tekst. Bewust eenvoudig gehouden (productie bevat alleen testdata): een eerder overwogen boomfingerprint is na meting
 vervallen, omdat de tekstcontrole alle 91 onderzochte foutvarianten al vangt.

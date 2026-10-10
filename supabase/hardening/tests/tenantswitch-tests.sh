@@ -29,7 +29,7 @@ ok "tweede keer: niets gewijzigd" $([ "$(stand)" = "$s1" ] && echo 1)
 # 3. rollback -> exact terug naar de uitgangsstand; tweede rollback breekt af
 out=$(run $RB); ok "rollback slaagt" $([ $? -eq 0 ] && echo 1) "$out"
 ok "rollback: alle policies exact als in de uitgangsstand" $([ "$(stand)" = "$s0" ] && echo 1)
-out=$(run $RB); ok "tweede rollback: afgebroken" $(echo "$out" | grep -q "niet alle policies staan exact" && echo 1) "$out"
+out=$(run $RB); ok "tweede rollback: afgebroken" $(echo "$out" | grep -q "niet alle 15 in de verwachte stand" && echo 1) "$out"
 ok "tweede rollback: niets gewijzigd" $([ "$(stand)" = "$s0" ] && echo 1)
 # 4. migratie na rollback slaagt weer
 out=$(run $MIG); ok "migratie na rollback slaagt opnieuw" $([ $? -eq 0 ] && [ "$(stand)" = "$s1" ] && echo 1) "$out"
@@ -44,7 +44,7 @@ ok "mengvorm: niets gewijzigd" $([ "$(stand)" = "$sm" ] && echo 1)
 
 # 6. extra policy op een van de 15 -> migratie breekt af
 vers; $PSQL -d ts_test -c "create policy extra on public.contacts for select using (true)" >/dev/null; se=$(stand)
-out=$(run $MIG); ok "extra policy: migratie breekt af" $(echo "$out" | grep -q "niet precies 1 policy" && echo 1) "$out"
+out=$(run $MIG); ok "extra policy: migratie breekt af" $(echo "$out" | grep -q "policy/vorm/RLS afwijkend" && echo 1) "$out"
 ok "extra policy: niets gewijzigd" $([ "$(stand)" = "$se" ] && echo 1)
 
 # 7. onbekende tekst (bijv. handmatig aangepast in productie) -> migratie breekt af
@@ -54,8 +54,8 @@ ok "onbekende tekst: niets gewijzigd" $([ "$(stand)" = "$su" ] && echo 1)
 
 # 8. nacontrole werkt: een migratie met een fout in één ALTER (= i.p.v. <>) breekt af, niets gewijzigd
 vers; s0=$(stand); fout=$(mktemp)
-sed 's/i.restaurant_id = public.my_restaurant_id()));$/i.restaurant_id <> public.my_restaurant_id()));/' $MIG > "$fout"
-ok "foutvariant echt aangebracht in kopie van de migratie" $([ "$(grep -c '<> public.my_restaurant_id' "$fout")" -ge 1 ] && echo 1)
+sed 's/and %s.restaurant_id = public.my_restaurant_id())/and %s.restaurant_id <> public.my_restaurant_id())/' $MIG > "$fout"
+ok "foutvariant echt aangebracht in kopie van de migratie" $([ "$(grep -c 'restaurant_id <> public.my_restaurant_id' "$fout")" -eq 1 ] && echo 1)
 out=$(run "$fout"); ok "nacontrole: foute uitdrukking -> afgebroken" $(echo "$out" | grep -q "achteraf" && echo 1) "$out"
 ok "nacontrole: niets gewijzigd" $([ "$(stand)" = "$s0" ] && echo 1); rm -f "$fout"
 
