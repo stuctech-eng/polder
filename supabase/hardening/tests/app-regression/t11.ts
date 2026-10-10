@@ -2,7 +2,8 @@
 // Geen database nodig. Bouwen: node build11.js <repo>; draaien: NODE_PATH=<node_modules met pg> node t11.js
 import { NextRequest } from "next/server";
 import { GET } from "@/app/auth/confirm/route";
-import { parseEmailLinkType, safeNextPath } from "@/lib/auth/email-link";
+import { parseEmailLinkType, safeNextPath, parseHashSession } from "@/lib/auth/email-link";
+import { POST as forgotPOST } from "@/app/api/auth/forgot-password/route";
 // @ts-ignore
 import { cfg } from "@supabase/supabase-js";
 let pass = 0, fail = 0; const out: string[] = [];
@@ -40,6 +41,27 @@ const go = async (qs: string) => {
   ok("next=//evil.com: blijft op eigen site (/reset-password)", r.host === "polder.vercel.app" && r.path === "/reset-password", JSON.stringify(r));
   r = await go("?token_hash=geldig-recovery&type=recovery&next=https://evil.com");
   ok("next=https://evil.com: blijft op eigen site", r.host === "polder.vercel.app" && r.path === "/reset-password", JSON.stringify(r));
+
+  // ===== herstelmail via de server (implicit flow): werkt zonder aangepast Supabase-sjabloon
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon"; delete process.env.NEXT_PUBLIC_SITE_URL;
+  const forgot = async (body: any) => { cfg.resets = []; const r = await forgotPOST(new Request("https://polder.vercel.app/api/auth/forgot-password",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })); return { status: r.status, json: await r.json(), resets: cfg.resets as any[] }; };
+  let f = await forgot({ email: "stuctech@gmail.com" });
+  ok("herstel aanvragen: 200, server vraagt aan met implicit flow, anon-sleutel en link naar /reset-password",
+     f.status === 200 && f.resets.length === 1 && f.resets[0].flowType === "implicit" && f.resets[0].key === "anon"
+     && f.resets[0].redirectTo === "https://polder.vercel.app/reset-password" && f.resets[0].email === "stuctech@gmail.com", JSON.stringify(f));
+  f = await forgot({ email: "geen-adres" });
+  ok("ongeldig e-mailadres: 400, niets aangevraagd", f.status === 400 && f.resets.length === 0, JSON.stringify(f));
+  cfg.resetFault = "For security purposes, you can only request this after 42 seconds";
+  f = await forgot({ email: "stuctech@gmail.com" });
+  ok("fout van Supabase (wachttijd): 500 met zichtbare melding", f.status === 500 && /42 seconds/.test(f.json.error ?? ""), JSON.stringify(f));
+  cfg.resetFault = undefined;
+  // ===== #-deel van de link uitlezen (herstel en uitnodiging)
+  const h1 = parseHashSession("#access_token=AT&refresh_token=RT&type=recovery") as any;
+  ok("link met tokens: sessie gevonden", h1?.accessToken === "AT" && h1?.refreshToken === "RT", JSON.stringify(h1));
+  const h2 = parseHashSession("#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired") as any;
+  ok("verlopen link: foutmelding uit de link", /invalid or has expired/.test(h2?.error ?? ""), JSON.stringify(h2));
+  ok("geen of half #-deel: niets", parseHashSession("") === null && parseHashSession("#access_token=AT") === null);
 
   console.log(out.join("\n")); console.log(`${pass} PASS, ${fail} FAIL`); process.exit(fail ? 1 : 0);
 })().catch((err) => { console.log(out.join("\n")); console.log("FOUT", err); process.exit(2); });

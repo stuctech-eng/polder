@@ -26,3 +26,19 @@ export function safeNextPath(next: string | null): string {
 
 /** Redenen die /reset-password begrijpt en als melding toont. */
 export type LinkFailure = "ontbreekt" | "ongeldig";
+
+/**
+ * Sessie uit een mail-link in het #-deel van de URL (implicit flow): herstel-links die de server aanvraagt
+ * (requestPasswordReset) en uitnodigingen van Supabase Auth. Geeft de tokens, of een foutmelding uit de link, of null.
+ */
+export function parseHashSession(
+  hash: string
+): { accessToken: string; refreshToken: string } | { error: string } | null {
+  const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const error = params.get("error_description") || params.get("error");
+  if (error) return { error };
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (accessToken && refreshToken) return { accessToken, refreshToken };
+  return null;
+}

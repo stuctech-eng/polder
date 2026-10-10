@@ -2,25 +2,34 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sent" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setStatus("idle");
+    setErrorMessage(null);
 
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
+    // De server vraagt de mail aan (lib/auth/recovery.ts): dan werkt de link in elke browser en elk venster.
+    const response = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }).catch(() => null);
 
     setLoading(false);
-    setStatus(error ? "error" : "sent");
+    if (response?.ok) {
+      setStatus("sent");
+      return;
+    }
+    const body = response ? await response.json().catch(() => ({})) : {};
+    setErrorMessage(body.error ?? "Geen verbinding met de server.");
+    setStatus("error");
   }
 
   return (
@@ -55,7 +64,7 @@ export default function ForgotPasswordPage() {
 
             {status === "error" && (
               <p className="text-sm text-red-600" role="alert">
-                Er ging iets mis. Probeer het opnieuw.
+                Er ging iets mis. {errorMessage}
               </p>
             )}
 

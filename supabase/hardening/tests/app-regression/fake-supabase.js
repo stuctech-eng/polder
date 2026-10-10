@@ -68,7 +68,7 @@ function builder(role, sub, table){
   }
   return b;
 }
-function createClient(url,key){
+function createClient(url,key,opts){ cfg.clients=(cfg.clients||[]).concat([{key,opts}]);
   const role = key==="service"?"service_role":"authenticated"; const sub = key.startsWith("user:")?key.slice(5):null;
   return { from:t=>builder(role,sub,t),
     // rpc: roept public.<fn>() aan als deze gebruiker; cfg.rpcFault = "<fn>" geeft een fout terug (fail-closed-test)
@@ -78,6 +78,9 @@ function createClient(url,key){
       const r=await runAs(role,sub,`select public.${fn}(${named}) as v`,ks.map(k=>args[k])); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
     auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }),
       // verifyOtp: token_hash "geldig-<type>" is geldig voor dat type, al het andere is ongeldig/verlopen (zoals Supabase)
+      // resetPasswordForEmail: legt de aanvraag vast; cfg.resetFault = "<melding>" geeft een fout zoals Supabase (bijv. wachttijd)
+      resetPasswordForEmail: async (email, o)=>{ cfg.resets=(cfg.resets||[]).concat([{email, redirectTo:o&&o.redirectTo, key, flowType:opts&&opts.auth&&opts.auth.flowType}]);
+        return cfg.resetFault?{data:null,error:{message:cfg.resetFault}}:{data:{},error:null}; },
       verifyOtp: async ({type, token_hash})=>{ cfg.verifyCalls=(cfg.verifyCalls||[]).concat([{type,token_hash}]);
         return token_hash===`geldig-${type}` ? {data:{user:{id:"u"},session:{}},error:null} : {data:{user:null,session:null},error:{message:"Email link is invalid or has expired",code:"otp_expired"}}; },
       // admin-API (alleen met de service-sleutel); schrijft rechtstreeks in auth.users zoals Supabase Auth dat doet

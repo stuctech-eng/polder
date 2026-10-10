@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.66** — MAIL-LINKS: route `/auth/confirm` (server controleert herstel- en uitnodigingslinks met token_hash), `lib/auth/email-link.ts`, `/reset-password` met vooraf-controle en zichtbare fouten, app-test t11; sectie 13.20. Lokaal getest; niet gepusht.
+**v1.66** — MAIL-LINKS: route `/auth/confirm` (v1.0.84) en herstelmail via de server met implicit flow (`/api/auth/forgot-password`, `lib/auth/recovery.ts`), `/reset-password` leest de sessie uit de link en toont echte fouten, app-test t11; sectie 13.20.
 
 **v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); niet in productie.
 
@@ -1891,27 +1891,28 @@ t9 23/23 per regel identiek aan de oude code. `aanuit-tests` 19/19, `tenantswitc
 (7) push B = app; (8) app-test: inloggen als stuctech@gmail.com → beheerscherm, testrestaurant aanmaken, aan/uit, logboek;
 owner-account ziet `/platform` niet. Rollback: eerst de app terug, dan `0027_rollback.sql`, dan `0026_rollback.sql`.
 
-### 13.20 MAIL-LINKS — wachtwoord herstellen en uitnodiging server-side controleren (2026-10-10)
+### 13.20 MAIL-LINKS — wachtwoord herstellen en uitnodiging (2026-10-10)
 
-> **STATUS (10 okt 2026): gebouwd en lokaal getest. NIET gepusht.** Gevonden tijdens de app-test van platformbeheer.
+> **STATUS (10 okt 2026): ronde 1 (`/auth/confirm`, v1.0.84) live; ronde 2 (herstel via de server, implicit flow) gebouwd en lokaal getest, NIET gepusht.**
 
 **Probleem.** De browserclient (`@supabase/ssr` 0.5.2) gebruikt de PKCE-flow: een herstel-link werkt alleen in exact de
-browser waarin hij is aangevraagd (daar staat de geheime sleutel). Op een iPhone opent Mail de link vaak elders (ander
-venster, privévenster); dan faalt het herstel met "Kon wachtwoord niet wijzigen". Uitnodigingen (team en platform) hebben
-hetzelfde probleem. De foutmelding verborg bovendien de echte oorzaak.
+browser waarin hij is aangevraagd. Op een iPhone opent Mail de link vaak elders (ander venster, privévenster); dan faalt het
+herstel. Uitnodigingen (team en platform) komen met de sessie in het #-deel van de link (implicit) en werden door de
+PKCE-browserclient ook niet opgepakt. De foutmelding verborg de echte oorzaak.
 
-**Oplossing.** Route `app/auth/confirm/route.ts`: de server controleert de link met `verifyOtp({ type, token_hash })`, zet de
-sessie (cookies) en stuurt door naar `/reset-password`; dat werkt in elke browser en op elk toestel. Alleen `recovery` en
-`invite`; `next` alleen een eigen pad (geen open redirect); een ongeldige of verlopen link gaat naar `/reset-password` met een
-zichtbare reden en de technische melding. Helpers in `lib/auth/email-link.ts`. `/auth/confirm` is een publiek pad in
-`middleware.ts`. `/reset-password` controleert vooraf of er een geldige sessie is (anders meteen een melding met knop
-"Nieuwe link aanvragen"), toont bij een fout de echte melding en stuurt na het wijzigen naar `/` (juiste plek per account).
-Oude links (`?code=`) blijven werken zoals voorheen.
+**Ronde 1 (live, v1.0.84).** Route `app/auth/confirm/route.ts` (server controleert `token_hash` met `verifyOtp`). Werkt alleen
+als de Supabase-e-mailsjablonen naar `/auth/confirm` linken; het sjabloon aanpassen bleek op de iPhone niet te doen. De route
+blijft bestaan (onschadelijk, voor later).
 
-**Supabase-instelling (eenmalig, dashboard → Authentication → Email Templates).** "Reset password":
-`https://polder.vercel.app/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`; "Invite user":
-`https://polder.vercel.app/auth/confirm?token_hash={{ .TokenHash }}&type=invite`. Eerst de app pushen, daarna de sjablonen.
+**Ronde 2 (zonder aangepast sjabloon).** De herstelmail wordt door de SERVER aangevraagd (`POST /api/auth/forgot-password`,
+`lib/auth/recovery.ts`) met de implicit flow en de publieke anon-sleutel: de standaard Supabase-mail bevat dan een link die
+de sessie zelf meebrengt (`#access_token=…`). `/reset-password` leest dat #-deel uit (`parseHashSession` in
+`lib/auth/email-link.ts`), zet de sessie (`setSession`), haalt het #-deel uit de adresbalk, en toont bij een verlopen link
+de melding uit de link. Dat werkt in elke browser, in een privévenster en op een ander toestel, en ook voor uitnodigingen.
+`/forgot-password` toont nu de echte foutmelding (bijv. de wachttijd tussen twee aanvragen). `/api/auth/forgot-password` is
+een publiek pad in `middleware.ts`. Oude `?code=`-links blijven werken.
 
-**Tests.** App-test t11 12/12 (geldige herstel-link en uitnodiging, verlopen link met melding, ander type, ontbrekende token,
-onbekend type, `next` naar eigen pad en geweigerde externe sites); mutatie (foutcontrole weg) → 2 FAIL. t10 31/31, `tsc`,
-`next build` OK. Ook: `prod-platform-checks.sql` controleert nu ook dat de server niets rechtstreeks in het logboek kan schrijven.
+**Tests.** App-test t11 18/18 (route `/auth/confirm`, herstel aanvragen via de server met implicit flow + anon-sleutel +
+juiste link, ongeldig adres, Supabase-fout zichtbaar, #-deel met tokens/fout/leeg). Mutaties: foutcontrole `/auth/confirm` weg
+→ 2 FAIL; PKCE in plaats van implicit → 1 FAIL. t9 23/23, t10 31/31, `tsc`, `next build` OK. `prod-platform-checks.sql`
+controleert ook dat de server niets rechtstreeks in het logboek kan schrijven.

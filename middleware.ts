@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { blockedReason, hasAccess } from "@/lib/user-management/access";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/confirm", "/approve", "/api/public-approve", "/api/ping-supabase"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth/confirm", "/api/auth/forgot-password", "/approve", "/api/public-approve", "/api/ping-supabase"];
 // Reset-password gebruikt zelf een (tijdelijke) sessie via de e-maillink —
 // een ingelogde gebruiker mag hier dus niet worden weggestuurd.
 const REDIRECT_IF_AUTHENTICATED = ["/login", "/forgot-password"];

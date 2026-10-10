@@ -12,7 +12,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 ## Wat is GEBOUWD maar NIET gepusht / NIET in productie
 - **Platformbeheer (migraties 0026 + 0027, beheerscherm `/platform`)**: lokaal getest op PG16 en PG17 (zie architecture 13.19). Beheerder = apart account stuctech@gmail.com (zonder restaurantprofiel). Beheeractie + logregel in één transactie. Uitrol in DEZE volgorde: push A (database/tests/docs) → `prod-platform-checks.sql` → migratie 0026 → migratie 0027 → leesblok → `prod-platform-beheerder.sql` → push B (app) → app-test.
 
-- **Mail-links (13.20)**: herstel- en uitnodigingslinks werkten niet als Mail ze in een ander venster opende (PKCE). Nieuwe route `/auth/confirm`; na de push moeten in Supabase 2 e-mailsjablonen worden aangepast (tekst in 13.20).
+- **Mail-links (13.20)**: herstel- en uitnodigingslinks werkten niet als Mail ze in een ander venster opende (PKCE). Oplossing: de server vraagt de herstelmail aan (implicit flow) en /reset-password leest de sessie uit de link. Geen aanpassing in Supabase nodig.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.

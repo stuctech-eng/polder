@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { parseHashSession } from "@/lib/auth/email-link";
 
 const LINK_MESSAGES: Record<string, string> = {
   ontbreekt: "Deze link is onvolledig. Vraag hieronder een nieuwe link aan.",
@@ -32,14 +33,34 @@ function ResetPasswordForm() {
       return;
     }
     const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data, error: userError }) => {
+    (async () => {
+      // Herstel-link (aangevraagd door de server) of uitnodiging: de sessie staat in het #-deel van de link.
+      const fromHash = parseHashSession(window.location.hash);
+      if (fromHash) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        if ("error" in fromHash) {
+          setSession("missing");
+          setSessionError(fromHash.error);
+          return;
+        }
+        const { error: sessionSetError } = await supabase.auth.setSession({
+          access_token: fromHash.accessToken,
+          refresh_token: fromHash.refreshToken,
+        });
+        if (sessionSetError) {
+          setSession("missing");
+          setSessionError(sessionSetError.message);
+          return;
+        }
+      }
+      const { data, error: userError } = await supabase.auth.getUser();
       if (data.user) {
         setSession("ok");
       } else {
         setSession("missing");
         setSessionError(userError?.message ?? null);
       }
-    });
+    })();
   }, [linkProblem]);
 
   async function handleSubmit(e: React.FormEvent) {

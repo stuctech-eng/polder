@@ -6,8 +6,8 @@ Bewaard uit de 7b-sessie (9 okt 2026) zodat ze niet verloren gaan. Ze draaien de
 - `t8.ts`  — voorcontrole app-release ZONDER 0023 (database op 0022): 39 checks (geblokkeerde bon = 400 en nul schrijfacties; falende approvals-query = fail closed; bestaande flow intact).
 - `t9.ts` — fase 2 (restaurant aan/uit, database MET 0025): 23 checks. Bouwen met `build9.js`.
 - `t10.ts` — platformbeheer (database MET 0026 + 0027): 31 checks (routes weigeren niet-beheerders, aanmaken, aan/uit, eigenaar uitnodigen, logboek, logregel faalt = actie faalt, fail closed, teambeheer ongewijzigd). Bouwen met `build10.js`; gebruikt een schone kopie van de database (de test wijzigt data).
-- `t11.ts` — mail-links (`/auth/confirm`): 12 checks, geen database nodig. Bouwen met `build11.js`.
-- `fake-supabase.js` — nep-client; `cfg.fault = { table, mode: "error" | "throw" }` injecteert fouten op SELECTs van een tabel; `cfg.writeFault = "<tabel>"` op schrijfacties; `cfg.rpcFault = "<functie>"` op rpc; rpc met argumenten (`rpc(fn, { p_a: … })`). Met de service-sleutel ook `auth.admin` (getUserById, inviteUserByEmail, deleteUser) rechtstreeks op `auth.users`; `auth.verifyOtp` (token_hash `geldig-<type>` is geldig).
+- `t11.ts` — mail-links (`/auth/confirm`, herstel via de server, #-deel uitlezen): 18 checks, geen database nodig. Bouwen met `build11.js`.
+- `fake-supabase.js` — nep-client; `cfg.fault = { table, mode: "error" | "throw" }` injecteert fouten op SELECTs van een tabel; `cfg.writeFault = "<tabel>"` op schrijfacties; `cfg.rpcFault = "<functie>"` op rpc; rpc met argumenten (`rpc(fn, { p_a: … })`). Met de service-sleutel ook `auth.admin` (getUserById, inviteUserByEmail, deleteUser) rechtstreeks op `auth.users`; `auth.verifyOtp` (token_hash `geldig-<type>` is geldig); `auth.resetPasswordForEmail` (vastgelegd in `cfg.resets`, fout via `cfg.resetFault`).
 - `build.js` / `build8.js` — bundelen `t7.ts` / `t8.ts` met esbuild; aanroep: `node build.js <projectmap met node_modules>`.
 - Gebruik: `SCEN_FILE=supabase/hardening/tests/invoice-block-scenarios.json NODE_PATH=<node_modules met pg> node t7.js`.
 
