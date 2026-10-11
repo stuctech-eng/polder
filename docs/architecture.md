@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.67** — FASE 4 MODULES PER RESTAURANT: migraties `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + rollbacks, `lib/features/*`, modulecontroles in routes/pagina's, schakelaars in het beheerscherm, `prod-modules-checks.sql`, 104 MODULES-cases, `modules-tests.sh`, app-test t12; sectie 13.21. Lokaal getest (PG16 + PG17); niet gepusht.
+
 **v1.66** — MAIL-LINKS: route `/auth/confirm` (v1.0.84) en herstelmail via de server met implicit flow (`/api/auth/forgot-password`, `lib/auth/recovery.ts`), `/reset-password` leest de sessie uit de link en toont echte fouten, app-test t11; sectie 13.20.
 
 **v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); in productie op 10-11 okt (v1.0.82/v1.0.83), app-test geslaagd, akkoord.
@@ -1916,3 +1918,52 @@ een publiek pad in `middleware.ts`. Oude `?code=`-links blijven werken.
 juiste link, ongeldig adres, Supabase-fout zichtbaar, #-deel met tokens/fout/leeg). Mutaties: foutcontrole `/auth/confirm` weg
 → 2 FAIL; PKCE in plaats van implicit → 1 FAIL. t9 23/23, t10 31/31, `tsc`, `next build` OK. `prod-platform-checks.sql`
 controleert ook dat de server niets rechtstreeks in het logboek kan schrijven.
+
+### 13.21 FASE 4 — modules per restaurant (migraties 0028-0030 + app, 2026-10-11)
+
+> **STATUS (11 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.** Plan: auditrapport versie 4 (beoordeeld door GPT).
+
+**Doel.** De platformbeheerder zet per restaurant de modules Dagafsluiting (`daily_closing`), Betalingen registreren
+(`payment_registration`) en Goedkeuring (`approval`) aan of uit. Restaurants kunnen dat nooit zelf. Vaste kern (altijd aan):
+Bedrijven, Rekeningen en bonnen, Facturen, Team, Dashboard. Bestaande restaurants: alle modules standaard aan. Keuze A:
+Goedkeuring uit = een bon die goedkeuring vereist blijft wachten; niets wordt automatisch goedgekeurd of gefactureerd; geen mail.
+
+**Migraties (elk < 3.000 tekens).**
+- `0028_modules.sql`: register `features` (key, default_enabled, description; 3 sleutels, standaard aan) en
+  `restaurant_features` (afwijking per restaurant). RLS aan, geen policies, alle rechten ingetrokken; alleen de server mag lezen.
+  Restaurants lezen hun stand alleen via `my_feature()`. `feature_aan(restaurant, key)` (onbekende sleutel/restaurant of NULL =
+  onwaar; geen rij = standaard) alleen voor `service_role`; `my_feature(key)` = `feature_aan(my_restaurant_id(), key)` voor
+  `authenticated`. Beide SECURITY DEFINER, `search_path = public, pg_temp`, eigenaar `postgres`.
+- `0029_module_beheer.sql`: `platform_module_zetten(admin, restaurant, key, aan)` (alleen `service_role`; controleert zelf
+  beheerder, restaurant en sleutel; wijziging + logregel `module_aan`/`module_uit` in één transactie) en de uitgebreide
+  logboek-constraint.
+- `0030_module_wacht.sql`: databasewacht `module_wacht()` (SECURITY DEFINER, geen uitzondering voor welke rol dan ook) op
+  `payments` (INSERT/UPDATE/DELETE), `invoices` (alleen → `paid`), `daily_closings` (INSERT/UPDATE/DELETE), `approval_settings`
+  (INSERT/UPDATE/DELETE), `approvals` (UPDATE) en `receipts` (uit `pending_approval`, en `approved` → `locked`). Een DELETE via
+  een cascade (ouderrij al weg) blijft toegestaan. Bestaande guards ongewijzigd.
+- Rollbacks in omgekeerde volgorde; elke rollback weigert zolang de volgende migratie er is. 0029 weigert met module-regels in
+  het logboek, 0028 met module-instellingen per restaurant.
+
+**App.** `lib/features/*` (`requireFeature()` altijd na `requireRole()`, fail closed; `isFeatureOn()` voor menu en pagina's;
+`isFeatureOnForRestaurant()` voor de publieke link). Controles in: dagafsluiting (pagina, GET/POST), betalingen (POST, en
+handmatig `paid` in `PATCH /api/invoices/[id]`), goedkeuring (instellingen GET/PUT, goedkeuren, opnieuw indienen, publieke link).
+Een nieuwe bon met goedkeuring uit wacht zonder mail. Menu, factuurlijst, bonnen- en bedrijfspagina verbergen de module.
+Bestaand gat gerepareerd: GET approval-settings had geen rolcontrole. Beheerscherm: per restaurant 3 schakelaars
+(`PATCH /api/platform/restaurants/[id]/modules`), bevestiging, daarna altijd opnieuw de stand uit de database.
+
+**Tests.** Harnas: 104 MODULES-cases (identiteit, F, R, A, W, S1-S6, C1-C7), PG16 en PG17 1011 PASS + 1 OPEN; PR24/PR25 sluiten de
+moduletabellen uit. `modules-tests.sh` 24/24 (incl. G1: alle bestaande guard-/triggerfuncties ongewijzigd). App-test t12 41/41
+(PG16 en PG17). Mutaties database: wacht zonder DELETE 7 FAIL, te strenge trigger op approvals INSERT 1 FAIL, geen wacht op
+bonstatus 5 FAIL, cascade zonder oudercontrole 7 FAIL, alleen diepte zonder oudercontrole (C4 via testtrigger) 6 FAIL, ontbrekende rij = uit 88 FAIL, EXECUTE voor authenticated 2 FAIL,
+`my_feature` als INVOKER 6 FAIL, logregel ingeslikt 1 FAIL, uitzondering voor service_role (via JWT-rol) 51 FAIL. Mutaties app:
+betalingsroute zonder controle 1 FAIL (database weigert, nul schrijfacties), fail-open 1 FAIL, publieke link zonder controle
+6 FAIL (database weigert de beslissing; lezen houdt alleen de app tegen), opnieuw indienen zonder controle 1 FAIL, mail bij uit
+1 FAIL. t7 (159 + 14 bekend), t8 39/39, t9 23/23, t10 31/31, t11 18/18 per regel identiek aan de oude code (t10: verwachte
+velden van het overzicht uitgebreid met `modules`). `platform-tests` 22/22, `aanuit-tests` 19/19, `tsc`, `next build` OK.
+
+**Restrisico's.** Opnieuw indienen rechtstreeks via de API blijft mogelijk (alleen strenger, keuze A). Lezen via de publieke
+link met module uit houdt alleen de app tegen (de database kan service-role-lezen niet blokkeren). Met een module uit kan ook de
+SQL-editor niet schrijven in die tabellen. `payments` UPDATE/DELETE en → `paid` met module aan: bestaand gat (hardening 10-13).
+
+**Uitrol.** Push A (database, tests, docs) → `prod-modules-checks.sql` (noteer `guards_md5`) → 0028 → 0029 → 0030 (elk eigen GO)
+→ leesblok (`guards_md5` ongewijzigd) → push B (app) → rooktest met "Test restaurant" → STOP.

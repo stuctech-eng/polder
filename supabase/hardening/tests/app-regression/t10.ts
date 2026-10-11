@@ -49,7 +49,8 @@ const RA = "a0000000-0000-0000-0000-000000000001", ORPH = "c0000000-0000-0000-00
   const lijst = r.json.restaurants ?? [];
   const a = lijst.find((x: any) => x.id === RA);
   ok("overzicht: 200 met restaurant A, eigenaar met e-mail en aantal gebruikers", r.status === 200 && !!a && a.userCount > 0 && a.owners.some((o: any) => o.email === "a.owner@staging.test"), JSON.stringify(r).slice(0, 300));
-  ok("overzicht: alleen platformvelden (geen facturen, bonnen of bedragen)", lijst.every((x: any) => Object.keys(x).sort().join() === "createdAt,id,isActive,name,owners,userCount"), JSON.stringify(Object.keys(a ?? {})));
+  // sinds fase 4 ook "modules" (stand per module: platformgegevens, geen restaurantinhoud)
+  ok("overzicht: alleen platformvelden (geen facturen, bonnen of bedragen)", lijst.every((x: any) => Object.keys(x).sort().join() === "createdAt,id,isActive,modules,name,owners,userCount"), JSON.stringify(Object.keys(a ?? {})));
 
   // aanmaken
   let s0 = await stand();

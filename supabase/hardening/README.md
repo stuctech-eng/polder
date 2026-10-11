@@ -1,6 +1,6 @@
 # Security hardening — voorbereiding en testharnas (STAP 0)
 
-**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt); stap 9 (restaurant aan/uit, 0025) in productie en akkoord (10 okt, app v1.0.80); platformbeheer (0026 + 0027) in productie en akkoord (11 okt, app v1.0.83).** Niets in deze map wijzigt productie zonder expliciete GO.
+**Status (10 okt 2026): stappen 0–7 + 0022 in productie; 0023 voorbereid, niet uitgevoerd; stap 8 (tenantswitch, 0024) in productie en akkoord (10 okt); stap 9 (restaurant aan/uit, 0025) in productie en akkoord (10 okt, app v1.0.80); platformbeheer (0026 + 0027) in productie en akkoord (11 okt, app v1.0.83); fase 4 modules (0028–0030) gebouwd en lokaal getest, wacht op GO.** Niets in deze map wijzigt productie zonder expliciete GO.
 Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 13 (en 13.7 = Stap 0-resultaat).
 
 ## Wat staat waar
@@ -20,6 +20,8 @@ Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 
 | `prod-aanuit-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van 0025: functies, kolom, my_access, dekking (lokaal staat email_settings erbij; bestaat niet in productie) |
 | `tests/platform-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie- en rollbacktests voor 0026 en 0027 (22 checks) |
 | `prod-platform-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van 0026/0027: tabellen, functie, RLS, rechten, actiefuncties, aantal beheerders |
+| `tests/modules-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie- en rollbacktests voor 0028–0030 (24 checks, incl. G1 guards ongewijzigd) |
+| `prod-modules-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van 0028–0030, rechten, alles standaard aan, `guards_md5` (vóór en na gelijk) |
 | `prod-platform-beheerder.sql` | **Productie** — WIJZIGT (alleen met GO) | Voegt stuctech@gmail.com toe als platformbeheerder; weigert een account met restaurantprofiel |
 
 ## Testharnas gebruiken
@@ -54,6 +56,7 @@ Elke stap = één migratie, één transactie, eigen rollback, daarna STOP voor c
 | 8 | **Tenantswitch (fase 1 meerdere restaurants)**: de 15 oude inline-policies via `my_restaurant_id()` | `0024_tenantswitch_inline_policies.sql` (**in productie, akkoord — 10 okt 2026**) | `rollbacks/0024_rollback.sql` | `run(8)` + `tests/tenantswitch-tests.sh` + `prod-tenantswitch-checks.sql` |
 | 9 | **Restaurant aan/uit (fase 2)**: `restaurants.is_active`, `my_restaurant_id()`/`my_role()` met restaurantcontrole, `my_access()` | `0025_restaurant_aan_uit.sql` + app (**in productie sinds 10 okt; controle 0025/0025/ja/ja/0/false/leeg; app-test geslaagd**) | `rollbacks/0025_rollback.sql` (eerst app terug) | `run(9)` + `tests/aanuit-tests.sh` + app-test t9 + `prod-aanuit-checks.sql` |
 | — | **Platformbeheer**: `platform_admins`, `platform_log`, `is_platform_admin()`; actiefuncties met logregel in één transactie (categorie PLATFORM, stap 0: geldt altijd vanaf 0027) | `0026_platformbeheer.sql` + `0027_platform_acties.sql` + app (**in productie sinds 10 okt; leesblok 0025/ja/ja/ja/ja/true/ja/0; app-test geslaagd**) | `rollbacks/0027_rollback.sql`, dan `0026_rollback.sql` (eerst app terug) | `run(9)` (PLATFORM 27/27) + `tests/platform-tests.sh` + app-test t10 + `prod-platform-checks.sql` |
+| — | **Fase 4 modules**: register, `feature_aan`/`my_feature`, beheerfunctie, databasewacht `module_wacht` (categorie MODULES, stap 0) | `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + app (**gebouwd en lokaal getest op PG16 + PG17; wacht op GO**) | `rollbacks/0030`, dan `0029`, dan `0028` (eerst app terug) | `run(9)` (MODULES 104/104) + `tests/modules-tests.sh` + app-test t12 + `prod-modules-checks.sql` |
 | 10 | H4b invoices/payments/documents (rolrechten) | gepland | gepland | `run(10)` |
 | 11 | H4c + H4d dagafsluiting/stamdata/settings/plugins | gepland | gepland | `run(11)` |
 | 12 | H10 PIN-geheimen | gepland (+ app) | gepland | `run(12)` |

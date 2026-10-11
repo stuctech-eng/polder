@@ -1,6 +1,6 @@
 # HANDOFF — waar we gebleven zijn (bijgewerkt 10 okt 2026)
 
-Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.66) en `supabase/hardening/README.md`.
+Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
 ## Wat staat LIVE
 - Hardening stappen 0–7a + migratie 0022 (approvals_guard aangescherpt) in productie, akkoord.
@@ -11,11 +11,14 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Mail-links (v1.0.84/v1.0.85)**: wachtwoord herstellen en uitnodigingen werken in elke browser (server vraagt de herstelmail aan; /reset-password leest de sessie uit de link). Geen aanpassing in Supabase nodig.
 - Productie-database staat op **migratie 0027** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
+## Wat is GEBOUWD maar NIET gepusht / NIET in productie
+- **Fase 4 — modules per restaurant (migraties 0028–0030 + app)**: lokaal getest op PG16 en PG17 (zie architecture 13.21). Uitrol in DEZE volgorde, elk met eigen GO: push A (database/tests/docs) → `prod-modules-checks.sql` (noteer `guards_md5`) → 0028 → 0029 → 0030 → leesblok → push B (app) → rooktest.
+
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 ## Volgende stappen (elk met eigen expliciete GO)
-1. Featuremodel + configureerbare UI, Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
+1. Fase 4 (modules) naar productie — gebouwd, zie hierboven. Daarna: Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
 2. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 10–13), privacyfase, gecontroleerde supporttoegang.
 
 ## Open punten (niet vergeten)
@@ -46,7 +49,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 
 **Database (Supabase)**
 - `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt).
-- `supabase/rollbacks/`: rollbacks per stap (0022–0027).
+- `supabase/rollbacks/`: rollbacks per stap (0022–0030).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 
 **Tests (alles lokaal, nooit op productie)**

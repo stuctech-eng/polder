@@ -617,10 +617,10 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen en de platformtabellen (0026)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
-case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platformtabellen (0026, bewust smaller: zie PA-cases)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026) en de moduletabellen (0028)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platform- en moduletabellen (0026/0028, bewust smaller: zie PA-/MX-cases)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
      "select has_table_privilege('authenticated','public.restaurants','select') and not has_table_privilege('authenticated','public.restaurants','insert,update,delete')", False, True, 2)
 case("PR27", "PRIVILEGES", "standaardrechten voor nieuwe tabellen bevatten geen TRUNCATE/TRIGGER/REFERENCES voor anon/authenticated/service_role", "postgres", "check",
@@ -909,6 +909,159 @@ case("PX07", PL, "logregel faalt -> eigenaar koppelen teruggedraaid (geen profie
 case("PX08", PL, "onbekend restaurant: geweigerd, geen logregel", "service_role", "check",
      "select hardening_test.refused_with($$select public.platform_restaurant_status('" + ORPH + "', 'e0000000-0000-0000-0000-000000000099', false)$$, 'niet gevonden') "
      "and not exists (select 1 from platform_log)", True, setup=MAAK_ADMIN)
+
+# ---------------------------------------------------------------- MODULES (fase 4, migraties 0028-0030)
+# Module-instellingen alleen via de platformbeheerder; standaard aan; uitgezette module = schrijfactie geweigerd door de
+# databasewacht (module_wacht), voor authenticated EN service_role. Identiteiten: OWNER/BED = set local role authenticated
+# met JWT; "service_role" = set local role service_role (geen superuser, zie MI01); "postgres" alleen voor opzet/catalogus.
+MO = "MODULES"
+def UIT(key, r=RA): return f"insert into restaurant_features values ('{r}','{key}',false,now());"
+PAY, DAY, APP = "payment_registration", "daily_closing", "approval"
+BEIDE = ((OWNER, "o"), ("service_role", "s"))
+def wacht(cid, title, sql, key, aan_ook=True, setup=""):
+    """module uit -> geweigerd (owner en service_role); module aan -> toegestaan (owner): bewijs dat de weigering van de module komt."""
+    for who, t in BEIDE:
+        case(f"{cid}{t}", MO, f"{title} -- module uit, als {who}: geweigerd", who, "dml", sql, False, setup=setup + UIT(key))
+    if aan_ook:
+        case(f"{cid}a", MO, f"{title} -- module aan, als owner A: toegestaan (controle)", OWNER, "dml", sql, True, setup=setup)
+# identiteit
+for who, t in BEIDE:
+    case(f"MI01{t}", MO, f"identiteit {who}: echte rol, geen superuser", who, "check",
+         f"select current_user = '{'authenticated' if who == OWNER else 'service_role'}' and not (select rolsuper from pg_roles where rolname = current_user)", True)
+# F: feature_aan / my_feature
+case("MF01", MO, "alle bestaande restaurants: de 3 modules standaard aan", "postgres", "check",
+     "select bool_and(public.feature_aan(r.id, k)) from public.restaurants r cross join (values ('daily_closing'),('payment_registration'),('approval')) v(k)", True)
+case("MF02", MO, "onbekende sleutel en NULL-sleutel: onwaar", "service_role", "check",
+     f"select not public.feature_aan('{RA}','onbekend') and not public.feature_aan('{RA}', null)", True)
+case("MF03", MO, "NULL-restaurant en niet-bestaand restaurant: onwaar", "service_role", "check",
+     "select not public.feature_aan(null,'approval') and not public.feature_aan('e0000000-0000-0000-0000-000000000099','approval')", True)
+case("MF04", MO, "owner A, geen rij: my_feature = standaard (waar)", OWNER, "check", "select public.my_feature('approval')", True)
+case("MF05", MO, "gedeactiveerde gebruiker: my_feature onwaar", INA, "check", "select not public.my_feature('approval')", True)
+case("MF06", MO, "restaurant A uit: my_feature owner A onwaar", OWNER, "check", "select not public.my_feature('approval')", True, setup=A_UIT)
+case("MF07", MO, "module uit bij A: owner A onwaar, owner B nog waar (A beinvloedt B niet)", OWNER, "check", "select not public.my_feature('approval')", True, setup=UIT(APP))
+case("MF08", MO, "module uit bij A: owner B ziet nog aan", OWNER_B, "check", "select public.my_feature('approval')", True, setup=UIT(APP))
+case("MF09", MO, "registerregel standaard uit + geen rij: onwaar (standaardwaarde wordt echt gelezen)", "service_role", "check",
+     f"select not public.feature_aan('{RA}','approval')", True, setup="update features set default_enabled = false where key = 'approval';")
+# R: rechten
+case("MR01", MO, "owner A kan feature_aan niet zelf aanroepen", OWNER, "check",
+     f"select hardening_test.refused_with($$select public.feature_aan('{RB}','approval')$$, 'permission denied')", True)
+case("MR02", MO, "anon kan my_feature niet aanroepen", "anon", "check",
+     "select hardening_test.refused_with($$select public.my_feature('approval')$$, 'permission denied')", True)
+case("MR03", MO, "service_role kan feature_aan aanroepen", "service_role", "check", f"select public.feature_aan('{RA}','approval')", True)
+case("MR04", MO, "alle 4 functies: SECURITY DEFINER met search_path public, pg_temp", "postgres", "check",
+     "select count(*) = 4 from pg_proc where pronamespace = 'public'::regnamespace and proname in ('feature_aan','my_feature','module_wacht','platform_module_zetten') "
+     "and prosecdef and proconfig = '{\"search_path=public, pg_temp\"}'", True)
+case("MR05", MO, "EXECUTE-rechten precies volgens het plan (ook PUBLIC via anon)", "postgres", "check",
+     "select not has_function_privilege('anon','public.feature_aan(uuid,text)','EXECUTE') and not has_function_privilege('authenticated','public.feature_aan(uuid,text)','EXECUTE') "
+     "and has_function_privilege('service_role','public.feature_aan(uuid,text)','EXECUTE') "
+     "and not has_function_privilege('anon','public.my_feature(text)','EXECUTE') and has_function_privilege('authenticated','public.my_feature(text)','EXECUTE') "
+     "and not has_function_privilege('service_role','public.my_feature(text)','EXECUTE') "
+     "and not has_function_privilege('anon','public.module_wacht()','EXECUTE') and not has_function_privilege('authenticated','public.module_wacht()','EXECUTE') "
+     "and not has_function_privilege('service_role','public.module_wacht()','EXECUTE') "
+     "and not has_function_privilege('anon','public.platform_module_zetten(uuid,uuid,text,boolean)','EXECUTE') "
+     "and not has_function_privilege('authenticated','public.platform_module_zetten(uuid,uuid,text,boolean)','EXECUTE') "
+     "and has_function_privilege('service_role','public.platform_module_zetten(uuid,uuid,text,boolean)','EXECUTE')", True)
+for who, t in BEIDE:
+    case(f"MR06{t}", MO, f"{who} zet zelf een module aan/uit in restaurant_features", who, "dml", UIT(PAY).rstrip(";"), False)
+    case(f"MR07{t}", MO, f"{who} wijzigt een bestaande module-instelling", who, "dml", "update restaurant_features set enabled = true", False, setup=UIT(PAY))
+    case(f"MR08{t}", MO, f"{who} wist een module-instelling", who, "dml", "delete from restaurant_features", False, setup=UIT(PAY))
+    case(f"MR09{t}", MO, f"{who} wijzigt het register", who, "dml", "update features set default_enabled = false", False)
+case("MR10", MO, "owner A leest restaurant_features niet (geen leesrecht nodig: my_feature)", OWNER, "select", "select 1 from restaurant_features", False, setup=UIT(PAY))
+case("MR11", MO, "geen restaurantrol heeft schrijfrecht op module-instellingen (catalogus)", "postgres", "check",
+     "select not has_table_privilege('authenticated','public.restaurant_features','INSERT,UPDATE,DELETE,TRUNCATE') "
+     "and not has_table_privilege('anon','public.restaurant_features','INSERT,UPDATE,DELETE,TRUNCATE') "
+     "and not has_table_privilege('authenticated','public.features','INSERT,UPDATE,DELETE,TRUNCATE') "
+     "and not exists (select 1 from pg_policies where tablename in ('features','restaurant_features'))", True)
+# A: beheerfunctie
+MAAK_ADMIN_M = f"insert into platform_admins (user_id) values ('{ORPH}');"
+case("MA01", MO, "beheerder zet module uit: instelling + logregel module_uit", "service_role", "check",
+     f"select hardening_test.daarna($$select public.platform_module_zetten('{ORPH}','{RA}','approval',false)$$, "
+     f"$$select not public.feature_aan('{RA}','approval') and (select action||(details->>'module') from platform_log order by id desc limit 1) = 'module_uitapproval'$$)", True, setup=MAAK_ADMIN_M)
+case("MA02", MO, "niet-beheerder: geweigerd", "service_role", "check",
+     f"select hardening_test.refused_with($$select public.platform_module_zetten('{ORPH}','{RA}','approval',false)$$, 'geen platformbeheerder')", True)
+case("MA03", MO, "logregel faalt -> module-instelling teruggedraaid", "service_role", "check",
+     f"select hardening_test.refused_with($$select public.platform_module_zetten('{ORPH}','{RA}','approval',false)$$, 'proef_log_faalt') "
+     f"and public.feature_aan('{RA}','approval') and not exists (select 1 from restaurant_features)", True,
+     setup=MAAK_ADMIN_M + "alter table platform_log add constraint proef_log_faalt check (false) not valid;")
+case("MA04", MO, "onbekende module: geweigerd", "service_role", "check",
+     f"select hardening_test.refused_with($$select public.platform_module_zetten('{ORPH}','{RA}','kassa',false)$$, 'onbekende module')", True, setup=MAAK_ADMIN_M)
+case("MA05", MO, "owner A roept de beheerfunctie aan: geweigerd", OWNER, "check",
+     f"select hardening_test.refused_with($$select public.platform_module_zetten('{ORPH}','{RA}','approval',false)$$, 'permission denied')", True, setup=MAAK_ADMIN_M)
+# W: databasewacht
+wacht("MW01", "betaling toevoegen (factuur A 501)", f"insert into payments (invoice_id, amount, method) values ('{A(501)}', 1, 'cash')", PAY)
+wacht("MW02", "betaling wijzigen", f"update payments set amount = amount where id = '{A(520)}'", PAY)
+wacht("MW03", "betaling rechtstreeks wissen (factuur bestaat nog: geen cascade)", f"delete from payments where id = '{A(520)}'", PAY)
+wacht("MW04", "factuur rechtstreeks op betaald zetten", f"update invoices set status = 'paid' where id = '{A(501)}'", PAY)
+case("MW05", MO, "betalingen uit: factuur op overdue zetten blijft toegestaan", OWNER, "dml", f"update invoices set status = 'overdue' where id = '{A(501)}'", True, setup=UIT(PAY))
+case("MW06", MO, "betalingen uit: betalingen lezen blijft toegestaan", OWNER, "select", f"select 1 from payments where id = '{A(520)}'", True, setup=UIT(PAY))
+wacht("MW07", "dag afsluiten", f"insert into daily_closings (restaurant_id, closing_date) values ('{RA}', '2026-10-11')", DAY)
+wacht("MW08", "dagafsluiting wijzigen (heropenen)", f"update daily_closings set reopened_at = now() where id = '{A(600)}'", DAY)
+wacht("MW09", "dagafsluiting rechtstreeks wissen", f"delete from daily_closings where id = '{A(600)}'", DAY)
+wacht("MW10", "goedkeuringsinstelling toevoegen (bedrijf A 105)", f"insert into approval_settings (company_id, method, is_required) values ('{A(105)}','pin',true)", APP)
+wacht("MW11", "goedkeuringsinstelling wijzigen", f"update approval_settings set is_required = is_required where company_id = '{A(100)}'", APP)
+wacht("MW12", "goedkeuringsinstelling rechtstreeks wissen", f"delete from approval_settings where company_id = '{A(100)}'", APP)
+case("MW13", MO, "module uit bij A: betaling bij B toevoegen blijft toegestaan (owner B)", OWNER_B, "dml",
+     f"insert into payments (invoice_id, amount, method) values ('{B(501)}', 1, 'cash')", True, setup=UIT(PAY))
+# goedkeuring: wachtende bon in A (opzet met triggers uit, zoals de seed)
+WACHT_BON = REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9101)}','{RA}','pending_approval',5); "
+                 f"insert into approvals (id, receipt_id, company_id, method, status) values ('{A(9102)}','{A(9101)}','{A(100)}','pin','pending');")
+wacht("MW14", "goedkeuring beslissen (pending -> approved)", f"update approvals set status = 'approved', approved_at = now(), approved_by = 'x' where id = '{A(9102)}'", APP, setup=WACHT_BON)
+wacht("MW15", "goedkeuring afwijzen (pending -> rejected)", f"update approvals set status = 'rejected', approved_at = now() where id = '{A(9102)}'", APP, setup=WACHT_BON)
+wacht("MS05", "omweg stap 2: wachtende bon -> locked", f"update receipts set status = 'locked' where id = '{A(9101)}'", APP, setup=WACHT_BON)
+wacht("MW16", "wachtende bon afwijzen (-> linked)", f"update receipts set status = 'linked' where id = '{A(9101)}'", APP, setup=WACHT_BON)
+GOEDGEKEURD = REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9103)}','{RA}','approved',5);")
+wacht("MW17", "goedgekeurde bon vergrendelen (approved -> locked)", f"update receipts set status = 'locked' where id = '{A(9103)}'", APP, setup=GOEDGEKEURD)
+# S1-S4: rechtstreekse sprong naar approved/locked (receipts_guard), module uit, beide rollen
+for van in ("draft", "linked"):
+    BON = REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9104)}','{RA}','{van}',5);")
+    for naar, nr in (("approved", 1 if van == "draft" else 2), ("locked", 3 if van == "draft" else 4)):
+        for who, t in BEIDE:
+            case(f"MS0{nr}{t}", MO, f"S{nr}: bon {van} -> {naar} rechtstreeks, module uit, als {who}: geweigerd", who, "dml",
+                 f"update receipts set status = '{naar}' where id = '{A(9104)}'", False, setup=BON + UIT(APP))
+# W7 / keuze A: wat vrij moet blijven met goedkeuring uit
+LINKED = REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9105)}','{RA}','linked',5);")
+case("MS06", MO, "keuze A / omweg stap 1: bon linked -> pending_approval blijft toegestaan (goedkeuring uit)", OWNER, "dml",
+     f"update receipts set status = 'pending_approval' where id = '{A(9105)}'", True, setup=LINKED + UIT(APP))
+case("MS07", MO, "keuze A: pending-goedkeuringsrij toevoegen blijft toegestaan (goedkeuring uit)", OWNER, "dml",
+     f"insert into approvals (receipt_id, company_id, method, status) values ('{A(9105)}','{A(100)}','pin','pending')", True,
+     setup=LINKED + REPL(f"update receipts set status = 'pending_approval' where id = '{A(9105)}';") + UIT(APP))
+case("MS08", MO, "goedkeuring uit: bon bewerken (bedrag) blijft toegestaan", OWNER, "dml", f"update receipts set total = 6 where id = '{A(9105)}'", True, setup=LINKED + UIT(APP))
+# C: cascades tegenover rechtstreeks wissen
+C_BEDRIJF = (f"insert into companies (id, restaurant_id, name) values ('{A(9110)}','{RA}','Weg-bedrijf'); "
+             f"insert into approval_settings (company_id, method, is_required) values ('{A(9110)}','pin',true); ")
+case("MC02", MO, "goedkeuring uit: bedrijf verwijderen (owner A) mag, instelling gaat mee via cascade", OWNER, "check",
+     f"select hardening_test.daarna($$delete from companies where id = '{A(9110)}'$$, $$select not exists (select 1 from approval_settings where company_id = '{A(9110)}')$$)", True,
+     setup=C_BEDRIJF + UIT(APP))
+C_FACTUUR = REPL(f"insert into invoices (id, restaurant_id, company_id, invoice_number, total, status) values ('{A(9120)}','{RA}','{A(100)}','2026-9120',5,'sent'); "
+                 f"insert into payments (id, invoice_id, amount, method) values ('{A(9121)}','{A(9120)}',5,'cash');")
+case("MC01", MO, "betalingen uit: factuur verwijderen (owner A) mag, betaling gaat mee via cascade", OWNER, "check",
+     f"select hardening_test.daarna($$delete from invoices where id = '{A(9120)}'$$, $$select not exists (select 1 from payments where id = '{A(9121)}')$$)", True,
+     setup=C_FACTUUR + UIT(PAY))
+case("MC03", MO, "dagafsluiting uit: restaurant verwijderen (beheer, postgres) mag, afsluiting gaat mee via cascade", "postgres", "check",
+     f"select hardening_test.daarna($$delete from restaurants where id = '{RC}'$$, $$select not exists (select 1 from daily_closings where restaurant_id = '{RC}')$$)", True,
+     setup=f"insert into daily_closings (restaurant_id, closing_date) values ('{RC}','2026-10-11'); " + UIT(DAY, RC))
+case("MC04", MO, "service_role: rechtstreeks wissen betaling (ouder bestaat) blijft geweigerd, ook binnen een functie", "service_role", "check",
+     f"select hardening_test.refused_with($$delete from payments where id = '{A(520)}'$$, 'staat uit')", True, setup=UIT(PAY))
+# C4 aanvullend: een DELETE op triggerdiepte > 1 terwijl de ouderrij NOG bestaat (geen cascade). Een tijdelijke testtrigger
+# (alleen in de opzet, teruggedraaid na de case) wist een betaling / afsluiting / instelling vanuit een andere tabel.
+def PROEF(sql): return (
+    "create table hardening_test.proef_c4 (x int); grant insert on hardening_test.proef_c4 to authenticated, service_role; "
+    "create function hardening_test.proef_c4_wis() returns trigger language plpgsql as $f$ begin " + sql + "; return new; end $f$; "
+    "create trigger proef_c4 after insert on hardening_test.proef_c4 for each row execute function hardening_test.proef_c4_wis();")
+for nr, (key, sql, wat) in enumerate((
+        (PAY, f"delete from public.payments where id = '{A(520)}'", "betaling (factuur bestaat nog)"),
+        (DAY, f"delete from public.daily_closings where id = '{A(600)}'", "dagafsluiting (restaurant bestaat nog)"),
+        (APP, f"delete from public.approval_settings where company_id = '{A(100)}'", "goedkeuringsinstelling (bedrijf bestaat nog)")), start=5):
+    for who, t in BEIDE:
+        case(f"MC0{nr}{t}", MO, f"C4: {wat} wissen via een testtrigger (diepte 2, geen cascade), module uit, als {who}: geweigerd", who, "check",
+             "select hardening_test.refused_with($$insert into hardening_test.proef_c4 values (1)$$, 'staat uit') "
+             "and (select pg_trigger_depth()) = 0", True, setup=PROEF(sql) + UIT(key))
+    tabel, waar = sql.split(" from ")[1].split(" where ")
+    case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", OWNER, "check",
+         f"select hardening_test.daarna($$insert into hardening_test.proef_c4 values (1)$$, $$select not exists (select 1 from {tabel} where {waar})$$)", True, setup=PROEF(sql))
+case("MG01", MO, "bestaande guards ongewijzigd (vingerafdrukken uit 0022)", "postgres", "check",
+     "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname='receipts_guard'),'\\s+',' ','g'))) = 'e2495872050430577d8464962b88d1de' "
+     "and md5(btrim(regexp_replace((select prosrc from pg_proc where proname='approvals_guard'),'\\s+',' ','g'))) = '3320a9525bbc54bdd29516a459fc6a61'", True)
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
 # Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):

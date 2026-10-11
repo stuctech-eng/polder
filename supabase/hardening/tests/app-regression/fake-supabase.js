@@ -14,6 +14,7 @@ const REL = {
   receipts: { open_tabs:{one:true,fk:"open_tab_id"}, receipt_lines:{fk:"receipt_id"}, approvals:{fk:"receipt_id"} },
   open_tabs: { companies:{one:true,fk:"company_id"}, departments:{one:true,fk:"department_id"}, cost_centers:{one:true,fk:"cost_center_id"}, projects:{one:true,fk:"project_id"} },
   daily_closings: { users:{one:true,fk:"closed_by"} },
+  invoices: { companies:{one:true,fk:"company_id"}, payments:{fk:"invoice_id"} },
 };
 function splitTop(s){ const out=[]; let d=0,cur=""; for(const ch of s){ if(ch==="(")d++; if(ch===")")d--; if(ch===","&&d===0){out.push(cur.trim());cur="";} else cur+=ch; } if(cur.trim())out.push(cur.trim()); return out; }
 function builder(role, sub, table){
