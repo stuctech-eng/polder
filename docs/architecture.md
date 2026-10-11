@@ -852,7 +852,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 **v1.66** — MAIL-LINKS: route `/auth/confirm` (v1.0.84) en herstelmail via de server met implicit flow (`/api/auth/forgot-password`, `lib/auth/recovery.ts`), `/reset-password` leest de sessie uit de link en toont echte fouten, app-test t11; sectie 13.20.
 
-**v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); niet in productie.
+**v1.65** — PLATFORMBEHEER: migraties `0026_platformbeheer.sql` (`platform_admins`, `platform_log`, `is_platform_admin()`) en `0027_platform_acties.sql` (actie + logregel in één transactie) + rollbacks, beheerscherm `/platform` met routes en `lib/platform/*`, gedeelde `inviteProfile()`, `prod-platform-checks.sql`, `prod-platform-beheerder.sql`, 27 PLATFORM-cases, `platform-tests.sh`, app-test t10; sectie 13.19. Lokaal getest (PG16 + PG17); in productie op 10-11 okt (v1.0.82/v1.0.83), app-test geslaagd, akkoord.
 
 **v1.64** — FASE 2 MEERDERE RESTAURANTS (restaurant aan/uit): migratie `0025_restaurant_aan_uit.sql` + rollback, `my_access()`, app-poort fail closed (`access.ts`, session-context, requireRole, middleware, inlogmelding), publieke goedkeuringslink controleert restaurant, `prod-aanuit-checks.sql`, harnas stap 9 (188 nieuwe cases, hernummering 9–12 → 10–13), `aanuit-tests.sh`, app-test t9; sectie 13.18. Lokaal getest (PG16 + PG17); in productie uitgevoerd op 10 okt (push A v1.0.79, migratie, push B v1.0.80), app-test geslaagd, akkoord.
 
@@ -1840,7 +1840,7 @@ Terugdraaien in omgekeerde volgorde: eerst de app, dan de rollback.
 
 ### 13.19 PLATFORMBEHEER — beheerscherm voor restaurants (migraties 0026 + 0027 + app, 2026-10-10)
 
-> **STATUS (10 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.**
+> **STATUS (11 okt 2026): IN PRODUCTIE en akkoord.** Push A (v1.0.82), leesblok vooraf 0025/nee/nee/nee/leeg/leeg/nee/leeg, migraties 0026 en 0027 "Success", leesblok achteraf 0025/ja/ja/ja/ja/true/ja/0, stuctech@gmail.com toegevoegd als beheerder, push B (v1.0.83). App-test door Dick: inloggen als beheerder → beheerscherm, "Test restaurant" aangemaakt, uit- en aangezet, logboek 3 regels; owner-app werkt normaal. Productie-database staat op **0027**.
 > Ronde 2 (na beoordeling GPT): beheeractie en logregel in EEN databasetransactie (migratie 0027); het logboek is alleen via die functies aan te vullen.
 
 **Doel.** Een apart beheerscherm `/platform` waarmee de platformbeheerder restaurants ziet (naam, aan/uit, aantal gebruikers,
@@ -1893,7 +1893,7 @@ owner-account ziet `/platform` niet. Rollback: eerst de app terug, dan `0027_rol
 
 ### 13.20 MAIL-LINKS — wachtwoord herstellen en uitnodiging (2026-10-10)
 
-> **STATUS (10 okt 2026): ronde 1 (`/auth/confirm`, v1.0.84) live; ronde 2 (herstel via de server, implicit flow) gebouwd en lokaal getest, NIET gepusht.**
+> **STATUS (11 okt 2026): IN PRODUCTIE en akkoord.** Ronde 1 (`/auth/confirm`, v1.0.84) en ronde 2 (herstel via de server, implicit flow, v1.0.85) live; Dick heeft daarmee het wachtwoord van stuctech@gmail.com gezet.
 
 **Probleem.** De browserclient (`@supabase/ssr` 0.5.2) gebruikt de PKCE-flow: een herstel-link werkt alleen in exact de
 browser waarin hij is aangevraagd. Op een iPhone opent Mail de link vaak elders (ander venster, privévenster); dan faalt het
