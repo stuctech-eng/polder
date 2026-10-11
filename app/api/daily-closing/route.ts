@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { buildDailyClosingReport } from "@/lib/daily-closing/daily-closing-service";
 
 export async function GET(request: Request) {
   try {
     const ctx = await requireRole("VIEW_DAILY_CLOSING");
+    await requireFeature("daily_closing");
     const supabase = createSupabaseServerClient();
 
     const { searchParams } = new URL(request.url);
@@ -24,6 +26,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ctx = await requireRole("EXECUTE_DAILY_CLOSING");
+    await requireFeature("daily_closing");
     const supabase = createSupabaseServerClient();
 
     const body = await request.json().catch(() => ({}));

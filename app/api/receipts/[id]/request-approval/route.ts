@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
 import { generateApprovalToken } from "@/lib/approval/token";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 
 export async function POST(
   request: Request,
@@ -11,6 +12,7 @@ export async function POST(
   let ctx;
   try {
     ctx = await requireRole("MANAGE_RECEIPTS");
+    await requireFeature("approval");
   } catch (err) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

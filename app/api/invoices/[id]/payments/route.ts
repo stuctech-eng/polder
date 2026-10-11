@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { z } from "zod";
 
 const paymentSchema = z.object({
@@ -42,6 +43,7 @@ export async function POST(
   let ctx;
   try {
     ctx = await requireRole("MANAGE_INVOICES");
+    await requireFeature("payment_registration");
   } catch (err) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

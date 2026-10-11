@@ -23,9 +23,12 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 export function InvoiceListItem({
   invoice: initialInvoice,
   initialTotalPaid,
+  paymentsEnabled = true,
 }: {
   invoice: Invoice;
   initialTotalPaid: number;
+  /** Module "Betalingen registreren" (fase 4); uit = geen knop. De server weigert de actie ook zelf. */
+  paymentsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [invoice, setInvoice] = useState(initialInvoice);
@@ -134,15 +137,17 @@ export function InvoiceListItem({
                   Markeer als verzonden
                 </button>
               )}
-              <button
-                onClick={() => {
-                  setAmount(String(remaining));
-                  setShowPaymentForm(true);
-                }}
-                className="text-xs text-neutral-900 underline font-medium"
-              >
-                Betaling registreren
-              </button>
+              {paymentsEnabled && (
+                <button
+                  onClick={() => {
+                    setAmount(String(remaining));
+                    setShowPaymentForm(true);
+                  }}
+                  className="text-xs text-neutral-900 underline font-medium"
+                >
+                  Betaling registreren
+                </button>
+              )}
             </div>
           ) : (
             <form onSubmit={handleAddPayment} className="flex gap-2 items-center flex-wrap mt-1">

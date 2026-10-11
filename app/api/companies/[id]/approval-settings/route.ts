@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { hashPin } from "@/lib/approval/providers/pin-provider";
 import { z } from "zod";
 
@@ -16,6 +17,16 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  try {
+    await requireRole("MANAGE_SETTINGS");
+    await requireFeature("approval");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from("approval_settings")
@@ -45,6 +56,7 @@ export async function PUT(
 ) {
   try {
     await requireRole("MANAGE_SETTINGS");
+    await requireFeature("approval");
   } catch (err) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

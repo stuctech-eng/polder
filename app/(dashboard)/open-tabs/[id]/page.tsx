@@ -8,6 +8,7 @@ import GenerateInvoiceButton from "./generate-invoice-button";
 import DownloadInvoiceButton from "./download-invoice-button";
 import TabEditControls from "./tab-edit-controls";
 import { isRejectionBlocked } from "@/lib/approval/invoice-blocking";
+import { isFeatureOn } from "@/lib/features/feature-service";
 import Link from "next/link";
 
 export default async function OpenTabDetailPage({
@@ -71,6 +72,7 @@ export default async function OpenTabDetailPage({
   });
   const blockedReceiptCount = (receipts ?? []).filter((r: any) => r.rejection_blocked).length;
 
+  const approvalOn = await isFeatureOn("approval");
   const approvalSettings = tab.company_id
     ? await getApprovalSettings(supabase, tab.company_id)
     : null;
@@ -134,6 +136,7 @@ export default async function OpenTabDetailPage({
             ? approvalSettings.method
             : null
         }
+        approvalEnabled={approvalOn}
       />
 
       {tab.status === "open" && (

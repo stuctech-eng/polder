@@ -8,6 +8,8 @@ const ACTION_LABELS: Record<PlatformLogEntry["action"], string> = {
   restaurant_aan: "Restaurant aangezet",
   restaurant_uit: "Restaurant uitgezet",
   eigenaar_uitgenodigd: "Eigenaar uitgenodigd",
+  module_aan: "Module aangezet",
+  module_uit: "Module uitgezet",
 };
 
 async function readError(response: Response, fallback: string) {
@@ -72,6 +74,7 @@ export default function PlatformUI({
                 {new Date(entry.createdAt).toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" })}
                 {entry.adminEmail ? ` · ${entry.adminEmail}` : ""}
                 {typeof entry.details.email === "string" ? ` · ${entry.details.email}` : ""}
+                {typeof entry.details.module === "string" ? ` · ${entry.details.module}` : ""}
               </div>
             </li>
           ))}
@@ -198,6 +201,8 @@ function RestaurantCard({
         </button>
       </div>
 
+      <ModulesSection restaurant={restaurant} onDone={onDone} onError={onError} />
+
       {showInvite && (
         <OwnerInviteForm
           restaurantId={restaurant.id}
@@ -209,6 +214,59 @@ function RestaurantCard({
         />
       )}
     </li>
+  );
+}
+
+function ModulesSection({
+  restaurant,
+  onDone,
+  onError,
+}: {
+  restaurant: PlatformRestaurant;
+  onDone: () => Promise<void>;
+  onError: (m: string | null) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function toggle(key: string, label: string, enabled: boolean) {
+    const next = !enabled;
+    const question = next
+      ? `Module "${label}" aanzetten voor ${restaurant.name}?`
+      : `Module "${label}" uitzetten voor ${restaurant.name}? Het restaurant kan deze module dan niet meer gebruiken.`;
+    if (!window.confirm(question)) return;
+    onError(null);
+    setBusy(key);
+    const response = await fetch(`/api/platform/restaurants/${restaurant.id}/modules`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feature: key, enabled: next }),
+    });
+    setBusy(null);
+    // Geen succesmelding: na elke poging de stand opnieuw uit de database lezen, zodat het scherm altijd klopt.
+    if (!response.ok) onError(await readError(response, "Module wijzigen mislukt"));
+    await onDone();
+  }
+
+  return (
+    <div className="mt-3 border-t border-neutral-100 pt-2">
+      <div className="text-xs font-medium text-neutral-500 mb-1">Modules</div>
+      <ul className="space-y-1">
+        {restaurant.modules.map((m) => (
+          <li key={m.key} className="flex items-center justify-between gap-2">
+            <span className="text-sm">{m.label}</span>
+            <button
+              onClick={() => toggle(m.key, m.label, m.enabled)}
+              disabled={busy !== null}
+              className={`min-h-touch px-3 rounded-lg border text-sm disabled:opacity-50 ${
+                m.enabled ? "border-green-300 bg-green-50 text-green-700" : "border-amber-300 bg-amber-50 text-amber-700"
+              }`}
+            >
+              {busy === m.key ? "Bezig..." : m.enabled ? "Aan" : "Uit"}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

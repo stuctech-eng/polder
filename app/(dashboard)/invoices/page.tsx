@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { isFeatureOn } from "@/lib/features/feature-service";
 import { InvoiceListItem } from "./invoice-list-item";
 
 export default async function InvoicesPage() {
@@ -16,6 +17,7 @@ export default async function InvoicesPage() {
     );
   }
 
+  const paymentsOn = await isFeatureOn("payment_registration");
   const supabase = createSupabaseServerClient();
   const { data: invoices, error } = await supabase
     .from("invoices")
@@ -58,6 +60,7 @@ export default async function InvoicesPage() {
               key={invoice.id}
               invoice={{ ...invoice, total: Number(invoice.total) }}
               initialTotalPaid={totalPaid}
+              paymentsEnabled={paymentsOn}
             />
           );
         })}

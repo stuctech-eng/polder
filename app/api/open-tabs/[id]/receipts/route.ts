@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
 import { generateApprovalToken } from "@/lib/approval/token";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { isFeatureOn } from "@/lib/features/feature-service";
 import { z } from "zod";
 
 const receiptLineSchema = z.object({
@@ -182,7 +183,8 @@ export async function POST(
           verification_code: approvalToken,
         });
 
-        if (settings.method === "email") {
+        // Keuze A (fase 4): staat de module Goedkeuring uit, dan wacht de bon wel, maar gaat er geen mail uit.
+        if (settings.method === "email" && (await isFeatureOn("approval"))) {
           const { data: restaurant } = await supabase
             .from("restaurants")
             .select("name")

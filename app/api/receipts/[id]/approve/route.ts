@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { getApprovalSettings, verifyApproval } from "@/lib/approval/approval-service";
 import { z } from "zod";
 
@@ -15,6 +16,7 @@ export async function POST(
   let ctx;
   try {
     ctx = await requireRole("APPROVE_RECEIPTS");
+    await requireFeature("approval");
   } catch (err) {
     if (err instanceof PermissionError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

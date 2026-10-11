@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { inviteProfile } from "@/lib/user-management/team-service";
 import type { PlatformContext } from "./platform-access";
+import { FEATURES, type FeatureKey } from "@/lib/features/features";
 
 /**
  * Platformbeheer: restaurants aanmaken, aan/uit zetten, eerste eigenaar uitnodigen, logboek.
@@ -10,7 +11,19 @@ import type { PlatformContext } from "./platform-access";
  * nooit restaurantinhoud (bonnen, facturen, omzet).
  */
 
-export type PlatformAction = "restaurant_aangemaakt" | "restaurant_aan" | "restaurant_uit" | "eigenaar_uitgenodigd";
+export type PlatformAction =
+  | "restaurant_aangemaakt"
+  | "restaurant_aan"
+  | "restaurant_uit"
+  | "eigenaar_uitgenodigd"
+  | "module_aan"
+  | "module_uit";
+
+export interface PlatformModule {
+  key: FeatureKey;
+  label: string;
+  enabled: boolean;
+}
 
 export interface PlatformRestaurant {
   id: string;
@@ -19,6 +32,8 @@ export interface PlatformRestaurant {
   createdAt: string;
   userCount: number;
   owners: { name: string; email: string | null; isActive: boolean }[];
+  /** Stand per module, zoals de database hem bepaalt: eigen instelling, anders de standaard uit het register. */
+  modules: PlatformModule[];
 }
 
 export interface PlatformLogEntry {
@@ -65,6 +80,19 @@ export async function listRestaurants(): Promise<PlatformRestaurant[]> {
     .select("id, restaurant_id, full_name, role, is_active");
   if (usersError) throw new PlatformError(`Gebruikers konden niet worden geladen: ${usersError.message}`, 500);
 
+  const { data: register, error: registerError } = await admin.from("features").select("key, default_enabled");
+  if (registerError) throw new PlatformError(`Modules konden niet worden geladen: ${registerError.message}`, 500);
+  const { data: instellingen, error: instellingenError } = await admin
+    .from("restaurant_features")
+    .select("restaurant_id, feature, enabled");
+  if (instellingenError) throw new PlatformError(`Module-instellingen konden niet worden geladen: ${instellingenError.message}`, 500);
+  const standaard = new Map((register ?? []).map((f) => [f.key as string, f.default_enabled as boolean]));
+  const modulesVan = (restaurantId: string): PlatformModule[] =>
+    FEATURES.filter((f) => standaard.has(f.key)).map((f) => {
+      const eigen = (instellingen ?? []).find((i) => i.restaurant_id === restaurantId && i.feature === f.key);
+      return { key: f.key, label: f.label, enabled: eigen ? (eigen.enabled as boolean) : (standaard.get(f.key) as boolean) };
+    });
+
   const result: PlatformRestaurant[] = [];
   for (const r of restaurants ?? []) {
     const own = (users ?? []).filter((u) => u.restaurant_id === r.id);
@@ -79,6 +107,7 @@ export async function listRestaurants(): Promise<PlatformRestaurant[]> {
       createdAt: r.created_at as string,
       userCount: own.length,
       owners,
+      modules: modulesVan(r.id as string),
     });
   }
   return result;
@@ -100,6 +129,22 @@ export async function setRestaurantActive(ctx: PlatformContext, restaurantId: st
   });
   if (error) throw actionError(error, "Status kon niet worden gewijzigd");
   return { id: restaurantId, isActive: data as boolean };
+}
+
+/** Module aan/uit voor een restaurant: wijziging + logregel in één transactie (migratie 0029). */
+export async function setModule(ctx: PlatformContext, restaurantId: string, key: FeatureKey, enabled: boolean) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc("platform_module_zetten", {
+    p_admin: ctx.adminUserId,
+    p_restaurant: restaurantId,
+    p_key: key,
+    p_aan: enabled,
+  });
+  if (error) {
+    if (error.code === "22023") throw new PlatformError("Onbekende module", 400);
+    throw actionError(error, "Module kon niet worden gewijzigd");
+  }
+  return { restaurantId, key, enabled: data as boolean };
 }
 
 export async function inviteOwner(ctx: PlatformContext, restaurantId: string, email: string, fullName: string) {

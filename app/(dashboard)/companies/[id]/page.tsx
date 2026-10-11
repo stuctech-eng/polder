@@ -1,5 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { isFeatureOn } from "@/lib/features/feature-service";
+import { ModuleOff } from "@/components/ui/module-off";
 import { notFound } from "next/navigation";
 import CompanyEditForm from "./edit-form";
 import {
@@ -29,6 +31,7 @@ export default async function CompanyDetailPage({
     );
   }
 
+  const approvalOn = await isFeatureOn("approval");
   const supabase = createSupabaseServerClient();
 
   const { data: company, error } = await supabase
@@ -103,14 +106,15 @@ export default async function CompanyDetailPage({
           companyId={params.id}
           initialConfig={(requiredFieldsConfig?.value as Record<string, boolean>) ?? {}}
         />
-        <ApprovalSettingsSection
+        {!approvalOn && <ModuleOff title="Goedkeuring" />}
+        {approvalOn && <ApprovalSettingsSection
           companyId={params.id}
           initialEnabled={approvalSettings?.is_required ?? false}
           initialMethod={
             (approvalSettings?.method as "pin" | "restaurant_confirms" | "email" | "qr" | null) ?? null
           }
           initialNotifyEmail={approvalSettings?.notify_email ?? null}
-        />
+        />}
       </div>
     </>
   );

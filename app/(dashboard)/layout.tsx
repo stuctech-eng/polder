@@ -1,6 +1,7 @@
 import { LogoutButton } from "@/components/ui/logout-button";
 import { getCurrentUserContext } from "@/lib/user-management/session-context";
 import { hasPermission } from "@/lib/user-management/permission-service";
+import { isFeatureOn } from "@/lib/features/feature-service";
 import Link from "next/link";
 
 export default async function DashboardLayout({
@@ -10,6 +11,8 @@ export default async function DashboardLayout({
 }) {
   const ctx = await getCurrentUserContext();
   const role = ctx?.role ?? null;
+  // Modules (fase 4): een uitgezette module verdwijnt uit het menu. Bij twijfel uit (isFeatureOn is fail closed).
+  const dailyClosingOn = ctx ? await isFeatureOn("daily_closing") : false;
 
   const can = (permission: Parameters<typeof hasPermission>[1]) =>
     role ? hasPermission(role, permission) : false;
@@ -19,7 +22,7 @@ export default async function DashboardLayout({
     { href: "/companies", label: "Bedrijven", visible: can("MANAGE_COMPANIES") },
     { href: "/open-tabs", label: "Rekeningen", visible: can("MANAGE_OPEN_TABS") },
     { href: "/invoices", label: "Facturen", visible: can("MANAGE_INVOICES") },
-    { href: "/daily-closing", label: "Dagafsluiting", visible: can("VIEW_DAILY_CLOSING") },
+    { href: "/daily-closing", label: "Dagafsluiting", visible: can("VIEW_DAILY_CLOSING") && dailyClosingOn },
     { href: "/team", label: "Team", visible: can("MANAGE_TEAM") },
     { href: "/handleiding", label: "? Handleiding", visible: true },
   ];

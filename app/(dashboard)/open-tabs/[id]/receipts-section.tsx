@@ -45,12 +45,15 @@ export function ReceiptsSection({
   isInvoiced = false,
   canAddReceipts = true,
   approvalMethod = null,
+  approvalEnabled = true,
 }: {
   openTabId: string;
   initialReceipts: Receipt[];
   isInvoiced?: boolean;
   canAddReceipts?: boolean;
   approvalMethod?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  /** Module Goedkeuring (fase 4). Uit = geen goedkeur- of indienknoppen; wachtende bonnen blijven wachten. */
+  approvalEnabled?: boolean;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
@@ -163,6 +166,7 @@ export function ReceiptsSection({
             receipt={r}
             isInvoiced={isInvoiced}
             approvalMethod={approvalMethod}
+            approvalEnabled={approvalEnabled}
             onDeleted={() => setReceipts((prev) => prev.filter((x) => x.id !== r.id))}
             onUpdated={(updated) =>
               setReceipts((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
@@ -275,12 +279,14 @@ function ReceiptItem({
   receipt,
   isInvoiced,
   approvalMethod,
+  approvalEnabled,
   onDeleted,
   onUpdated,
 }: {
   receipt: Receipt;
   isInvoiced: boolean;
   approvalMethod: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  approvalEnabled: boolean;
   onDeleted: () => void;
   onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
 }) {
@@ -421,7 +427,13 @@ function ReceiptItem({
         ))}
       </div>
 
-      {receipt.status === "pending_approval" && (
+      {receipt.status === "pending_approval" && !approvalEnabled && (
+        <p className="text-xs text-amber-700 mt-2" role="status">
+          Wacht op goedkeuring. De module Goedkeuring staat uit voor dit restaurant; deze bon kan pas gefactureerd worden als die weer aan staat.
+        </p>
+      )}
+
+      {receipt.status === "pending_approval" && approvalEnabled && (
         <ApprovalBlock
           receiptId={receipt.id}
           method={approvalMethod}
@@ -450,7 +462,7 @@ function ReceiptItem({
             </>
           ) : (
             <>
-              {receipt.rejection_blocked && (receipt.status === "linked" || receipt.status === "draft") && (
+              {approvalEnabled && receipt.rejection_blocked && (receipt.status === "linked" || receipt.status === "draft") && (
                 <button
                   onClick={handleResubmit}
                   disabled={loading}

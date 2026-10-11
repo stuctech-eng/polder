@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { buildDailyClosingReport } from "@/lib/daily-closing/daily-closing-service";
 import DailyClosingUI from "./daily-closing-ui";
 
@@ -9,6 +10,7 @@ export default async function DailyClosingPage() {
 
   try {
     const ctx = await requireRole("VIEW_DAILY_CLOSING");
+    await requireFeature("daily_closing");
     const supabase = createSupabaseServerClient();
     const today = new Date().toISOString().slice(0, 10);
     report = await buildDailyClosingReport(supabase, ctx.restaurantId, today);

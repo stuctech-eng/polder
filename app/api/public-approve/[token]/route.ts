@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isFeatureOnForRestaurant } from "@/lib/features/feature-service";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 const ONGELDIG = { error: "Ongeldige of verlopen link" };
@@ -13,6 +14,15 @@ async function restaurantActief(supabase: AdminClient, restaurantId: string | nu
   if (!restaurantId) return false;
   const { data, error } = await supabase.from("restaurants").select("is_active").eq("id", restaurantId).maybeSingle();
   return !error && data?.is_active === true;
+}
+
+/**
+ * De link werkt alleen als het restaurant aan staat EN de module Goedkeuring aan staat (fase 4). Fail closed.
+ * Anders dezelfde 404 als een ongeldige link, zonder iets te lezen of te schrijven. De databasewacht (0030)
+ * blokkeert de beslissing ook als deze controle zou ontbreken.
+ */
+async function linkToegestaan(supabase: AdminClient, restaurantId: string | null | undefined): Promise<boolean> {
+  return (await restaurantActief(supabase, restaurantId)) && (await isFeatureOnForRestaurant(supabase, restaurantId, "approval"));
 }
 
 /**
@@ -43,7 +53,7 @@ export async function GET(
     .eq("id", approval.receipt_id)
     .single();
 
-  if (!(await restaurantActief(supabase, receipt?.restaurant_id))) {
+  if (!(await linkToegestaan(supabase, receipt?.restaurant_id))) {
     return NextResponse.json(ONGELDIG, { status: 404 });
   }
 
@@ -94,7 +104,7 @@ export async function POST(
     .single();
 
   // Vóór elke andere controle en vóór elke schrijfactie
-  if (!(await restaurantActief(supabase, receipt?.restaurant_id))) {
+  if (!(await linkToegestaan(supabase, receipt?.restaurant_id))) {
     return NextResponse.json(ONGELDIG, { status: 404 });
   }
 

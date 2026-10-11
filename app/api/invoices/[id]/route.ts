@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
+import { requireFeature } from "@/lib/features/feature-service";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -28,6 +29,18 @@ export async function PATCH(
       { error: "Validatiefout", details: parsed.error.flatten() },
       { status: 400 }
     );
+  }
+
+  // Handmatig "betaald" zetten is betaalregistratie (fase 4): alleen als die module aan staat.
+  if (parsed.data.status === "paid") {
+    try {
+      await requireFeature("payment_registration");
+    } catch (err) {
+      if (err instanceof PermissionError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+    }
   }
 
   const supabase = createSupabaseServerClient();
