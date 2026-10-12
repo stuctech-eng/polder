@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.68** — Ongebruikt vakje "Goedkeuring vereist vóór factureren" (facturatieregel, `workflow_rules.requires_approval`) uit het bedrijfsscherm gehaald; `PUT /api/companies/[id]/workflow-rule` slaat het niet meer op (een meegestuurde waarde wordt genegeerd), de kolom en bestaande waarden blijven ongewijzigd; GET van die route kreeg een rolcontrole (`MANAGE_SETTINGS`). Goedkeuring loopt uitsluitend via de module Goedkeuring. App-test t13 (5 checks; de oude route faalt er 4). Geen migratie.
+
 **v1.67** — FASE 4 MODULES PER RESTAURANT: migraties `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + rollbacks, `lib/features/*`, modulecontroles in routes/pagina's, schakelaars in het beheerscherm, `prod-modules-checks.sql`, 104 MODULES-cases, `modules-tests.sh`, app-test t12; sectie 13.21. Lokaal getest (PG16 + PG17); in productie op 11-12 okt (v1.0.87/v1.0.88), rooktest geslaagd, akkoord.
 
 **v1.66** — MAIL-LINKS: route `/auth/confirm` (v1.0.84) en herstelmail via de server met implicit flow (`/api/auth/forgot-password`, `lib/auth/recovery.ts`), `/reset-password` leest de sessie uit de link en toont echte fouten, app-test t11; sectie 13.20.

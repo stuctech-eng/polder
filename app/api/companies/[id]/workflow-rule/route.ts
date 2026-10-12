@@ -5,13 +5,26 @@ import { z } from "zod";
 
 const workflowRuleSchema = z.object({
   invoiceFrequency: z.enum(["immediate", "weekly", "monthly", "per_project"]),
-  requiresApproval: z.boolean(),
+  // "requiresApproval" wordt niet meer gebruikt (12 okt 2026): het vakje deed niets; goedkeuring loopt via de module
+  // Goedkeuring (approval_settings). Een oude client die het nog meestuurt, wordt geaccepteerd maar genegeerd;
+  // de bestaande kolom workflow_rules.requires_approval blijft ongewijzigd staan (geen data gewist).
+  requiresApproval: z.boolean().optional(),
 });
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  // Rolcontrole (was er niet; de restaurantgrens via RLS gold al wel).
+  try {
+    await requireRole("MANAGE_SETTINGS");
+  } catch (err) {
+    if (err instanceof PermissionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+  }
+
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from("workflow_rules")
@@ -75,7 +88,6 @@ export async function PUT(
       .from("workflow_rules")
       .update({
         invoice_frequency: parsed.data.invoiceFrequency,
-        requires_approval: parsed.data.requiresApproval,
       })
       .eq("id", existing.id)
       .select()
@@ -87,7 +99,6 @@ export async function PUT(
         restaurant_id: ctx.restaurantId,
         company_id: params.id,
         invoice_frequency: parsed.data.invoiceFrequency,
-        requires_approval: parsed.data.requiresApproval,
       })
       .select()
       .single();

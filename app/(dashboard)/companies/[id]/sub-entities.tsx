@@ -8,7 +8,6 @@ type Project = { id: string; name: string; code: string | null; is_active: boole
 
 type WorkflowRule = {
   invoice_frequency: "immediate" | "weekly" | "monthly" | "per_project";
-  requires_approval: boolean;
 };
 
 const FREQUENCY_LABELS: Record<string, string> = {
@@ -26,7 +25,6 @@ export function WorkflowRuleSection({
   initialRule: WorkflowRule | null;
 }) {
   const [frequency, setFrequency] = useState(initialRule?.invoice_frequency ?? "immediate");
-  const [requiresApproval, setRequiresApproval] = useState(initialRule?.requires_approval ?? false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -39,7 +37,7 @@ export function WorkflowRuleSection({
     const response = await fetch(`/api/companies/${companyId}/workflow-rule`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invoiceFrequency: frequency, requiresApproval }),
+      body: JSON.stringify({ invoiceFrequency: frequency }),
     });
 
     setLoading(false);
@@ -82,16 +80,6 @@ export function WorkflowRuleSection({
           ))}
         </select>
       </div>
-
-      <label className="flex items-center gap-2 text-sm py-2">
-        <input
-          type="checkbox"
-          checked={requiresApproval}
-          onChange={(e) => setRequiresApproval(e.target.checked)}
-          className="min-h-touch min-w-touch"
-        />
-        Goedkeuring vereist vóór factureren
-      </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {saved && <p className="text-sm text-green-700">Opgeslagen.</p>}

@@ -23,7 +23,6 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
-- Bedrijfspagina: het vakje "Goedkeuring vereist vóór factureren" (`workflow_rules.requires_approval`) wordt opgeslagen maar nergens gebruikt en hoort niet bij de module Goedkeuring; later verbergen of verwijderen (eigen GO).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).
 - Zijtak `plan-7b-0023-voorbereid` op GitHub: alle bestanden staan ook op main, maar de zijtak bevat de enige kopie van de oude commitgeschiedenis (v1.0.2–v1.0.74; main begint bij v1.0.76). Bewust laten staan (archief). De rode "Error" in Vercel hoort bij een oude preview van die tak en is onschuldig.
 - `tsconfig.tsbuildinfo` staat in git (bouwcache; `tsc` wijzigt hem). Later uit git halen.
@@ -34,7 +33,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
-- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.89.
+- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.90.
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris).
 
 ## Waar staat wat (bestanden en plekken)
