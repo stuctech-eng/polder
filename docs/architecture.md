@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.67** — FASE 4 MODULES PER RESTAURANT: migraties `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + rollbacks, `lib/features/*`, modulecontroles in routes/pagina's, schakelaars in het beheerscherm, `prod-modules-checks.sql`, 104 MODULES-cases, `modules-tests.sh`, app-test t12; sectie 13.21. Lokaal getest (PG16 + PG17); niet gepusht.
+**v1.67** — FASE 4 MODULES PER RESTAURANT: migraties `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + rollbacks, `lib/features/*`, modulecontroles in routes/pagina's, schakelaars in het beheerscherm, `prod-modules-checks.sql`, 104 MODULES-cases, `modules-tests.sh`, app-test t12; sectie 13.21. Lokaal getest (PG16 + PG17); in productie op 11-12 okt (v1.0.87/v1.0.88), rooktest geslaagd, akkoord.
 
 **v1.66** — MAIL-LINKS: route `/auth/confirm` (v1.0.84) en herstelmail via de server met implicit flow (`/api/auth/forgot-password`, `lib/auth/recovery.ts`), `/reset-password` leest de sessie uit de link en toont echte fouten, app-test t11; sectie 13.20.
 
@@ -1921,7 +1921,7 @@ controleert ook dat de server niets rechtstreeks in het logboek kan schrijven.
 
 ### 13.21 FASE 4 — modules per restaurant (migraties 0028-0030 + app, 2026-10-11)
 
-> **STATUS (11 okt 2026): gebouwd en lokaal getest op PostgreSQL 16.15 en 17.6. NIET gepusht, NIET in productie; wacht op beoordeling en GO.** Plan: auditrapport versie 4 (beoordeeld door GPT).
+> **STATUS (12 okt 2026): IN PRODUCTIE en akkoord.** Push A (v1.0.87); voorcontrole 0027/nee/nee/nee/0/nee/leeg/leeg, `guards_md5` productie `287f55d538eeb47386154595baf42dee`; migraties 0028, 0029 en 0030 elk "Success" met nacontrole; eindstand 0027/ja/ja/ja/6/ja/true/true en `guards_md5` ongewijzigd; push B (v1.0.88). Rooktest door Dick: de drie modules uit- en weer aangezet via het beheerscherm (logregels), bedrijfspagina toont "Goedkeuring: Deze module staat uit", kern blijft zichtbaar. Productie-database staat op **0030**. Plan: auditrapport versie 4 (beoordeeld door GPT).
 
 **Doel.** De platformbeheerder zet per restaurant de modules Dagafsluiting (`daily_closing`), Betalingen registreren
 (`payment_registration`) en Goedkeuring (`approval`) aan of uit. Restaurants kunnen dat nooit zelf. Vaste kern (altijd aan):
