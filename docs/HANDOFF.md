@@ -17,13 +17,17 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
+- **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Geen app-wijziging. Zie architecture 13.23. Productiecontrole: `supabase/hardening/prod-stamdata-checks.sql`.
+
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 in productie; daarna 11 dagafsluiting/stamdata, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 in productie; stap 11 dagafsluiting/stamdata lokaal klaar, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
+- Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
+- Na stap 11 blijven open: PIN-kolommen leesbaar voor iedereen (stap 12) en tabelrechten (grants) opruimen (stap 13).
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).

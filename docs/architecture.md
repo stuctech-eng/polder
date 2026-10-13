@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17), nog niet in productie.
+
 **v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17); in productie op 13 okt (0031 + 0032, app v1.0.91), controle en rooktest geslaagd.
 
 **v1.68** — Ongebruikt vakje "Goedkeuring vereist vóór factureren" (facturatieregel, `workflow_rules.requires_approval`) uit het bedrijfsscherm gehaald; `PUT /api/companies/[id]/workflow-rule` slaat het niet meer op (een meegestuurde waarde wordt genegeerd), de kolom en bestaande waarden blijven ongewijzigd; GET van die route kreeg een rolcontrole (`MANAGE_SETTINGS`). Goedkeuring loopt uitsluitend via de module Goedkeuring. App-test t13 (5 checks; de oude route faalt er 4). Geen migratie.
@@ -2015,4 +2017,33 @@ wissen" zijn aangepast: de controle loopt waar nodig als service_role, of de cas
 **Uitrol.** Push → `prod-facturen-checks.sql` (verwacht 0030 / 4 / 4 / 0 / leeg / 287f55d5…; noteer module_wacht_md5 en
 modules_md5) → 0031 → 0032 (elk eigen GO) → leesblok (0032 / 11 / 0 / 3 / true; drie md5's gelijk) → rooktest als owner → STOP.
 De app werkt met de oude en de nieuwe database, dus de volgorde app/database maakt niet uit.
+
+### 13.23 HARDENING STAP 11 — rolrechten dagafsluiting, bedrijfsgegevens en instellingen (migraties 0033-0034, 2026-10-13)
+
+**Probleem.** Op 13 tabellen gold nog "alles mag binnen het eigen restaurant" (ALL-policy); elke rol kon via de API dagafsluitingen,
+bedrijven, onderdelen en instellingen wijzigen of wissen. Vier tabellen gebruikt de app niet.
+
+**Toegang (RLS, alleen `authenticated`; "iedereen" = actieve gebruiker van een actief restaurant via `my_restaurant_id()`).**
+| Tabel | Lezen | Aanmaken | Wijzigen | Wissen |
+|---|---|---|---|---|
+| daily_closings | VIEW_DAILY_CLOSING | EXECUTE_DAILY_CLOSING en `closed_by = auth.uid()` | niemand | niemand |
+| companies | iedereen | MANAGE_COMPANIES | MANAGE_COMPANIES | niemand |
+| departments, cost_centers, projects, company_codes | iedereen | MANAGE_COMPANIES | niemand (geen route) | niemand |
+| configurations, workflow_rules, approval_settings | iedereen | MANAGE_SETTINGS | MANAGE_SETTINGS | niemand |
+| contacts, integration_plugins, email_settings, notifications | niemand (dicht, geen policy) | niemand | niemand | niemand |
+Bedrijfsgegevens blijven leesbaar voor iedereen omdat bediening bij een rekening een bedrijf en afdeling kiest. De PIN-kolommen in
+approval_settings volgen in stap 12. Alle databasefuncties die deze tabellen lezen zijn SECURITY DEFINER (xref, `module_wacht`).
+Na 0034 bestaat er geen ALL-policy meer in `public`. email_settings had nog de oude tekst van vóór de tenantswitch; die is weg.
+
+**Tests.** Harnas `run(11)` 1139 PASS + 1 OPEN op PG16 en PG17; een 0032-database geeft op `run(11)` 117 FAIL. Nieuwe
+ROLRECHTEN11-cases (74): dagafsluiting (bediening, administratie, op naam van een ander, zonder naam, wijzigen, wissen), lezen per
+rol, schrijven per rol, en elke bewerking op de vier dichte tabellen (met controle dat er rijen zijn). `stamdata-tests.sh` 35/35
+(heen/terug exact, verkeerde volgorde en extra policy afgebroken, 11 kapotte versies gevangen, alle triggers/guards/modulestand en
+overige policies ongewijzigd). App-tests t7-t14 per regel gelijk op 0032 en 0034; t15 16/16 (op 0032: 5 FAIL). Bestaande cases die
+uitgingen van "owner mag wissen" lopen hun controle als service_role of verwachten vanaf stap 11 "voor niemand toegestaan".
+
+**Rollback = noodmaatregel.** `rollbacks/0034` dan `0033` zet de oude ALL-policies exact terug (ook de oude tekst van email_settings).
+
+**Uitrol.** Push → `prod-stamdata-checks.sql` (verwacht 0032/13/13/13/leeg; noteer de vier md5's) → 0033 → leesblok (0033/20/7/7)
+→ 0034 → leesblok (0034/22/0/0/true; vier md5's gelijk) → rooktest (bedrijf wijzigen, rekening openen als bediening, dag afsluiten) → STOP.
 

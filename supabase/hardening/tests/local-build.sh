@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Bouwt een LOKALE testdatabase (Postgres, géén Supabase) en draait seed + harnas + cases.
 # Gebruik:  PSQL="psql -X -q -p 55432 -h /socketdir -U postgres" ./local-build.sh   (vanuit supabase/hardening/tests)
-#   TOT=0022|0024|0025|0026|0027|0030|0032   bouw t/m die migratie (standaard 0032); 0022 = vóór fase 1, 0024 = vóór fase 2, 0025 = vóór platformbeheer
+#   TOT=0022|0024|0025|0026|0027|0030|0032|0034   bouw t/m die migratie (standaard 0034); 0022 = vóór fase 1, 0024 = vóór fase 2, 0025 = vóór platformbeheer
 #   MET_0023=1   voeg ook de voorbereide, NIET in productie uitgevoerde migratie 0023 toe (toets met run(99))
 set -euo pipefail
-PSQL=${PSQL:-"psql -X -q"}; DB=${DB:-polder_stage}; TOT=${TOT:-0032}; MET_0023=${MET_0023:-0}
+PSQL=${PSQL:-"psql -X -q"}; DB=${DB:-polder_stage}; TOT=${TOT:-0034}; MET_0023=${MET_0023:-0}
 cd "$(dirname "$0")/../.."          # = supabase/
 $PSQL -d postgres -c "drop database if exists $DB" -c "create database $DB"
 P="$PSQL -v ON_ERROR_STOP=1 -d $DB"
@@ -26,6 +26,7 @@ if [ "$TOT" \> "0025" ]; then echo "migratie 0026 (platformbeheer)"; $P -f migra
 if [ "$TOT" \> "0026" ]; then echo "migratie 0027 (platformacties)"; $P -f migrations/0027_platform_acties.sql >/dev/null; fi
 if [ "$TOT" \> "0027" ]; then for m in 0028_modules 0029_module_beheer 0030_module_wacht; do echo "migratie $m"; $P -f migrations/$m.sql >/dev/null; done; fi
 if [ "$TOT" \> "0030" ]; then for m in 0031_rolrechten_facturen 0032_factuur_wacht; do echo "migratie $m"; $P -f migrations/$m.sql >/dev/null; done; fi
+if [ "$TOT" \> "0032" ]; then for m in 0033_rolrechten_dagafsluiting_bedrijven 0034_rolrechten_instellingen; do echo "migratie $m"; $P -f migrations/$m.sql >/dev/null; done; fi
 python3 hardening/tests/generate_cases.py > hardening/tests/10_cases.sql
 $P -f hardening/tests/00_harness.sql -f hardening/tests/10_cases.sql >/dev/null
 echo "klaar (t/m $TOT, 0023: $MET_0023). Draai:  select * from hardening_test.summary(9);"

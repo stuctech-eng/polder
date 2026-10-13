@@ -45,7 +45,7 @@ function builder(role, sub, table){
     if(q.op==="insert"){ const rows=Array.isArray(q.data)?q.data:[q.data]; const ks=Object.keys(rows[0]);
       const vals=rows.map(r=>"("+ks.map(k=>{P.push(typeof r[k]==="object"&&r[k]!==null?JSON.stringify(r[k]):r[k]);return "$"+P.length}).join(",")+")").join(",");
       sql=`insert into public.${table} (${ks.map(k=>`"${k}"`).join(",")}) values ${vals}${q.ret?" returning "+(base.length?base.join(","):"*"):""}`; }
-    if(q.op==="update"){ const ks=Object.keys(q.data); const base0=P.length; const set=ks.map((k,i)=>`"${k}"=$${base0+i+1}`).join(","); ks.forEach(k=>P.push(q.data[k]));
+    if(q.op==="update"){ /* zoals supabase-js (JSON): undefined-velden worden niet meegestuurd */ const ks=Object.keys(q.data).filter(k=>q.data[k]!==undefined); const base0=P.length; const set=ks.map((k,i)=>`"${k}"=$${base0+i+1}`).join(","); ks.forEach(k=>P.push(q.data[k]));
       sql=`update public.${table} set ${set} where ${w}${q.ret?" returning "+(base.length?base.join(","):"*"):""}`; }
     if(q.op==="delete") sql=`delete from public.${table} where ${w}${q.ret?" returning *":""}`;
     // update: de where-parameters komen eerst in P; params van set staan erna -> herbouw volgorde

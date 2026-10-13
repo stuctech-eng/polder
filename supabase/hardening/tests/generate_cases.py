@@ -407,32 +407,40 @@ case("IN08", "INACTIEF", "gedeactiveerde wijzigt bon", INA, "dml", f"update rece
 #   TOxx = de testopzet klopt (rij bestaat, actieve gebruiker heeft met dezelfde SQL effect, rij daarna exact hersteld) — altijd waar
 #   TSxx = de gedeactiveerde gebruiker wordt geweigerd om de juiste reden — waar vanaf stap 8
 STAP_TENANT = 8
-# Vanaf stap 10 mag NIEMAND (ook de actieve owner niet) deze bewerkingen nog: de opzet "actieve owner heeft effect" geldt dan niet meer.
-# De weigering van de gedeactiveerde gebruiker telt dan als "iedereen 0 rijen" (de strengere regel zelf staat in AC/FW-cases).
+# Vanaf stap 10/11 mag NIEMAND (ook de actieve owner niet) deze bewerkingen nog: de opzet "actieve owner heeft effect" geldt dan niet meer.
+# De weigering van de gedeactiveerde gebruiker telt dan als "iedereen 0 rijen" (de strengere regel zelf staat in AC/FW/RR-cases).
 STAP_FACTUREN = 10
-VERBODEN_10 = {("invoices", "DELETE"), ("documents", "UPDATE"), ("documents", "DELETE"), ("payments", "UPDATE"), ("payments", "DELETE")}
-OMZET_10 = {"invoices", "documents", "invoice_lines", "payments"}   # bediening leest deze vanaf stap 10 niet meer (AC30)
+STAP_STAMDATA = 11
+ALLE_OPS = ("SELECT", "INSERT", "UPDATE", "DELETE")
+VERBODEN = {**{k: STAP_FACTUREN for k in [("invoices", "DELETE"), ("documents", "UPDATE"), ("documents", "DELETE"), ("payments", "UPDATE"), ("payments", "DELETE")]},
+            **{k: STAP_STAMDATA for k in [("companies", "DELETE"), ("workflow_rules", "DELETE"), ("configurations", "DELETE"), ("approval_settings", "DELETE")]
+               + [(t, op) for t in ("departments", "cost_centers", "projects", "company_codes") for op in ("UPDATE", "DELETE")]
+               + [(t, op) for t in ("contacts", "integration_plugins", "notifications") for op in ALLE_OPS]}}
+# bediening leest deze niet meer: omzet vanaf stap 10 (AC30), ongebruikte tabellen vanaf stap 11 (dicht)
+BED_LEEST_NIET = {**{t: STAP_FACTUREN for t in ("invoices", "documents", "invoice_lines", "payments")},
+                  **{t: STAP_STAMDATA for t in ("contacts", "integration_plugins", "notifications")}}
+WAAROM = {STAP_FACTUREN: "vanaf stap 10 voor niemand toegestaan", STAP_STAMDATA: "vanaf stap 11 voor niemand toegestaan"}
 def geweigerd_expr(args, tbl, op):
     x = f"(hardening_test.inactief_dml({args}))"
-    if (tbl, op) in VERBODEN_10:
-        return f"select {x}.geweigerd or {x}.detail like 'actief: rijen=0 | %: rijen=0'"
+    if (tbl, op) in VERBODEN:
+        # iedereen geweigerd: 0 rijen (SELECT/UPDATE/DELETE) of RLS-fout (INSERT), voor de actieve EN de geweigerde gebruiker
+        return f"select {x}.geweigerd or {x}.detail ~ '^actief: (rijen=0|.*row-level security.*) [|] [a-z]+: (rijen=0|.*row-level security.*)$'"
     return f"select {x}.geweigerd"
 TS_TABELLEN = ["companies", "invoices", "documents", "workflow_rules", "configurations", "notifications", "integration_plugins",
                "contacts", "departments", "cost_centers", "projects", "company_codes", "approval_settings", "invoice_lines", "payments"]
 for n, tbl in enumerate(TS_TABELLEN, start=1):
     for op, letter in (("SELECT", "S"), ("INSERT", "I"), ("UPDATE", "U"), ("DELETE", "D")):
-        v = (tbl, op) in VERBODEN_10
+        v = VERBODEN.get((tbl, op), 0)
         case(f"TO{n:02d}{letter}", "TENANTSWITCH", f"opzet {tbl} {op}: actieve owner heeft effect met dezelfde SQL, rij hersteld", "postgres", "check",
-             f"select (hardening_test.inactief_dml('{tbl}','{op}')).opzet_ok", True, False if v else None, STAP_FACTUREN if v else 0,
-             "vanaf stap 10 voor niemand toegestaan" if v else "")
+             f"select (hardening_test.inactief_dml('{tbl}','{op}')).opzet_ok", True, False if v else None, v, WAAROM.get(v, ""))
         case(f"TS{n:02d}{letter}", "TENANTSWITCH", f"gedeactiveerde {op} op {tbl} geweigerd (0 rijen / RLS-fout), actieve gebruiker niet", "postgres", "check",
              geweigerd_expr(f"'{tbl}','{op}'", tbl, op), False, True, STAP_TENANT)
 # actieve bediening (geen owner) wordt door de tenantswitch niet beperkt: zelfde opzet, andere actieve rol
 for n, tbl in enumerate(TS_TABELLEN, start=1):
-    o = tbl in OMZET_10
+    o = BED_LEEST_NIET.get(tbl, 0)
     case(f"TB{n:02d}", "TENANTSWITCH", f"actieve bediening leest {tbl} met dezelfde opzet (niet beperkt)", "postgres", "check",
-         f"select (hardening_test.inactief_dml('{tbl}','SELECT','{BED}')).opzet_ok", True, False if o else None, STAP_FACTUREN if o else 0,
-         "vanaf stap 10 geen omzet voor bediening (AC30)" if o else "")
+         f"select (hardening_test.inactief_dml('{tbl}','SELECT','{BED}')).opzet_ok", True, False if o else None, o,
+         {STAP_FACTUREN: "vanaf stap 10 geen omzet voor bediening (AC30)", STAP_STAMDATA: "vanaf stap 11 dicht (ongebruikt)"}.get(o, ""))
 # isolatie aanvullen voor de tabellen zonder TENANT-case; met positieve controle (B-owner ziet zijn eigen rij)
 OWNER_B = em("b", "owner")
 for cid, tbl, where in [
@@ -442,7 +450,9 @@ for cid, tbl, where in [
     ("TI46", "company_codes", f"company_id = '{B(100)}'"), ("TI47", "notifications", f"restaurant_id = '{RB}'"),
 ]:
     case(cid, "TENANT", f"A-owner kan {tbl} van B niet lezen", OWNER, "select", f"select 1 from {tbl} where {where}", False)
-    case(cid + "p", "TENANT", f"controle: B-owner leest eigen {tbl}", OWNER_B, "select", f"select 1 from {tbl} where {where}", True)
+    d = STAP_STAMDATA if BED_LEEST_NIET.get(tbl) == STAP_STAMDATA else 0   # vanaf stap 11 dicht voor alle restaurantrollen, ook de eigen owner
+    case(cid + "p", "TENANT", f"controle: B-owner leest eigen {tbl}", OWNER_B, "select", f"select 1 from {tbl} where {where}", True, False if d else None, d,
+         "vanaf stap 11 dicht (ongebruikt)" if d else "")
 
 # ---------------------------------------------------------------- RESTAURANT AAN/UIT (fase 2, migratie 0025, stap 9)
 # Restaurant A wordt in de opzet uitgezet (alleen als de kolom is_active bestaat, dus vanaf 0025). Vóór 0025 blijft A aan:
@@ -465,7 +475,9 @@ RU_LEZEN = [
 ]
 for n, (tbl, where) in enumerate(RU_LEZEN, start=1):
     sql = f"select 1 from {tbl} where {where}"
-    case(f"RA{n:02d}", "RESTAURANT_UIT", f"controle: owner A leest {tbl} (A aan)", OWNER, "select", sql, True)
+    d = STAP_STAMDATA if BED_LEEST_NIET.get(tbl) == STAP_STAMDATA else 0   # ongebruikte tabellen: vanaf stap 11 ook voor de owner dicht
+    case(f"RA{n:02d}", "RESTAURANT_UIT", f"controle: owner A leest {tbl} (A aan)", OWNER, "select", sql, True, False if d else None, d,
+         "vanaf stap 11 dicht (ongebruikt)" if d else "")
     case(f"RU{n:02d}", "RESTAURANT_UIT", f"A uit: owner A leest {tbl}", OWNER, "select", sql, True, False, STAP_RESTAURANT, setup=A_UIT)
 case("RU30", "RESTAURANT_UIT", "A uit: owner A leest EIGEN profiel (bewuste uitzondering: app moet de reden kunnen tonen)", OWNER, "select",
      "select 1 from users where id = auth.uid()", True, setup=A_UIT)
@@ -479,10 +491,9 @@ case("RU32", "RESTAURANT_UIT", "A uit: owner A uploadt in eigen map", OWNER, "dm
 for n, tbl in enumerate(TS_TABELLEN, start=1):
     for op, letter in (("SELECT", "S"), ("INSERT", "I"), ("UPDATE", "U"), ("DELETE", "D")):
         args = f"'{tbl}','{op}','{OWNER}','{OWNER}',true"
-        v = (tbl, op) in VERBODEN_10
+        v = VERBODEN.get((tbl, op), 0)
         case(f"RO{n:02d}{letter}", "RESTAURANT_UIT", f"opzet {tbl} {op}: owner A heeft effect zolang A aan staat, rij hersteld", "postgres", "check",
-             f"select (hardening_test.inactief_dml({args})).opzet_ok", True, False if v else None, STAP_FACTUREN if v else 0,
-             "vanaf stap 10 voor niemand toegestaan" if v else "")
+             f"select (hardening_test.inactief_dml({args})).opzet_ok", True, False if v else None, v, WAAROM.get(v, ""))
         case(f"RW{n:02d}{letter}", "RESTAURANT_UIT", f"A uit: owner A {op} op {tbl} geweigerd (0 rijen / RLS-fout)", "postgres", "check",
              geweigerd_expr(args, tbl, op), False, True, STAP_RESTAURANT)
 # functiecontracten
@@ -1012,12 +1023,14 @@ wacht("MW03", "betaling rechtstreeks wissen (factuur bestaat nog: geen cascade)"
 wacht("MW04", "factuur rechtstreeks op betaald zetten", f"update invoices set status = 'paid' where id = '{A(501)}'", PAY)
 case("MW05", MO, "betalingen uit: factuur op overdue zetten blijft toegestaan", OWNER, "dml", f"update invoices set status = 'overdue' where id = '{A(501)}'", True, setup=UIT(PAY))
 case("MW06", MO, "betalingen uit: betalingen lezen blijft toegestaan", OWNER, "select", f"select 1 from payments where id = '{A(520)}'", True, setup=UIT(PAY))
-wacht("MW07", "dag afsluiten", f"insert into daily_closings (restaurant_id, closing_date) values ('{RA}', '2001-01-01')", DAY)  # vaste datum: de seed gebruikt datums rond vandaag
-wacht("MW08", "dagafsluiting wijzigen (heropenen)", f"update daily_closings set reopened_at = now() where id = '{A(600)}'", DAY)
-wacht("MW09", "dagafsluiting rechtstreeks wissen", f"delete from daily_closings where id = '{A(600)}'", DAY)
+# vaste datum (de seed heeft al een afsluiting op 2026-10-11); op eigen naam (vanaf stap 11 verplicht)
+wacht("MW07", "dag afsluiten", f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', '2001-01-01', '{A(10)}')", DAY)
+# vanaf stap 11 wijzigt of wist geen restaurantrol een dagafsluiting of goedkeuringsinstelling: controle als service_role
+wacht("MW08", "dagafsluiting wijzigen (heropenen)", f"update daily_closings set reopened_at = now() where id = '{A(600)}'", DAY, controle="service_role")
+wacht("MW09", "dagafsluiting rechtstreeks wissen", f"delete from daily_closings where id = '{A(600)}'", DAY, controle="service_role")
 wacht("MW10", "goedkeuringsinstelling toevoegen (bedrijf A 105)", f"insert into approval_settings (company_id, method, is_required) values ('{A(105)}','pin',true)", APP)
 wacht("MW11", "goedkeuringsinstelling wijzigen", f"update approval_settings set is_required = is_required where company_id = '{A(100)}'", APP)
-wacht("MW12", "goedkeuringsinstelling rechtstreeks wissen", f"delete from approval_settings where company_id = '{A(100)}'", APP)
+wacht("MW12", "goedkeuringsinstelling rechtstreeks wissen", f"delete from approval_settings where company_id = '{A(100)}'", APP, controle="service_role")
 case("MW13", MO, "module uit bij A: betaling bij B toevoegen blijft toegestaan (owner B)", OWNER_B, "dml",
      f"insert into payments (invoice_id, amount, method) values ('{B(501)}', 1, 'cash')", True, setup=UIT(PAY))
 # goedkeuring: wachtende bon in A (opzet met triggers uit, zoals de seed)
@@ -1047,7 +1060,8 @@ case("MS08", MO, "goedkeuring uit: bon bewerken (bedrag) blijft toegestaan", OWN
 # C: cascades tegenover rechtstreeks wissen
 C_BEDRIJF = (f"insert into companies (id, restaurant_id, name) values ('{A(9110)}','{RA}','Weg-bedrijf'); "
              f"insert into approval_settings (company_id, method, is_required) values ('{A(9110)}','pin',true); ")
-case("MC02", MO, "goedkeuring uit: bedrijf verwijderen (owner A) mag, instelling gaat mee via cascade", OWNER, "check",
+# vanaf stap 11 wist alleen de server (service_role) een bedrijf
+case("MC02", MO, "goedkeuring uit: bedrijf verwijderen (service_role) mag, instelling gaat mee via cascade", "service_role", "check",
      f"select hardening_test.daarna($$delete from companies where id = '{A(9110)}'$$, $$select not exists (select 1 from approval_settings where company_id = '{A(9110)}')$$)", True,
      setup=C_BEDRIJF + UIT(APP))
 C_FACTUUR = REPL(f"insert into invoices (id, restaurant_id, company_id, invoice_number, total, status) values ('{A(9120)}','{RA}','{A(100)}','2026-9120',5,'draft'); "
@@ -1071,13 +1085,13 @@ for nr, (key, sql, wat) in enumerate((
         (PAY, f"delete from public.payments where id = '{A(520)}'", "betaling (factuur bestaat nog)"),
         (DAY, f"delete from public.daily_closings where id = '{A(600)}'", "dagafsluiting (restaurant bestaat nog)"),
         (APP, f"delete from public.approval_settings where company_id = '{A(100)}'", "goedkeuringsinstelling (bedrijf bestaat nog)")), start=5):
-    # betalingen: vanaf stap 10 wist geen restaurantrol meer een betaling, dus alleen service_role
-    for who, t in (BEIDE if key != PAY else (("service_role", "s"),)):
+    # vanaf stap 10/11 wist geen restaurantrol meer een betaling, dagafsluiting of instelling: alleen service_role
+    for who, t in (("service_role", "s"),):
         case(f"MC0{nr}{t}", MO, f"C4: {wat} wissen via een testtrigger (diepte 2, geen cascade), module uit, als {who}: geweigerd", who, "check",
              "select hardening_test.refused_with($$insert into hardening_test.proef_c4 values (1)$$, 'staat uit') "
              "and (select pg_trigger_depth()) = 0", True, setup=PROEF(sql) + UIT(key))
     tabel, waar = sql.split(" from ")[1].split(" where ")
-    case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", OWNER if key != PAY else "service_role", "check",
+    case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", "service_role", "check",
          f"select hardening_test.daarna($$insert into hardening_test.proef_c4 values (1)$$, $$select not exists (select 1 from {tabel} where {waar})$$)", True, setup=PROEF(sql))
 case("MG01", MO, "bestaande guards ongewijzigd (vingerafdrukken uit 0022)", "postgres", "check",
      "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname='receipts_guard'),'\\s+',' ','g'))) = 'e2495872050430577d8464962b88d1de' "
@@ -1178,6 +1192,93 @@ case("FW80", FW, "betalingen uit: administratie zet sent -> paid: geweigerd door
      weiger(upd("status = 'paid'", 501), "staat uit"), True, setup=UIT(PAY))
 case("FW81", FW, "betalingen uit: paid -> sent: geweigerd door de factuurwacht (module raakt dit niet)", "service_role", "check",
      weiger(upd("status = 'sent'", 502), STATUS), False, True, STAP_FACTUREN, setup=UIT(PAY))
+
+# ---------------------------------------------------------------- ROLRECHTEN STAP 11 (migraties 0033 + 0034)
+# Dagafsluiting op eigen naam, bedrijfsgegevens lezen voor iedereen / schrijven MANAGE_COMPANIES, instellingen MANAGE_SETTINGS,
+# ongebruikte tabellen dicht, nergens wissen. Weigering via RLS: SELECT/UPDATE/DELETE = 0 rijen, INSERT = RLS-fout.
+RR = "ROLRECHTEN11"
+S11 = STAP_STAMDATA
+def rls(sql): return f"select hardening_test.refused_with($${sql}$$, 'row-level security')"
+AFS = lambda who_id, d: f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', '{d}', {who_id})"
+# dagafsluiting
+case("RR01", RR, "bediening sluit de dag af (eigen naam): geweigerd", BED, "check", rls(AFS(f"'{A(13)}'", "2001-02-01")), False, True, S11)
+case("RR02", RR, "manager sluit de dag af op naam van de owner: geweigerd", MGR, "check", rls(AFS(f"'{A(10)}'", "2001-02-02")), False, True, S11)
+case("RR03", RR, "manager sluit de dag af zonder naam (closed_by leeg): geweigerd", MGR, "check", rls(AFS("null", "2001-02-03")), False, True, S11)
+case("RR04", RR, "manager sluit de dag af op eigen naam: toegestaan", MGR, "dml", AFS(f"'{A(11)}'", "2001-02-04"), True)
+case("RR05", RR, "owner sluit de dag af op eigen naam: toegestaan", OWNER, "dml", AFS(f"'{A(10)}'", "2001-02-05"), True)
+case("RR06", RR, "administratie (alleen bekijken) sluit de dag af: geweigerd", ADM, "check", rls(AFS(f"'{A(12)}'", "2001-02-06")), False, True, S11)
+case("RR07", RR, "owner heropent bestaande afsluiting (update): 0 rijen", OWNER, "dml", f"update daily_closings set reopened_at = now() where id = '{A(600)}'", True, False, S11)
+case("RR08", RR, "owner wijzigt omzet van bestaande afsluiting: 0 rijen", OWNER, "dml", f"update daily_closings set total_revenue = 1 where id = '{A(600)}'", True, False, S11)
+case("RR09", RR, "manager wist afsluiting: 0 rijen", MGR, "dml", f"delete from daily_closings where id = '{A(600)}'", True, False, S11)
+case("RR10", RR, "administratie leest afsluitingen (VIEW_DAILY_CLOSING): toegestaan", ADM, "select", f"select 1 from daily_closings where id = '{A(600)}'", True)
+case("RR11", RR, "bediening leest afsluitingen: 0 rijen", BED, "select", f"select 1 from daily_closings where id = '{A(600)}'", True, False, S11)
+case("RR12", RR, "keuken leest afsluitingen: 0 rijen", KEU, "select", f"select 1 from daily_closings where id = '{A(600)}'", True, False, S11)
+# bedrijfsgegevens: lezen voor iedereen (rekening openen)
+for i, (tbl, wie) in enumerate([("companies", BED), ("companies", KEU), ("departments", BED), ("cost_centers", BED), ("projects", BED), ("company_codes", BED)], start=20):
+    w = f"id = '{A(100)}'" if tbl == "companies" else f"company_id = '{A(100)}'"
+    case(f"RR{i}", RR, f"{wie.split('@')[0]} leest {tbl}: toegestaan", wie, "select", f"select 1 from {tbl} where {w}", True)
+case("RR26", RR, "gedeactiveerde leest bedrijven: 0 rijen", INA, "select", f"select 1 from companies where id = '{A(100)}'", False)
+case("RR27", RR, "A uit: owner A leest bedrijven: 0 rijen", OWNER, "select", f"select 1 from companies where id = '{A(100)}'", False, setup=A_UIT)
+case("RR30", RR, "administratie maakt bedrijf aan: toegestaan", ADM, "dml", f"insert into companies (restaurant_id, name) values ('{RA}','rr30')", True)
+case("RR31", RR, "manager maakt bedrijf aan: geweigerd", MGR, "check", rls(f"insert into companies (restaurant_id, name) values ('{RA}','rr31')"), False, True, S11)
+case("RR32", RR, "administratie wijzigt bedrijf: toegestaan", ADM, "dml", f"update companies set name = 'rr32' where id = '{A(100)}'", True)
+case("RR33", RR, "manager wijzigt bedrijf: 0 rijen", MGR, "dml", f"update companies set name = 'rr33' where id = '{A(100)}'", True, False, S11)
+case("RR34", RR, "owner wist bedrijf: 0 rijen", OWNER, "dml", f"delete from companies where id = '{A(105)}'", True, False, S11)
+SUB = {"departments": "name", "cost_centers": "name", "projects": "name"}
+case("RR35", RR, "administratie maakt afdeling aan: toegestaan", ADM, "dml", f"insert into departments (company_id, name) values ('{A(100)}','rr35')", True)
+case("RR36", RR, "manager maakt afdeling aan: geweigerd", MGR, "check", rls(f"insert into departments (company_id, name) values ('{A(100)}','rr36')"), False, True, S11)
+case("RR37", RR, "bediening maakt project aan: geweigerd", BED, "check", rls(f"insert into projects (company_id, name) values ('{A(100)}','rr37')"), False, True, S11)
+# wissen op een verse rij zonder verwijzingen (anders weigert de foreign key al, om de verkeerde reden)
+VERS = {"departments": "(id, company_id, name) values ('{i}','" + A(100) + "','rr')", "cost_centers": "(id, company_id, name) values ('{i}','" + A(100) + "','rr')",
+        "projects": "(id, company_id, name) values ('{i}','" + A(100) + "','rr')", "company_codes": "(id, company_id, type, code) values ('{i}','" + A(100) + "','rr','rr')"}
+for i, tbl in enumerate(("departments", "cost_centers", "projects", "company_codes"), start=38):
+    case(f"RR{i}", RR, f"owner wijzigt bestaande {tbl}: 0 rijen (geen wijzigroute)", OWNER, "dml",
+         f"update {tbl} set company_id = company_id where company_id = '{A(100)}'", True, False, S11)
+    vid = A(9150 + i)
+    case(f"RR{i}w", RR, f"owner wist {tbl}: 0 rijen", OWNER, "dml", f"delete from {tbl} where id = '{vid}'", True, False, S11,
+         setup=REPL(f"insert into {tbl} " + VERS[tbl].replace("{i}", vid) + ";"))
+# instellingen
+for i, tbl in enumerate(("configurations", "workflow_rules", "approval_settings"), start=50):
+    w = f"company_id = '{A(100)}'"
+    case(f"RR{i}l", RR, f"bediening leest {tbl}: toegestaan", BED, "select", f"select 1 from {tbl} where {w}", True)
+    case(f"RR{i}a", RR, f"administratie wijzigt {tbl}: toegestaan", ADM, "dml", f"update {tbl} set company_id = company_id where {w}", True)
+    case(f"RR{i}m", RR, f"manager wijzigt {tbl}: 0 rijen", MGR, "dml", f"update {tbl} set company_id = company_id where {w}", True, False, S11)
+    case(f"RR{i}w", RR, f"owner wist {tbl}: 0 rijen", OWNER, "dml", f"delete from {tbl} where {w}", True, False, S11)
+case("RR53", RR, "administratie maakt configuratie aan: toegestaan", ADM, "dml",
+     f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}','{A(105)}','rr53','{{}}')", True)
+case("RR54", RR, "bediening maakt workflowregel aan: geweigerd", BED, "check",
+     rls(f"insert into workflow_rules (restaurant_id, company_id, invoice_frequency, requires_approval) values ('{RA}','{A(105)}','weekly',false)"), False, True, S11)
+case("RR55", RR, "manager maakt goedkeuringsinstelling aan: geweigerd", MGR, "check",
+     rls(f"insert into approval_settings (company_id, method, is_required) values ('{A(105)}','pin',true)"), False, True, S11)
+# ongebruikte tabellen: dicht voor alle restaurantrollen (ook owner), elke bewerking
+EM = REPL(f"insert into email_settings (id, restaurant_id) values ('{A(9140)}','{RA}');")
+DICHT = {
+    "contacts": (f"company_id = '{A(100)}'", f"insert into contacts (company_id, full_name) values ('{A(100)}','rr')", "full_name = 'x'", ""),
+    "integration_plugins": (f"restaurant_id = '{RA}'",
+        f"insert into integration_plugins (restaurant_id, plugin_type, plugin_name, plugin_version, min_core_version) values ('{RA}','pos','rr','1','1')", "plugin_name = 'x'", ""),
+    "email_settings": (f"restaurant_id = '{RA}'", f"insert into email_settings (restaurant_id) values ('{RA}')", "sender_name = 'x'", EM),
+    "notifications": (f"restaurant_id = '{RA}'", f"insert into notifications (restaurant_id, type, trigger_event) values ('{RA}','email','rr')", "trigger_event = 'x'", ""),
+}
+for i, (tbl, (w, ins, set_, setup)) in enumerate(DICHT.items(), start=60):
+    case(f"RR{i}c", RR, f"controle: {tbl} heeft rijen van A (service_role ziet ze)", "service_role", "select", f"select 1 from {tbl} where {w}", True, setup=setup)
+    case(f"RR{i}s", RR, f"owner leest {tbl}: 0 rijen", OWNER, "select", f"select 1 from {tbl} where {w}", True, False, S11, setup=setup)
+    case(f"RR{i}i", RR, f"owner maakt {tbl} aan: RLS-fout", OWNER, "check", rls(ins), False, True, S11, setup=setup)
+    case(f"RR{i}u", RR, f"owner wijzigt {tbl}: 0 rijen", OWNER, "dml", f"update {tbl} set {set_} where {w}", True, False, S11, setup=setup)
+    vers = REPL(f"insert into contacts (id, company_id, full_name) values ('{A(9160)}','{A(100)}','rr');") if tbl == "contacts" else ""
+    wd = f"id = '{A(9160)}'" if tbl == "contacts" else w   # contacts: verse rij zonder verwijzing (foreign key)
+    case(f"RR{i}d", RR, f"owner wist {tbl}: 0 rijen", OWNER, "dml", f"delete from {tbl} where {wd}", True, False, S11, setup=setup + vers)
+# catalogus
+DICHT_L = "('contacts','integration_plugins','email_settings','notifications')"
+case("RR70", RR, "ongebruikte tabellen: RLS aan en geen enkele policy", "postgres", "check",
+     f"select (select count(*) from pg_class where relnamespace = 'public'::regnamespace and relname in {DICHT_L} and relrowsecurity) = 4 "
+     f"and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in {DICHT_L})", False, True, S11)
+case("RR71", RR, "13 + 9 policies, allemaal voor authenticated, geen ALL en geen wis-policy op de stap-11-tabellen", "postgres", "check",
+     "select (select count(*) from pg_policies where schemaname = 'public' and tablename in ('daily_closings','companies','departments','cost_centers','projects','company_codes')) = 13 "
+     "and (select count(*) from pg_policies where schemaname = 'public' and tablename in ('configurations','workflow_rules','approval_settings')) = 9 "
+     "and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in ('daily_closings','companies','departments','cost_centers','projects','company_codes',"
+     "'configurations','workflow_rules','approval_settings') and (cmd in ('ALL','DELETE') or roles <> '{authenticated}'))", False, True, S11)
+case("RR72", RR, "dagafsluiting: insert-policy eist closed_by = auth.uid()", "postgres", "check",
+     "select coalesce((select with_check like '%closed_by = auth.uid()%' from pg_policies where policyname = 'daily_closings insert'), false)", False, True, S11)
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
 # Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):
