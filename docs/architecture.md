@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17), nog niet in productie.
+**v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17); in productie op 13 okt (0033 + 0034, v1.0.94), controle en rooktest geslaagd.
 
 **v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17); in productie op 13 okt (0031 + 0032, app v1.0.91), controle en rooktest geslaagd.
 
@@ -2041,6 +2041,8 @@ rol, schrijven per rol, en elke bewerking op de vier dichte tabellen (met contro
 (heen/terug exact, leesblok per stand, verkeerde volgorde en extra policy afgebroken, 11 kapotte versies gevangen, alle triggers/guards/modulestand en
 overige policies ongewijzigd). App-tests t7-t14 per regel gelijk op 0032 en 0034; t15 16/16 (op 0032: 5 FAIL). Bestaande cases die
 uitgingen van "owner mag wissen" lopen hun controle als service_role of verwachten vanaf stap 11 "voor niemand toegestaan".
+
+**Productie (13 okt).** Vooraf 0032/12/12/12/12/leeg; na 0033 0033/12/19/6/6; na 0034 0034/12/22/0/0/true. `guards_md5` a324f688…, `module_wacht_md5` 1d1de1f5…, `modules_md5` 6fa1b0af…, `overige_md5` 1a66865a… telkens gelijk. Rooktest als owner geslaagd. Geen ALL-policy meer in de database.
 
 **Rollback = noodmaatregel.** `rollbacks/0034` dan `0033` zet de oude ALL-policies exact terug (ook de oude tekst van email_settings).
 

@@ -11,23 +11,23 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Mail-links (v1.0.84/v1.0.85)**: wachtwoord herstellen en uitnodigingen werken in elke browser (server vraagt de herstelmail aan; /reset-password leest de sessie uit de link). Geen aanpassing in Supabase nodig.
 - **Fase 4 — modules per restaurant (migraties 0028–0030, v1.0.88)**: in productie sinds 11 okt, akkoord 12 okt. In het beheerscherm per restaurant Dagafsluiting, Betalingen registreren en Goedkeuring aan/uit (alleen de platformbeheerder; logregel per wijziging). Uit = verborgen in menu/pagina's, routes geven 403 en de databasewacht weigert schrijfacties. Alle modules staan standaard aan. Productie `guards_md5` = `287f55d538eeb47386154595baf42dee` (controle met `prod-modules-checks.sql`).
 - **Hardening stap 10 — rolrechten facturen (migraties 0031–0032, app v1.0.91)**: in productie sinds 13 okt 15:52. Controle vooraf 0030/4/4/0/leeg, na 0032 0032/11/0/3/true; `guards_md5` (287f55d5…), `module_wacht_md5` (1d1de1f5…) en `modules_md5` (6fa1b0af…) vóór en na gelijk. Rooktest door Dick als owner geslaagd (factuur 2026-0011 gemaakt, drie deelbetalingen, volledig betaald, dashboard zichtbaar). Alleen owner/administratie maken en wijzigen facturen en betalingen; niemand wist ze; betaald is eindstand. Zie architecture 13.22.
+- **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, v1.0.94)**: in productie sinds 13 okt 17:35. Controle vooraf 0032/12/12/12/12/leeg, na 0033 0033/12/19/6/6, na 0034 0034/12/22/0/0/true; `guards_md5` (a324f688…), `module_wacht_md5` (1d1de1f5…), `modules_md5` (6fa1b0af…) en `overige_md5` (1a66865a…) telkens gelijk. Rooktest door Dick als owner: "alles lijkt oké" (dagafsluiting-pagina leesbaar). Geen ALL-policy meer in de database. email_settings bestaat in productie niet (eerste controle gaf 12 i.p.v. 13; 0034, rollback en leesblok daarop aangepast vóór uitvoering). Zie architecture 13.23.
 - Productie-database staat op **migratie 0030** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
-- **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Geen app-wijziging. Zie architecture 13.23. Eerste productiecontrole (13 okt) toonde 12 i.p.v. 13 tabellen: email_settings bestaat in productie niet; 0034, rollback en leesblok zijn daarop aangepast en opnieuw getest (nog niets uitgevoerd). Productiecontrole: `supabase/hardening/prod-stamdata-checks.sql`.
-
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 in productie; stap 11 dagafsluiting/stamdata lokaal klaar, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 en 11 in productie; 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 11 blijven open: PIN-kolommen leesbaar voor iedereen (stap 12) en tabelrechten (grants) opruimen (stap 13).
+- Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).
