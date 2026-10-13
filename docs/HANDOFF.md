@@ -17,7 +17,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
-- **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Geen app-wijziging. Zie architecture 13.23. Productiecontrole: `supabase/hardening/prod-stamdata-checks.sql`.
+- **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Geen app-wijziging. Zie architecture 13.23. Eerste productiecontrole (13 okt) toonde 12 i.p.v. 13 tabellen: email_settings bestaat in productie niet; 0034, rollback en leesblok zijn daarop aangepast en opnieuw getest (nog niets uitgevoerd). Productiecontrole: `supabase/hardening/prod-stamdata-checks.sql`.
 
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.

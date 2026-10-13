@@ -24,15 +24,15 @@ Plan: `docs/security-hardening-plan.md` · Audit: `docs/architecture.md` sectie 
 | `prod-modules-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand van 0028–0030, rechten, alles standaard aan, `guards_md5` (vóór en na gelijk) |
 | `tests/facturen-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie-, rollback- en mutatietests voor 0031–0032 (36 checks: heen/terug exact, verkeerde volgorde afgebroken, 15 kapotte versies gevangen, twee lagen) |
 | `prod-facturen-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand 0030/0031/0032, aantallen policies en wachttriggers, rechten, `guards_md5` (= 287f55d5…), `module_wacht_md5` en `modules_md5` vóór en na gelijk |
-| `tests/stamdata-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie-, rollback- en mutatietests voor 0033–0034 (35 checks: heen/terug exact, verkeerde volgorde afgebroken, extra policy → afgebroken, 11 kapotte versies gevangen, triggers/guards/modules/overige policies ongewijzigd) |
-| `prod-stamdata-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand 0032/0033/0034, aantallen policies, ALL-policies in public, `dicht_ok`; `guards_md5`, `module_wacht_md5`, `modules_md5`, `overige_md5` vóór en na gelijk |
+| `tests/stamdata-tests.sh` | Alleen lokaal (maakt eigen kopie-databases) | Migratie-, rollback- en mutatietests voor 0033–0034 (43 checks; 42 op een basis zonder email_settings, zoals productie; o.a. rollback 0034 breekt af bij elke afwijkende policyverdeling: heen/terug exact, verkeerde volgorde afgebroken, extra policy → afgebroken, 11 kapotte versies gevangen, triggers/guards/modules/overige policies ongewijzigd) |
+| `prod-stamdata-checks.sql` | **Productie** — alleen lezen, eindigt met rollback | Stand 0032/0033/0034, aantal bestaande tabellen (productie 12: geen email_settings), aantallen policies, ALL-policies in public, `dicht_ok`; `guards_md5`, `module_wacht_md5`, `modules_md5`, `overige_md5` vóór en na gelijk |
 | `prod-platform-beheerder.sql` | **Productie** — WIJZIGT (alleen met GO) | Voegt stuctech@gmail.com toe als platformbeheerder; weigert een account met restaurantprofiel |
 
 ## Testharnas gebruiken
 
 ```sql
 -- na staging-seed.sql, 00_harness.sql en 10_cases.sql:
-select * from hardening_test.summary(0);                       -- huidige stand: alles PASS
+select * from hardening_test.summary(0);                       -- huidige stand: alles PASS (kolom skip = expliciet overgeslagen cases, zie 'vereist')
 select * from hardening_test.known_weaknesses;                 -- de bekende zwaktes en in welke stap ze dichtgaan
 select * from hardening_test.run(3) where result <> 'PASS';    -- verwachting ná hardening-stap 3
 ```

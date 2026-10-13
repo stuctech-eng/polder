@@ -31,7 +31,8 @@ create table hardening_test.cases (
   expect_after boolean,           -- NULL = open beslispunt
   step int not null default 0,    -- hardening-stap waarin expect_after gaat gelden (0 = verandert nooit)
   note text,
-  setup text                      -- optioneel: SQL als postgres vóór de test (in dezelfde teruggedraaide subtransactie), bv. FK-ballast opruimen
+  setup text,                     -- optioneel: SQL als postgres vóór de test (in dezelfde teruggedraaide subtransactie), bv. FK-ballast opruimen
+  vereist text                    -- optioneel: booleaanse SQL-voorwaarde (als postgres); onwaar = case OVERGESLAGEN (SKIP), nooit PASS of FAIL
 );
 
 drop table if exists hardening_test.permission_baseline cascade;
@@ -126,6 +127,16 @@ begin
 
   for c in select * from hardening_test.cases order by category, id loop
     v_allowed := null; v_err := null; v_n := null; v_uid := null;
+    -- voorwaarde niet vervuld (bv. een tabel die in productie niet bestaat): expliciet SKIP, zichtbaar in de uitslag
+    if c.vereist is not null then
+      execute 'select coalesce((' || c.vereist || '), false)' into v_allowed;
+      if not v_allowed then
+        id := c.id; category := c.category; title := c.title; as_user := c.as_user;
+        expected := '-'; actual := '-'; result := 'SKIP'; detail := 'overgeslagen, voorwaarde onwaar: ' || c.vereist;
+        return next; continue;
+      end if;
+      v_allowed := null;
+    end if;
     if c.as_user like 'uid:%' then
       v_uid := substr(c.as_user, 5)::uuid;          -- willekeurige uid (ook niet-bestaande) als geldig JWT-subject
     elsif c.as_user not in ('service_role','postgres','anon','nosub') then
@@ -188,15 +199,16 @@ begin
 end
 $fn$;
 
+drop function if exists hardening_test.summary(int);
 create or replace function hardening_test.summary(p_step int default 0)
-returns table (category text, totaal bigint, pass bigint, fail bigint, open_ bigint, fout bigint)
+returns table (category text, totaal bigint, pass bigint, fail bigint, open_ bigint, fout bigint, skip bigint)
 language sql as $$
   select r.category, count(*), count(*) filter (where result='PASS'), count(*) filter (where result='FAIL'),
-         count(*) filter (where result='OPEN'), count(*) filter (where result='FOUT')
+         count(*) filter (where result='OPEN'), count(*) filter (where result='FOUT'), count(*) filter (where result='SKIP')
   from hardening_test.run(p_step) r group by r.category
   union all
   select 'TOTAAL', count(*), count(*) filter (where result='PASS'), count(*) filter (where result='FAIL'),
-         count(*) filter (where result='OPEN'), count(*) filter (where result='FOUT')
+         count(*) filter (where result='OPEN'), count(*) filter (where result='FOUT'), count(*) filter (where result='SKIP')
   from hardening_test.run(p_step) r
   order by 1;
 $$;

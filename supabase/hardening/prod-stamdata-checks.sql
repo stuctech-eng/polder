@@ -1,17 +1,19 @@
 -- POLDER - controle rolrechten stap 11 (migraties 0033-0034). ALLEEN LEZEN, eindigt met rollback.
--- Voor 0033: stand 0032, 13/13/13, dicht_ok leeg. Na 0033: 0033, 20/7/7. Na 0034: 0034, 22/0/0, dicht_ok true.
+-- tabellen = 12 in productie (email_settings bestaat daar niet), 13 lokaal. Productie: voor 0033 stand 0032, 12/12/12, dicht_ok leeg;
+-- na 0033: 0033, 19/6/6; na 0034: 0034, 22/0/0, dicht_ok true.
 -- guards_md5, module_wacht_md5, modules_md5 en overige_md5: voor en na gelijk (noteren bij de eerste controle).
 begin;
 with l as (select array['daily_closings','companies','departments','cost_centers','projects','company_codes','configurations',
              'workflow_rules','approval_settings','contacts','integration_plugins','email_settings','notifications']::text[] a),
+     n as (select count(*) t from unnest((select a from l)) x where to_regclass('public.' || x) is not null),
      p as (select count(*) n, count(*) filter (where cmd = 'ALL') a from pg_policies, l where schemaname = 'public' and tablename = any(l.a)),
      g as (select count(*) n from pg_policies where schemaname = 'public' and cmd = 'ALL')
 select
-  case when p.n = 13 and p.a = 13 then '0032' when p.n = 20 and p.a = 7 then '0033'
+  case when p.n = n.t and p.a = n.t then '0032' when p.n = n.t + 7 and p.a = n.t - 6 then '0033'
        when p.n = 22 and p.a = 0 and g.n = 0 then '0034' else 'ONBEKEND' end as stand,
-  p.n as policies, p.a as policies_all, g.n as all_in_public,
+  n.t as tabellen, p.n as policies, p.a as policies_all, g.n as all_in_public,
   case when p.n <> 22 then null else
-    (select count(*) = 4 from pg_class where relnamespace = 'public'::regnamespace and relrowsecurity
+    (select count(*) = n.t - 9 from pg_class where relnamespace = 'public'::regnamespace and relrowsecurity
        and relname in ('contacts','integration_plugins','email_settings','notifications'))
     and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in ('contacts','integration_plugins','email_settings','notifications'))
     and not exists (select 1 from pg_policies, l where schemaname = 'public' and tablename = any(l.a) and (cmd = 'DELETE' or roles <> '{authenticated}'))
@@ -24,5 +26,5 @@ select
     cross join (values ('daily_closing'),('payment_registration'),('approval')) v(k)) as modules_md5,
   (select md5(string_agg(tablename || policyname || cmd || coalesce(qual, '') || coalesce(with_check, ''), '|' order by tablename, policyname))
      from pg_policies, l where schemaname = 'public' and not (tablename = any(l.a))) as overige_md5
-from p, g;
+from p, g, n;
 rollback;

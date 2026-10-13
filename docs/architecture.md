@@ -2037,13 +2037,21 @@ Na 0034 bestaat er geen ALL-policy meer in `public`. email_settings had nog de o
 
 **Tests.** Harnas `run(11)` 1139 PASS + 1 OPEN op PG16 en PG17; een 0032-database geeft op `run(11)` 117 FAIL. Nieuwe
 ROLRECHTEN11-cases (74): dagafsluiting (bediening, administratie, op naam van een ander, zonder naam, wijzigen, wissen), lezen per
-rol, schrijven per rol, en elke bewerking op de vier dichte tabellen (met controle dat er rijen zijn). `stamdata-tests.sh` 35/35
-(heen/terug exact, verkeerde volgorde en extra policy afgebroken, 11 kapotte versies gevangen, alle triggers/guards/modulestand en
+rol, schrijven per rol, en elke bewerking op de vier dichte tabellen (met controle dat er rijen zijn). `stamdata-tests.sh` 43/43 mét en 42/42 zónder email_settings
+(heen/terug exact, leesblok per stand, verkeerde volgorde en extra policy afgebroken, 11 kapotte versies gevangen, alle triggers/guards/modulestand en
 overige policies ongewijzigd). App-tests t7-t14 per regel gelijk op 0032 en 0034; t15 16/16 (op 0032: 5 FAIL). Bestaande cases die
 uitgingen van "owner mag wissen" lopen hun controle als service_role of verwachten vanaf stap 11 "voor niemand toegestaan".
 
 **Rollback = noodmaatregel.** `rollbacks/0034` dan `0033` zet de oude ALL-policies exact terug (ook de oude tekst van email_settings).
 
-**Uitrol.** Push → `prod-stamdata-checks.sql` (verwacht 0032/13/13/13/leeg; noteer de vier md5's) → 0033 → leesblok (0033/20/7/7)
-→ 0034 → leesblok (0034/22/0/0/true; vier md5's gelijk) → rooktest (bedrijf wijzigen, rekening openen als bediening, dag afsluiten) → STOP.
+**email_settings bestaat in productie niet** (migratie 0002 is daar nooit uitgevoerd; al vastgelegd in 13.2, bevinding 2). De eerste
+productiecontrole (13 okt) gaf daardoor 12 in plaats van 13 tabellen. Er is niets uitgevoerd. 0034, de rollback en het leesblok nemen
+email_settings nu alleen mee als de tabel bestaat; getest op een database mét en een database zónder email_settings (zoals productie),
+PG16 en PG17. Review GPT (13 okt): (1) de email_settings-cases worden zonder die tabel niet weggefilterd maar door
+het harnas expliciet OVERGESLAGEN (nieuwe kolom `vereist` in `hardening_test.cases`, uitslag SKIP, eigen kolom in `summary`);
+(2) rollback 0034 controleert vooraf exact de 9 policies van 0034 (tabel, naam, bewerking, rol) en breekt bij elke afwijking af
+(getest: wis- i.p.v. wijzig-policy, andere naam, extra policy op een dichte tabel, andere rol). Les: lokale testdatabase wijkt hier af van productie; bij een audit de bekende productieverschillen (13.2) meenemen.
+
+**Uitrol.** Push → `prod-stamdata-checks.sql` (productie: 0032/12/12/12/12/leeg; noteer de vier md5's) → 0033 → leesblok (0033/12/19/6/6)
+→ 0034 → leesblok (0034/12/22/0/0/true; vier md5's gelijk) → rooktest (bedrijf wijzigen, rekening openen als bediening, dag afsluiten) → STOP.
 

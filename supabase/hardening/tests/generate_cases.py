@@ -26,9 +26,10 @@ FREE_OWNER = ("set local session_replication_role = replica; "   # testopzet: lo
               "update receipts set created_by=null where created_by is not null; update daily_closings set closed_by=null, reopened_by=null; "
               "update activity_log set user_id=null; update domain_events set published_by=null; update audit_log set changed_by=null; "
               "update notifications set recipient_user_id=null; set local session_replication_role = origin;")
-def case(id, cat, title, user, kind, sql, now, after=None, step=0, note="", setup=None):
+def case(id, cat, title, user, kind, sql, now, after=None, step=0, note="", setup=None, vereist=None):
+    """vereist: booleaanse SQL-voorwaarde; onwaar = de case wordt expliciet OVERGESLAGEN (SKIP), niet PASS of FAIL."""
     if step == 0: after = now
-    cases.append((id, cat, title, user, kind, sql.strip(), now, after, step, note, setup))
+    cases.append((id, cat, title, user, kind, sql.strip(), now, after, step, note, setup, vereist))
 
 OWNER, MGR, ADM, BED, KEU, INA = (em("a", x) for x in ("owner", "manager", "admin", "bediening", "keuken", "inactive"))
 
@@ -1259,18 +1260,21 @@ DICHT = {
     "email_settings": (f"restaurant_id = '{RA}'", f"insert into email_settings (restaurant_id) values ('{RA}')", "sender_name = 'x'", EM),
     "notifications": (f"restaurant_id = '{RA}'", f"insert into notifications (restaurant_id, type, trigger_event) values ('{RA}','email','rr')", "trigger_event = 'x'", ""),
 }
+# email_settings (migratie 0002) bestaat in productie niet: die cases worden dan expliciet OVERGESLAGEN (SKIP)
 for i, (tbl, (w, ins, set_, setup)) in enumerate(DICHT.items(), start=60):
-    case(f"RR{i}c", RR, f"controle: {tbl} heeft rijen van A (service_role ziet ze)", "service_role", "select", f"select 1 from {tbl} where {w}", True, setup=setup)
-    case(f"RR{i}s", RR, f"owner leest {tbl}: 0 rijen", OWNER, "select", f"select 1 from {tbl} where {w}", True, False, S11, setup=setup)
-    case(f"RR{i}i", RR, f"owner maakt {tbl} aan: RLS-fout", OWNER, "check", rls(ins), False, True, S11, setup=setup)
-    case(f"RR{i}u", RR, f"owner wijzigt {tbl}: 0 rijen", OWNER, "dml", f"update {tbl} set {set_} where {w}", True, False, S11, setup=setup)
+    vr = "to_regclass('public.email_settings') is not null" if tbl == "email_settings" else None
+    case(f"RR{i}c", RR, f"controle: {tbl} heeft rijen van A (service_role ziet ze)", "service_role", "select", f"select 1 from {tbl} where {w}", True, setup=setup, vereist=vr)
+    case(f"RR{i}s", RR, f"owner leest {tbl}: 0 rijen", OWNER, "select", f"select 1 from {tbl} where {w}", True, False, S11, setup=setup, vereist=vr)
+    case(f"RR{i}i", RR, f"owner maakt {tbl} aan: RLS-fout", OWNER, "check", rls(ins), False, True, S11, setup=setup, vereist=vr)
+    case(f"RR{i}u", RR, f"owner wijzigt {tbl}: 0 rijen", OWNER, "dml", f"update {tbl} set {set_} where {w}", True, False, S11, setup=setup, vereist=vr)
     vers = REPL(f"insert into contacts (id, company_id, full_name) values ('{A(9160)}','{A(100)}','rr');") if tbl == "contacts" else ""
     wd = f"id = '{A(9160)}'" if tbl == "contacts" else w   # contacts: verse rij zonder verwijzing (foreign key)
-    case(f"RR{i}d", RR, f"owner wist {tbl}: 0 rijen", OWNER, "dml", f"delete from {tbl} where {wd}", True, False, S11, setup=setup + vers)
+    case(f"RR{i}d", RR, f"owner wist {tbl}: 0 rijen", OWNER, "dml", f"delete from {tbl} where {wd}", True, False, S11, setup=setup + vers, vereist=vr)
 # catalogus
 DICHT_L = "('contacts','integration_plugins','email_settings','notifications')"
-case("RR70", RR, "ongebruikte tabellen: RLS aan en geen enkele policy", "postgres", "check",
-     f"select (select count(*) from pg_class where relnamespace = 'public'::regnamespace and relname in {DICHT_L} and relrowsecurity) = 4 "
+case("RR70", RR, "ongebruikte tabellen (die bestaan): RLS aan en geen enkele policy", "postgres", "check",
+     f"select (select count(*) from pg_class where relnamespace = 'public'::regnamespace and relname in {DICHT_L} and relrowsecurity) "
+     f"= (select count(*) from pg_class where relnamespace = 'public'::regnamespace and relname in {DICHT_L}) "   # email_settings bestaat in productie niet
      f"and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in {DICHT_L})", False, True, S11)
 case("RR71", RR, "13 + 9 policies, allemaal voor authenticated, geen ALL en geen wis-policy op de stap-11-tabellen", "postgres", "check",
      "select (select count(*) from pg_policies where schemaname = 'public' and tablename in ('daily_closings','companies','departments','cost_centers','projects','company_codes')) = 13 "
@@ -1339,8 +1343,9 @@ case("H690", H, "open_tabs_guard bevat de afwijzingsblokkade; trigger actief; fu
 def b(x): return "null" if x is None else ("true" if x else "false")
 print("-- GEGENEREERD door generate_cases.py — niet met de hand bewerken.")
 print("truncate hardening_test.cases;")
-print("insert into hardening_test.cases (id, category, title, as_user, kind, sql, expect_now, expect_after, step, note, setup) values")
+print("insert into hardening_test.cases (id, category, title, as_user, kind, sql, expect_now, expect_after, step, note, setup, vereist) values")
 rows = []
-for (id_, cat, title, user, kind, sql, now, after, step, note, setup) in cases:
-    rows.append(f"  ({q(id_)},{q(cat)},{q(title)},{q(user)},{q(kind)},{q(sql)},{b(now)},{b(after)},{step},{q(note)},{'null' if setup is None else q(setup)})")
+for (id_, cat, title, user, kind, sql, now, after, step, note, setup, vereist) in cases:
+    rows.append(f"  ({q(id_)},{q(cat)},{q(title)},{q(user)},{q(kind)},{q(sql)},{b(now)},{b(after)},{step},{q(note)},"
+                f"{'null' if setup is None else q(setup)},{'null' if vereist is None else q(vereist)})")
 print(",\n".join(rows) + ";")

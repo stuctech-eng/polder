@@ -1,15 +1,17 @@
 -- 0034 rolrechten instellingen en ongebruikte tabellen (hardening stap 11, architecture 13.23). Na 0033. Rollback: rollbacks/0034_rollback.sql
 -- instellingen: lezen iedereen, schrijven MANAGE_SETTINGS, nooit wissen. Ongebruikt (contacts, integration_plugins, email_settings,
 -- notifications): geen policy meer = dicht voor restaurantrollen. Daarna bestaat er geen ALL-policy meer in public.
+-- email_settings (migratie 0002) bestaat in productie niet: wordt alleen meegenomen als de tabel bestaat.
 begin;
 do $m$
 declare t text; r text := 'restaurant_id = public.my_restaurant_id()'; k text;
-  l text[] := array['configurations','workflow_rules','approval_settings','contacts','integration_plugins','email_settings','notifications'];
+  l text[] := array['configurations','workflow_rules','approval_settings','contacts','integration_plugins','notifications'];
 begin
+if to_regclass('public.email_settings') is not null then l := l || 'email_settings'::text; end if;
 if not exists (select 1 from pg_policies where schemaname = 'public' and policyname = 'daily_closings insert')
-  or (select count(*) from pg_policies where schemaname = 'public' and tablename = any(l)) <> 7
+  or (select count(*) from pg_policies where schemaname = 'public' and tablename = any(l)) <> cardinality(l)
   or (select count(*) from pg_policies where schemaname = 'public' and tablename = any(l) and cmd = 'ALL'
-      and policyname = 'tenant isolation ' || tablename) <> 7
+      and policyname = 'tenant isolation ' || tablename) <> cardinality(l)
 then raise exception '0034 vooraf: uitgangsstand wijkt af, niets gewijzigd'; end if;
 
 foreach t in array l loop execute format('drop policy %I on public.%I', 'tenant isolation ' || t, t); end loop;

@@ -29,25 +29,35 @@ rest() { geldig "$(sql "select md5(coalesce((select string_agg(proname||md5(pros
   || coalesce((select string_agg(tablename||policyname||coalesce(qual,'')||coalesce(with_check,''), '|' order by tablename, policyname)
     from pg_policies where schemaname='public' and tablename not in ($T)),''))" | tail -1)"; }
 fails() { sql "select count(*) from hardening_test.run($1) where result = 'FAIL'"; }
+# email_settings bestaat in productie niet (migratie 0002 nooit uitgevoerd): het harnas slaat precies die 5 cases expliciet over (SKIP)
+skips() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'SKIP'"; }
+# het productie-leesblok: stand|tabellen|policies|policies_all|all_in_public|dicht_ok
+leesblok() { $PSQL -d sd_test -At -F'|' -f hardening/prod-stamdata-checks.sql 2>&1 | grep -v '^$' | head -1 | cut -d'|' -f1-6; }
 
 echo "== $($PSQL -d postgres -At -c 'show server_version')"
 ok "4 blokken passen in de editor (< 3000 tekens)" $(for f in $M1 $M2 $R1 $R2; do [ "$(wc -c < $f)" -lt 3000 ] || exit; done; echo 1)
 
 # 1. heen, met tweede keer = afgebroken zonder wijziging
-vers; s0=$(stand); r0=$(rest)
+vers; s0=$(stand); r0=$(rest); NT=$(sql "select count(*) from unnest(array[$T]) x where to_regclass('public.' || x) is not null")
+echo "== tabellen: $NT (12 = zoals productie, zonder email_settings)"
+ok "leesblok vooraf: 0032|$NT|$NT|$NT|$NT|leeg" $([ "$(leesblok)" = "0032|$NT|$NT|$NT|$NT|" ] && echo 1) "$(leesblok)"
 ok "uitgangsstand: harnas run(10) 0 FAIL" $([ "$(fails 10)" = "0" ] && echo 1)
 out=$(run $M2); ok "0034 zonder 0033: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034 vooraf" && [ "$(stand)" = "$s0" ] && echo 1) "$out"
 out=$(run $R1); ok "0033-rollback zonder 0033: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0033-rollback vooraf" && [ "$(stand)" = "$s0" ] && echo 1) "$out"
 out=$(run $R2); ok "0034-rollback zonder 0034: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034-rollback vooraf" && [ "$(stand)" = "$s0" ] && echo 1) "$out"
 out=$(run $M1); ok "0033 slaagt" $([ -z "$(echo "$out" | grep -i error)" ] && echo 1) "$out"; s1=$(stand)
 ok "0033: meting ziet de wijziging" $([ "$s0" != "$s1" ] && [[ "$s0" != MEETFOUT* ]] && echo 1)
+ok "leesblok na 0033: 0033|$NT|$((NT+7))|$((NT-6))|$((NT-6))|leeg" $([ "$(leesblok)" = "0033|$NT|$((NT+7))|$((NT-6))|$((NT-6))|" ] && echo 1) "$(leesblok)"
 out=$(run $M1); ok "0033 tweede keer: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0033 vooraf" && [ "$(stand)" = "$s1" ] && echo 1) "$out"
 out=$(run $M2); ok "0034 slaagt" $([ -z "$(echo "$out" | grep -i error)" ] && echo 1) "$out"; s2=$(stand)
 ok "0034: meting ziet de wijziging" $([ "$s1" != "$s2" ] && echo 1)
+ok "leesblok na 0034: 0034|$NT|22|0|0|t" $([ "$(leesblok)" = "0034|$NT|22|0|0|t" ] && echo 1) "$(leesblok)"
 out=$(run $M2); ok "0034 tweede keer: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034 vooraf" && [ "$(stand)" = "$s2" ] && echo 1) "$out"
 ok "geen enkele ALL-policy meer in public" $([ "$(sql "select count(*) from pg_policies where schemaname='public' and cmd='ALL'")" = "0" ] && echo 1)
 ok "triggers, guards, module_wacht, module-stand en overige policies ongewijzigd na 0033-0034" $([ "$(rest)" = "$r0" ] && [[ "$r0" != MEETFOUT* ]] && echo 1)
 ok "harnas run(11) 0 FAIL na 0033-0034" $([ "$(fails 11)" = "0" ] && echo 1)
+VERWACHT_SKIP=$([ "$NT" = "12" ] && echo "RR62c,RR62d,RR62i,RR62s,RR62u" || echo "")
+ok "overgeslagen cases precies: '${VERWACHT_SKIP:-geen}'" $([ "$(skips 11)" = "$VERWACHT_SKIP" ] && echo 1) "$(skips 11)"
 
 # 2. rollbacks: verkeerde volgorde afgebroken, goede volgorde exact terug
 out=$(run $R1); ok "0033-rollback met 0034 aanwezig: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0033-rollback vooraf" && [ "$(stand)" = "$s2" ] && echo 1) "$out"
@@ -63,6 +73,21 @@ vers; sql "create policy proef on public.companies for select using (false)" >/d
 out=$(run $M1); ok "0033 met onverwachte extra policy op companies: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0033 vooraf" && [ "$(stand)" = "$sa" ] && echo 1) "$out"
 vers; run $M1 >/dev/null; sql "create policy proef on public.contacts for select using (true)" >/dev/null; sb=$(stand)
 out=$(run $M2); ok "0034 met onverwachte extra policy op contacts: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034 vooraf" && [ "$(stand)" = "$sb" ] && echo 1) "$out"
+
+# 3b. rollback 0034 op een afwijkende stand (zelfde aantal policies, andere verdeling): afgebroken, niets gewijzigd
+vers; run $M1 >/dev/null; run $M2 >/dev/null
+sql "drop policy \"workflow_rules update\" on public.workflow_rules" >/dev/null
+sql "create policy \"workflow_rules delete\" on public.workflow_rules for delete to authenticated using (true)" >/dev/null; sc=$(stand)
+out=$(run $R2); ok "0034-rollback: 9 policies maar een wis- in plaats van wijzig-policy: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034-rollback vooraf" && [ "$(stand)" = "$sc" ] && echo 1) "$out"
+vers; run $M1 >/dev/null; run $M2 >/dev/null
+sql "alter policy \"configurations select\" on public.configurations rename to \"configurations lezen\"" >/dev/null; sc=$(stand)
+out=$(run $R2); ok "0034-rollback: policy met afwijkende naam: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034-rollback vooraf" && [ "$(stand)" = "$sc" ] && echo 1) "$out"
+vers; run $M1 >/dev/null; run $M2 >/dev/null
+sql "create policy proef on public.notifications for select to authenticated using (false)" >/dev/null; sc=$(stand)
+out=$(run $R2); ok "0034-rollback: extra policy op een dichte tabel: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034-rollback vooraf" && [ "$(stand)" = "$sc" ] && echo 1) "$out"
+vers; run $M1 >/dev/null; run $M2 >/dev/null
+sql "alter policy \"approval_settings update\" on public.approval_settings to public" >/dev/null; sc=$(stand)
+out=$(run $R2); ok "0034-rollback: policy voor een andere rol: afgebroken, niets gewijzigd" $(echo "$out" | grep -q "0034-rollback vooraf" && [ "$(stand)" = "$sc" ] && echo 1) "$out"
 
 # 4. bewust kapotte versies: het harnas moet ze vangen (run(11) > 0 FAIL)
 mutant() {  # $1 naam, $2 bestand (1|2), $3 oud, $4 nieuw
@@ -90,7 +115,7 @@ extra() {  # $1 naam, $2 sql
 extra "wis-policy op instellingen (owner mag wissen)" "create policy proef on public.workflow_rules for delete to authenticated using (restaurant_id = public.my_restaurant_id())"
 extra "wis-policy op dagafsluiting" "create policy proef on public.daily_closings for delete to authenticated using (restaurant_id = public.my_restaurant_id())"
 extra "ongebruikte tabel contacts weer leesbaar" "create policy proef on public.contacts for select to authenticated using (true)"
-extra "ongebruikte tabel email_settings weer schrijfbaar" "create policy proef on public.email_settings for insert to authenticated with check (true)"
+[ "$NT" = "13" ] && extra "ongebruikte tabel email_settings weer schrijfbaar" "create policy proef on public.email_settings for insert to authenticated with check (true)"
 extra "wijzig-policy op afdelingen" "create policy proef on public.departments for update to authenticated using (true)"
 $PSQL -d postgres -c "drop database if exists sd_test" >/dev/null 2>&1; rm -f /tmp/sd_mut.sql
 echo "RESULTAAT: $pass PASS, $fail FAIL"
