@@ -360,7 +360,7 @@ case("AC37", "FACTUREN", "administratie wijzigt bedrag van bestaande betaling", 
 case("AC38", "FACTUREN", "administratie verwijdert bestaande betaling", ADM, "dml", f"delete from payments where id='{A(520)}'", True, False, 10)
 case("AC39", "FACTUREN", "administratie zet factuur draft → sent (legitiem)", ADM, "dml", f"update invoices set status='sent' where id='{A(500)}'", True)
 case("AC40", "FACTUREN", "administratie zet factuur sent → paid (legitiem)", ADM, "dml", f"update invoices set status='paid' where id='{A(501)}'", True)
-case("AC41", "FACTUREN", "OPEN BESLISPUNT D6: factuur draft → paid rechtstreeks", ADM, "dml", f"update invoices set status='paid' where id='{A(500)}'", True, None, 10, "D6 — niet zelf beslissen")
+case("AC41", "FACTUREN", "besluit D6: factuur draft → paid blijft toegestaan (betalingsflow)", ADM, "dml", f"update invoices set status='paid' where id='{A(500)}'", True, note="D6 besloten 12 okt")
 case("AC42", "FACTUREN", "bediening wijzigt factuurregel", BED, "dml", f"update invoice_lines set amount=1 where id='{A(510)}'", True, False, 10)
 case("AC43", "FACTUREN", "bediening verwijdert document-record", BED, "dml", f"delete from documents where id='{A(530)}'", True, False, 10)
 
@@ -407,18 +407,32 @@ case("IN08", "INACTIEF", "gedeactiveerde wijzigt bon", INA, "dml", f"update rece
 #   TOxx = de testopzet klopt (rij bestaat, actieve gebruiker heeft met dezelfde SQL effect, rij daarna exact hersteld) — altijd waar
 #   TSxx = de gedeactiveerde gebruiker wordt geweigerd om de juiste reden — waar vanaf stap 8
 STAP_TENANT = 8
+# Vanaf stap 10 mag NIEMAND (ook de actieve owner niet) deze bewerkingen nog: de opzet "actieve owner heeft effect" geldt dan niet meer.
+# De weigering van de gedeactiveerde gebruiker telt dan als "iedereen 0 rijen" (de strengere regel zelf staat in AC/FW-cases).
+STAP_FACTUREN = 10
+VERBODEN_10 = {("invoices", "DELETE"), ("documents", "UPDATE"), ("documents", "DELETE"), ("payments", "UPDATE"), ("payments", "DELETE")}
+OMZET_10 = {"invoices", "documents", "invoice_lines", "payments"}   # bediening leest deze vanaf stap 10 niet meer (AC30)
+def geweigerd_expr(args, tbl, op):
+    x = f"(hardening_test.inactief_dml({args}))"
+    if (tbl, op) in VERBODEN_10:
+        return f"select {x}.geweigerd or {x}.detail like 'actief: rijen=0 | %: rijen=0'"
+    return f"select {x}.geweigerd"
 TS_TABELLEN = ["companies", "invoices", "documents", "workflow_rules", "configurations", "notifications", "integration_plugins",
                "contacts", "departments", "cost_centers", "projects", "company_codes", "approval_settings", "invoice_lines", "payments"]
 for n, tbl in enumerate(TS_TABELLEN, start=1):
     for op, letter in (("SELECT", "S"), ("INSERT", "I"), ("UPDATE", "U"), ("DELETE", "D")):
+        v = (tbl, op) in VERBODEN_10
         case(f"TO{n:02d}{letter}", "TENANTSWITCH", f"opzet {tbl} {op}: actieve owner heeft effect met dezelfde SQL, rij hersteld", "postgres", "check",
-             f"select (hardening_test.inactief_dml('{tbl}','{op}')).opzet_ok", True)
+             f"select (hardening_test.inactief_dml('{tbl}','{op}')).opzet_ok", True, False if v else None, STAP_FACTUREN if v else 0,
+             "vanaf stap 10 voor niemand toegestaan" if v else "")
         case(f"TS{n:02d}{letter}", "TENANTSWITCH", f"gedeactiveerde {op} op {tbl} geweigerd (0 rijen / RLS-fout), actieve gebruiker niet", "postgres", "check",
-             f"select (hardening_test.inactief_dml('{tbl}','{op}')).geweigerd", False, True, STAP_TENANT)
+             geweigerd_expr(f"'{tbl}','{op}'", tbl, op), False, True, STAP_TENANT)
 # actieve bediening (geen owner) wordt door de tenantswitch niet beperkt: zelfde opzet, andere actieve rol
 for n, tbl in enumerate(TS_TABELLEN, start=1):
+    o = tbl in OMZET_10
     case(f"TB{n:02d}", "TENANTSWITCH", f"actieve bediening leest {tbl} met dezelfde opzet (niet beperkt)", "postgres", "check",
-         f"select (hardening_test.inactief_dml('{tbl}','SELECT','{BED}')).opzet_ok", True)
+         f"select (hardening_test.inactief_dml('{tbl}','SELECT','{BED}')).opzet_ok", True, False if o else None, STAP_FACTUREN if o else 0,
+         "vanaf stap 10 geen omzet voor bediening (AC30)" if o else "")
 # isolatie aanvullen voor de tabellen zonder TENANT-case; met positieve controle (B-owner ziet zijn eigen rij)
 OWNER_B = em("b", "owner")
 for cid, tbl, where in [
@@ -465,10 +479,12 @@ case("RU32", "RESTAURANT_UIT", "A uit: owner A uploadt in eigen map", OWNER, "dm
 for n, tbl in enumerate(TS_TABELLEN, start=1):
     for op, letter in (("SELECT", "S"), ("INSERT", "I"), ("UPDATE", "U"), ("DELETE", "D")):
         args = f"'{tbl}','{op}','{OWNER}','{OWNER}',true"
+        v = (tbl, op) in VERBODEN_10
         case(f"RO{n:02d}{letter}", "RESTAURANT_UIT", f"opzet {tbl} {op}: owner A heeft effect zolang A aan staat, rij hersteld", "postgres", "check",
-             f"select (hardening_test.inactief_dml({args})).opzet_ok", True)
+             f"select (hardening_test.inactief_dml({args})).opzet_ok", True, False if v else None, STAP_FACTUREN if v else 0,
+             "vanaf stap 10 voor niemand toegestaan" if v else "")
         case(f"RW{n:02d}{letter}", "RESTAURANT_UIT", f"A uit: owner A {op} op {tbl} geweigerd (0 rijen / RLS-fout)", "postgres", "check",
-             f"select (hardening_test.inactief_dml({args})).geweigerd", False, True, STAP_RESTAURANT)
+             geweigerd_expr(args, tbl, op), False, True, STAP_RESTAURANT)
 # functiecontracten
 case("RF01", "RESTAURANT_UIT", "A uit: my_restaurant_id/my_role NULL, has_perm onwaar, my_access = restaurant_uit", OWNER, "check",
      heeft_0025("public.my_restaurant_id() is null and public.my_role() is null and not public.has_perm('MANAGE_INVOICES') "
@@ -918,12 +934,13 @@ MO = "MODULES"
 def UIT(key, r=RA): return f"insert into restaurant_features values ('{r}','{key}',false,now());"
 PAY, DAY, APP = "payment_registration", "daily_closing", "approval"
 BEIDE = ((OWNER, "o"), ("service_role", "s"))
-def wacht(cid, title, sql, key, aan_ook=True, setup=""):
+def wacht(cid, title, sql, key, aan_ook=True, setup="", controle=OWNER):
     """module uit -> geweigerd (owner en service_role); module aan -> toegestaan (owner): bewijs dat de weigering van de module komt."""
     for who, t in BEIDE:
         case(f"{cid}{t}", MO, f"{title} -- module uit, als {who}: geweigerd", who, "dml", sql, False, setup=setup + UIT(key))
     if aan_ook:
-        case(f"{cid}a", MO, f"{title} -- module aan, als owner A: toegestaan (controle)", OWNER, "dml", sql, True, setup=setup)
+        wie = "owner A" if controle == OWNER else controle
+        case(f"{cid}a", MO, f"{title} -- module aan, als {wie}: toegestaan (controle)", controle, "dml", sql, True, setup=setup)
 # identiteit
 for who, t in BEIDE:
     case(f"MI01{t}", MO, f"identiteit {who}: echte rol, geen superuser", who, "check",
@@ -989,12 +1006,13 @@ case("MA05", MO, "owner A roept de beheerfunctie aan: geweigerd", OWNER, "check"
      f"select hardening_test.refused_with($$select public.platform_module_zetten('{ORPH}','{RA}','approval',false)$$, 'permission denied')", True, setup=MAAK_ADMIN_M)
 # W: databasewacht
 wacht("MW01", "betaling toevoegen (factuur A 501)", f"insert into payments (invoice_id, amount, method) values ('{A(501)}', 1, 'cash')", PAY)
-wacht("MW02", "betaling wijzigen", f"update payments set amount = amount where id = '{A(520)}'", PAY)
-wacht("MW03", "betaling rechtstreeks wissen (factuur bestaat nog: geen cascade)", f"delete from payments where id = '{A(520)}'", PAY)
+# vanaf stap 10 mag geen restaurantrol een betaling wijzigen of wissen: de controle "module aan" loopt daarom als service_role
+wacht("MW02", "betaling wijzigen", f"update payments set amount = amount where id = '{A(520)}'", PAY, controle="service_role")
+wacht("MW03", "betaling rechtstreeks wissen (factuur bestaat nog: geen cascade)", f"delete from payments where id = '{A(520)}'", PAY, controle="service_role")
 wacht("MW04", "factuur rechtstreeks op betaald zetten", f"update invoices set status = 'paid' where id = '{A(501)}'", PAY)
 case("MW05", MO, "betalingen uit: factuur op overdue zetten blijft toegestaan", OWNER, "dml", f"update invoices set status = 'overdue' where id = '{A(501)}'", True, setup=UIT(PAY))
 case("MW06", MO, "betalingen uit: betalingen lezen blijft toegestaan", OWNER, "select", f"select 1 from payments where id = '{A(520)}'", True, setup=UIT(PAY))
-wacht("MW07", "dag afsluiten", f"insert into daily_closings (restaurant_id, closing_date) values ('{RA}', '2026-10-11')", DAY)
+wacht("MW07", "dag afsluiten", f"insert into daily_closings (restaurant_id, closing_date) values ('{RA}', '2001-01-01')", DAY)  # vaste datum: de seed gebruikt datums rond vandaag
 wacht("MW08", "dagafsluiting wijzigen (heropenen)", f"update daily_closings set reopened_at = now() where id = '{A(600)}'", DAY)
 wacht("MW09", "dagafsluiting rechtstreeks wissen", f"delete from daily_closings where id = '{A(600)}'", DAY)
 wacht("MW10", "goedkeuringsinstelling toevoegen (bedrijf A 105)", f"insert into approval_settings (company_id, method, is_required) values ('{A(105)}','pin',true)", APP)
@@ -1032,9 +1050,10 @@ C_BEDRIJF = (f"insert into companies (id, restaurant_id, name) values ('{A(9110)
 case("MC02", MO, "goedkeuring uit: bedrijf verwijderen (owner A) mag, instelling gaat mee via cascade", OWNER, "check",
      f"select hardening_test.daarna($$delete from companies where id = '{A(9110)}'$$, $$select not exists (select 1 from approval_settings where company_id = '{A(9110)}')$$)", True,
      setup=C_BEDRIJF + UIT(APP))
-C_FACTUUR = REPL(f"insert into invoices (id, restaurant_id, company_id, invoice_number, total, status) values ('{A(9120)}','{RA}','{A(100)}','2026-9120',5,'sent'); "
+C_FACTUUR = REPL(f"insert into invoices (id, restaurant_id, company_id, invoice_number, total, status) values ('{A(9120)}','{RA}','{A(100)}','2026-9120',5,'draft'); "
                  f"insert into payments (id, invoice_id, amount, method) values ('{A(9121)}','{A(9120)}',5,'cash');")
-case("MC01", MO, "betalingen uit: factuur verwijderen (owner A) mag, betaling gaat mee via cascade", OWNER, "check",
+# vanaf stap 10 wist alleen de server (service_role) en alleen een draft-factuur
+case("MC01", MO, "betalingen uit: draft-factuur verwijderen (service_role) mag, betaling gaat mee via cascade", "service_role", "check",
      f"select hardening_test.daarna($$delete from invoices where id = '{A(9120)}'$$, $$select not exists (select 1 from payments where id = '{A(9121)}')$$)", True,
      setup=C_FACTUUR + UIT(PAY))
 case("MC03", MO, "dagafsluiting uit: restaurant verwijderen (beheer, postgres) mag, afsluiting gaat mee via cascade", "postgres", "check",
@@ -1052,16 +1071,113 @@ for nr, (key, sql, wat) in enumerate((
         (PAY, f"delete from public.payments where id = '{A(520)}'", "betaling (factuur bestaat nog)"),
         (DAY, f"delete from public.daily_closings where id = '{A(600)}'", "dagafsluiting (restaurant bestaat nog)"),
         (APP, f"delete from public.approval_settings where company_id = '{A(100)}'", "goedkeuringsinstelling (bedrijf bestaat nog)")), start=5):
-    for who, t in BEIDE:
+    # betalingen: vanaf stap 10 wist geen restaurantrol meer een betaling, dus alleen service_role
+    for who, t in (BEIDE if key != PAY else (("service_role", "s"),)):
         case(f"MC0{nr}{t}", MO, f"C4: {wat} wissen via een testtrigger (diepte 2, geen cascade), module uit, als {who}: geweigerd", who, "check",
              "select hardening_test.refused_with($$insert into hardening_test.proef_c4 values (1)$$, 'staat uit') "
              "and (select pg_trigger_depth()) = 0", True, setup=PROEF(sql) + UIT(key))
     tabel, waar = sql.split(" from ")[1].split(" where ")
-    case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", OWNER, "check",
+    case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", OWNER if key != PAY else "service_role", "check",
          f"select hardening_test.daarna($$insert into hardening_test.proef_c4 values (1)$$, $$select not exists (select 1 from {tabel} where {waar})$$)", True, setup=PROEF(sql))
 case("MG01", MO, "bestaande guards ongewijzigd (vingerafdrukken uit 0022)", "postgres", "check",
      "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname='receipts_guard'),'\\s+',' ','g'))) = 'e2495872050430577d8464962b88d1de' "
      "and md5(btrim(regexp_replace((select prosrc from pg_proc where proname='approvals_guard'),'\\s+',' ','g'))) = '3320a9525bbc54bdd29516a459fc6a61'", True)
+
+# ---------------------------------------------------------------- FACTUURWACHT (stap 10, migraties 0031 + 0032)
+# Statusregels gelden voor IEDEREEN (ook service_role): de weigering wordt getoetst op de eigen melding van de wacht,
+# zodat een weigering om een andere reden (RLS, module) niet als bewijs telt. Seed A: 500 draft, 501 sent, 502 paid.
+FW = "FACTUURWACHT"
+def weiger(sql, msg): return f"select hardening_test.refused_with($${sql}$$, '{msg}')"
+STATUS = "Ongeldige factuurstatus"; NA_DRAFT = "Na draft verandert alleen"; REGEL = "Factuurregel:"; BETAAL = "Betaling geweigerd"
+OVERDUE = REPL(f"update invoices set status = 'overdue' where id = '{A(501)}';")
+DRAFT2 = REPL(f"insert into invoices (id, restaurant_id, company_id, invoice_number, status) values ('{A(9130)}','{RA}','{A(100)}','P-9130','draft');")
+def upd(set_, n): return f"update invoices set {set_} where id = '{A(n)}'"
+# toegestane overgangen (D6), als administratie
+case("FW01", FW, "draft -> sent toegestaan", ADM, "dml", upd("status = 'sent'", 500), True)
+case("FW02", FW, "sent -> overdue toegestaan", ADM, "dml", upd("status = 'overdue'", 501), True)
+case("FW03", FW, "overdue -> paid toegestaan", ADM, "dml", upd("status = 'paid'", 501), True, setup=OVERDUE)
+case("FW04", FW, "draft: bedrag wijzigen mag nog (controle)", ADM, "dml", upd("total = 11", 500), True)
+case("FW05", FW, "paid: zelfde stand opnieuw opslaan (geen wijziging) mag", ADM, "dml", upd("status = 'paid'", 502), True)
+# verboden overgangen, met de eigen melding
+for cid, n, naar, wie, setup in [("FW10", 500, "overdue", ADM, ""), ("FW11", 501, "draft", ADM, ""), ("FW12", 502, "overdue", ADM, ""),
+                                 ("FW13", 502, "draft", ADM, ""), ("FW14", 501, "sent", ADM, OVERDUE), ("FW15", 502, "sent", "service_role", ""),
+                                 ("FW16", 502, "draft", "postgres", "")]:
+    case(cid, FW, f"factuur {n} -> {naar} geweigerd ({wie})", wie, "check", weiger(upd(f"status = '{naar}'", n), STATUS), False, True, STAP_FACTUREN, setup=setup)
+# na draft verandert alleen de status
+for cid, set_, n, wie in [("FW20", "total = 1", 501, ADM), ("FW21", "invoice_number = 'X-1'", 501, ADM), ("FW22", f"company_id = '{A(105)}'", 501, ADM),
+                          ("FW23", "issued_at = '2001-01-01'", 501, ADM), ("FW24", "subtotal = 1", 502, ADM), ("FW25", "total = 1", 501, "service_role"),
+                          ("FW26", "status = 'paid', total = 1", 501, ADM)]:
+    case(cid, FW, f"factuur {n} (na draft): {set_} geweigerd ({wie})", wie, "check", weiger(upd(set_, n), NA_DRAFT), False, True, STAP_FACTUREN)
+# aanmaken en wissen
+NIEUW = lambda st, n: f"insert into invoices (id, restaurant_id, company_id, invoice_number, status) values ('{A(n)}','{RA}','{A(100)}','P-{n}','{st}')"
+case("FW30", FW, "nieuwe factuur als draft (administratie) toegestaan", ADM, "dml", NIEUW("draft", 9131), True)
+case("FW31", FW, "nieuwe factuur direct sent (administratie) geweigerd", ADM, "dml", NIEUW("sent", 9132), True, False, STAP_FACTUREN)
+case("FW32", FW, "nieuwe factuur direct paid (service_role) geweigerd door de wacht", "service_role", "check", weiger(NIEUW("paid", 9133), "Nieuwe factuur moet draft"), False, True, STAP_FACTUREN)
+case("FW33", FW, "service_role wist verzonden factuur: geweigerd door de wacht", "service_role", "check", weiger(f"delete from invoices where id = '{A(501)}'", "Alleen een draft-factuur"), False, True, STAP_FACTUREN)
+case("FW34", FW, "service_role wist draft-factuur: toegestaan (controle)", "service_role", "dml", f"delete from invoices where id = '{A(500)}'", True)
+case("FW35", FW, "owner wist draft-factuur: geweigerd (geen wis-policy)", OWNER, "dml", f"delete from invoices where id = '{A(500)}'", True, False, STAP_FACTUREN)
+# factuurregels
+REGEL_IN = lambda n: f"insert into invoice_lines (invoice_id, description, amount) values ('{A(n)}','proef',1)"
+case("FW40", FW, "regel toevoegen aan draft-factuur (administratie) toegestaan", ADM, "dml", REGEL_IN(500), True)
+case("FW41", FW, "regel toevoegen aan verzonden factuur geweigerd", ADM, "check", weiger(REGEL_IN(501), REGEL), False, True, STAP_FACTUREN)
+case("FW42", FW, "regel van betaalde factuur wijzigen geweigerd (service_role)", "service_role", "check",
+     weiger(f"update invoice_lines set amount = 1 where id = '{A(510)}'", REGEL), False, True, STAP_FACTUREN)
+case("FW43", FW, "regel van betaalde factuur wissen geweigerd (service_role)", "service_role", "check",
+     weiger(f"delete from invoice_lines where id = '{A(510)}'", REGEL), False, True, STAP_FACTUREN)
+REGEL_500 = REPL(f"insert into invoice_lines (id, invoice_id, description, amount) values ('{A(9134)}','{A(500)}','proef',1);")
+case("FW44", FW, "regel verplaatsen naar andere draft-factuur geweigerd", ADM, "check",
+     weiger(f"update invoice_lines set invoice_id = '{A(9130)}' where id = '{A(9134)}'", REGEL), False, True, STAP_FACTUREN, setup=REGEL_500 + DRAFT2)
+case("FW45", FW, "regel van draft-factuur wissen (administratie) toegestaan", ADM, "dml", f"delete from invoice_lines where id = '{A(9134)}'", True, setup=REGEL_500)
+case("FW46", FW, "manager (geen MANAGE_INVOICES) voegt regel toe: geweigerd", MGR, "dml", REGEL_IN(500), True, False, STAP_FACTUREN)
+case("FW47", FW, "bediening voegt regel toe: geweigerd door RLS (definer-wacht ziet de factuur wel)", BED, "check",
+     weiger(REGEL_IN(500), "row-level security"), False, True, STAP_FACTUREN)
+# betalingen
+BET = lambda n, bedrag: f"insert into payments (invoice_id, amount, method) values ('{A(n)}', {bedrag}, 'pin')"
+case("FW50", FW, "betaling op draft-factuur (betalingsflow) toegestaan", ADM, "dml", BET(500, 1), True)
+case("FW51", FW, "betaling op betaalde factuur geweigerd (administratie)", ADM, "check", weiger(BET(502, 1), BETAAL), False, True, STAP_FACTUREN)
+case("FW52", FW, "betaling op betaalde factuur geweigerd (service_role)", "service_role", "check", weiger(BET(502, 1), BETAAL), False, True, STAP_FACTUREN)
+case("FW53", FW, "betaling van 0 geweigerd", ADM, "check", weiger(BET(501, 0), BETAAL), False, True, STAP_FACTUREN)
+case("FW54", FW, "negatieve betaling geweigerd", ADM, "check", weiger(BET(501, -5), BETAAL), False, True, STAP_FACTUREN)
+case("FW55", FW, "manager registreert betaling: geweigerd (geen MANAGE_INVOICES)", MGR, "dml", BET(501, 1), True, False, STAP_FACTUREN)
+case("FW56", FW, "owner wijzigt betaling: geweigerd", OWNER, "dml", f"update payments set amount = 1 where id = '{A(520)}'", True, False, STAP_FACTUREN)
+case("FW57", FW, "owner wist betaling: geweigerd", OWNER, "dml", f"delete from payments where id = '{A(520)}'", True, False, STAP_FACTUREN)
+# lezen
+case("FW60", FW, "bediening leest betalingen", BED, "select", f"select 1 from payments where id = '{A(520)}'", True, False, STAP_FACTUREN)
+case("FW61", FW, "bediening leest factuurregels", BED, "select", f"select 1 from invoice_lines where id = '{A(510)}'", True, False, STAP_FACTUREN)
+case("FW62", FW, "keuken leest facturen", KEU, "select", f"select 1 from invoices where restaurant_id = '{RA}'", True, False, STAP_FACTUREN)
+case("FW63", FW, "manager leest documenten (geen MANAGE_INVOICES)", MGR, "select", f"select 1 from documents where id = '{A(530)}'", True, False, STAP_FACTUREN)
+case("FW64", FW, "administratie leest documenten (pdf-route) toegestaan", ADM, "select", f"select 1 from documents where id = '{A(530)}'", True)
+case("FW65", FW, "manager leest betalingen (VIEW_REVENUE, dashboard) toegestaan", MGR, "select", f"select 1 from payments where id = '{A(520)}'", True)
+case("FW66", FW, "manager leest factuurregels (VIEW_REVENUE) toegestaan", MGR, "select", f"select 1 from invoice_lines where id = '{A(510)}'", True)
+case("FW67", FW, "manager zet factuur op paid: geweigerd (geen MANAGE_INVOICES)", MGR, "dml", upd("status = 'paid'", 501), True, False, STAP_FACTUREN)
+case("FW68", FW, "bediening maakt document-record: geweigerd", BED, "dml",
+     f"insert into documents (restaurant_id, type, related_table, related_id, storage_path) values ('{RA}','invoice','invoices','{A(500)}','{RA}/x.pdf')", True, False, STAP_FACTUREN)
+# catalogus
+VIER = "('invoices','invoice_lines','payments','documents')"
+case("FW70", FW, "precies 11 policies op de 4 tabellen, geen ALL meer, allemaal voor authenticated", "postgres", "check",
+     f"select (select count(*) from pg_policies where schemaname = 'public' and tablename in {VIER}) = 11 "
+     f"and not exists (select 1 from pg_policies where schemaname = 'public' and tablename in {VIER} and (cmd = 'ALL' or roles <> '{{authenticated}}'))",
+     False, True, STAP_FACTUREN)
+case("FW71", FW, "geen enkele wis-policy op facturen en betalingen, geen wijzig-policy op betalingen", "postgres", "check",
+     "select not exists (select 1 from pg_policies where schemaname = 'public' and ((tablename in ('invoices','payments','documents') and cmd in ('DELETE','ALL')) "
+     "or (tablename in ('payments','documents') and cmd in ('UPDATE','ALL'))))", False, True, STAP_FACTUREN)
+case("FW72", FW, "wachtfuncties: DEFINER, search_path vast, voor niemand uitvoerbaar", "postgres", "check",
+     "select count(*) = 2 from pg_proc where pronamespace = 'public'::regnamespace and proname in ('invoices_guard','invoice_child_guard') "
+     "and prosecdef and proconfig = '{\"search_path=public, pg_temp\"}' and proowner = 'postgres'::regrole "
+     "and not has_function_privilege('anon', oid, 'EXECUTE') and not has_function_privilege('authenticated', oid, 'EXECUTE') "
+     "and not has_function_privilege('service_role', oid, 'EXECUTE')", False, True, STAP_FACTUREN)
+case("FW73", FW, "3 wachttriggers op de juiste tabellen en bewerkingen", "postgres", "check",
+     "select coalesce(string_agg(tgrelid::regclass::text || ':' || tgtype, ',' order by tgrelid::regclass::text) = 'invoice_lines:31,invoices:31,payments:7', false) "
+     "from pg_trigger where tgname in ('invoices_guard','invoice_child_guard')", False, True, STAP_FACTUREN)
+case("FW74", FW, "module_wacht en alle bestaande trigger-functies ongewijzigd (vingerafdruk van 0030)", "postgres", "check",
+     "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname = 'module_wacht'), '\\s+', ' ', 'g'))) = '1ae0dbb059cec09d9fde20aad42c9a3f' "
+     "and (select md5(string_agg(p.proname || md5(p.prosrc), '|' order by p.proname)) from pg_proc p where p.pronamespace = 'public'::regnamespace "
+     "and p.prorettype = 'trigger'::regtype and p.proname not in ('module_wacht','invoices_guard','invoice_child_guard')) = '29c836f2b151411df746182866d2a985'", True)
+# samen met de modulewacht: beide lagen weigeren elk om hun eigen reden
+case("FW80", FW, "betalingen uit: administratie zet sent -> paid: geweigerd door de module (niet door de factuurwacht)", ADM, "check",
+     weiger(upd("status = 'paid'", 501), "staat uit"), True, setup=UIT(PAY))
+case("FW81", FW, "betalingen uit: paid -> sent: geweigerd door de factuurwacht (module raakt dit niet)", "service_role", "check",
+     weiger(upd("status = 'sent'", 502), STATUS), False, True, STAP_FACTUREN, setup=UIT(PAY))
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
 # Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):

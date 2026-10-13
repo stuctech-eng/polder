@@ -1,4 +1,4 @@
-# HANDOFF — waar we gebleven zijn (bijgewerkt 10 okt 2026)
+# HANDOFF — waar we gebleven zijn (bijgewerkt 12 okt 2026)
 
 Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
@@ -15,9 +15,12 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
+- **Hardening stap 10 — rolrechten facturen (migraties 0031–0032 + betalingsroute, 12 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Zie architecture 13.22. Productiecontrole: `supabase/hardening/prod-facturen-checks.sql`.
+
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (hardening-stappen 10–13), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 klaar voor productie; daarna 11 dagafsluiting/stamdata, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+   Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.

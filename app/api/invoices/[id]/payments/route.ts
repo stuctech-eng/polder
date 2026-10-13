@@ -106,13 +106,29 @@ export async function POST(
   const totalPaid = (allPayments ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
   const isFullyPaid = totalPaid >= Number(invoice.total) - 0.005; // afronding
 
-  if (isFullyPaid) {
-    await supabase.from("invoices").update({ status: "paid" }).eq("id", params.id);
-  } else if (invoice.status === "draft") {
-    // Een gedeeltelijke betaling op een nog-niet-verzonden factuur is
-    // ongebruikelijk maar niet onmogelijk — zet 'm in ieder geval op 'sent'
-    // zodat de status niet misleidend op 'draft' blijft staan.
-    await supabase.from("invoices").update({ status: "sent" }).eq("id", params.id);
+  // Een gedeeltelijke betaling op een nog-niet-verzonden factuur is ongebruikelijk maar niet onmogelijk:
+  // zet 'm dan in ieder geval op 'sent', zodat de status niet misleidend op 'draft' blijft staan.
+  const nextStatus = isFullyPaid ? "paid" : invoice.status === "draft" ? "sent" : null;
+  if (nextStatus && nextStatus !== invoice.status) {
+    // De database (factuurwacht, migratie 0032) kan de overgang weigeren. Dan nooit "gelukt" melden:
+    // de betaling staat er wel, de factuurstatus niet. De melding uit de database wordt zichtbaar in de app.
+    const { data: updated, error: statusError } = await supabase
+      .from("invoices")
+      .update({ status: nextStatus })
+      .eq("id", params.id)
+      .select("id");
+    if (statusError || !updated?.length) {
+      return NextResponse.json(
+        {
+          error: `Betaling is geregistreerd, maar de factuurstatus kon niet op '${nextStatus}' worden gezet: ${
+            statusError?.message ?? "geen rij bijgewerkt"
+          }`,
+          payment,
+          totalPaid,
+        },
+        { status: 500 }
+      );
+    }
   }
 
   await supabase.from("activity_log").insert({

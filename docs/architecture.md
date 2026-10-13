@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17), nog niet in productie.
+
 **v1.68** — Ongebruikt vakje "Goedkeuring vereist vóór factureren" (facturatieregel, `workflow_rules.requires_approval`) uit het bedrijfsscherm gehaald; `PUT /api/companies/[id]/workflow-rule` slaat het niet meer op (een meegestuurde waarde wordt genegeerd), de kolom en bestaande waarden blijven ongewijzigd; GET van die route kreeg een rolcontrole (`MANAGE_SETTINGS`). Goedkeuring loopt uitsluitend via de module Goedkeuring. App-test t13 (5 checks; de oude route faalt er 4). Geen migratie.
 
 **v1.67** — FASE 4 MODULES PER RESTAURANT: migraties `0028_modules.sql`, `0029_module_beheer.sql`, `0030_module_wacht.sql` + rollbacks, `lib/features/*`, modulecontroles in routes/pagina's, schakelaars in het beheerscherm, `prod-modules-checks.sql`, 104 MODULES-cases, `modules-tests.sh`, app-test t12; sectie 13.21. Lokaal getest (PG16 + PG17); in productie op 11-12 okt (v1.0.87/v1.0.88), rooktest geslaagd, akkoord.
@@ -1969,3 +1971,46 @@ SQL-editor niet schrijven in die tabellen. `payments` UPDATE/DELETE en → `paid
 
 **Uitrol.** Push A (database, tests, docs) → `prod-modules-checks.sql` (noteer `guards_md5`) → 0028 → 0029 → 0030 (elk eigen GO)
 → leesblok (`guards_md5` ongewijzigd) → push B (app) → rooktest met "Test restaurant" → STOP.
+
+### 13.22 HARDENING STAP 10 — rolrechten facturen en betalingen (migraties 0031-0032 + app, 2026-10-12)
+
+**Probleem.** Binnen het eigen restaurant mocht elke rol (ook bediening) via de API facturen, factuurregels, betalingen en
+documentrecords lezen, wijzigen en wissen; alleen de routes hielden dat tegen. Andere restaurants waren al afgeschermd.
+
+**Toegang (0031, RLS, alleen `authenticated`).**
+| Tabel | Lezen | Aanmaken | Wijzigen | Wissen |
+|---|---|---|---|---|
+| invoices | VIEW_REVENUE | MANAGE_INVOICES, alleen `draft` | MANAGE_INVOICES | niemand |
+| invoice_lines | VIEW_REVENUE | MANAGE_INVOICES | MANAGE_INVOICES | MANAGE_INVOICES |
+| payments | VIEW_REVENUE | MANAGE_INVOICES | niemand | niemand |
+| documents | MANAGE_INVOICES | MANAGE_INVOICES | niemand | niemand |
+De policies spiegelen exact de `requireRole` van de routes (betalen, factureren en de PDF-route: MANAGE_INVOICES; dashboard en
+dagafsluiting lezen omzet: VIEW_REVENUE). Gevolg: bediening en keuken zien geen omzet meer; op een gefactureerde rekening ziet
+bediening het factuurblok niet (bedoeld).
+
+**Factuurwacht (0032, triggers, geldt voor iedereen, ook service_role en de SQL-editor).** SECURITY DEFINER zodat de wacht de echte
+factuur ziet, ook als de aanroeper hem door RLS niet mag lezen; wie iets mag, blijft RLS bepalen.
+- Overgangen (besluit D6, 12 okt): draft->sent, draft->paid (de betalingsroute zet een volledig betaalde conceptfactuur zelf op paid),
+  sent->paid, sent->overdue, overdue->paid. Al het andere geweigerd; `paid` is eindstand.
+- Na `draft` verandert alleen de status (bedrag, nummer, bedrijf, datums vast). Nieuwe factuur altijd `draft`. Alleen een
+  draft-factuur kan weg (en dan alleen via de server; RLS heeft geen wis-policy).
+- Factuurregels alleen zolang de factuur `draft` is en niet verplaatsen. Betaling: bedrag > 0, niet op een betaalde factuur.
+- Cascade-uitzondering zoals bij de andere wachten (ouderrij al weg, triggerdiepte > 1).
+- `module_wacht` en alle bestaande guards ongewijzigd (FW74, `guards_md5`).
+
+**App.** De betalingsroute controleerde niet of het op `paid`/`sent` zetten lukte; weigert de database, dan gaf de app toch 201.
+Nu: 500 met de melding "Betaling is geregistreerd, maar de factuurstatus kon niet ... worden gezet: <reden>".
+
+**Tests.** Harnas `run(10)` 1067 PASS + 1 OPEN (TM11) op PG16 en PG17; een 0030-database geeft op `run(10)` 65 FAIL (de cases
+onderscheiden de standen). `facturen-tests.sh` 36/36: heen/terug exact, verkeerde volgorde afgebroken, 15 kapotte versies
+gevangen (o.a. paid->sent, bedrag na draft, service_role-uitzondering, invoker-wacht, manager betaalt), twee lagen (RLS of wacht
+alleen houdt een directe sent-factuur ook tegen). App-tests t7-t13 per regel gelijk (oude code op 0030 vs nieuwe code op 0032);
+t14 13/13 (oude route 2 FAIL, database zonder 0031-0032 4 FAIL). Bestaande cases die uitgingen van "owner mag facturen/betalingen
+wissen" zijn aangepast: de controle loopt waar nodig als service_role, of de case verwacht vanaf stap 10 "voor niemand toegestaan".
+
+**Rollback = noodmaatregel.** `rollbacks/0032` dan `0031` herstelt de oude werking en daarmee ook het oude lek; alleen tijdelijk.
+
+**Uitrol.** Push → `prod-facturen-checks.sql` (verwacht 0030 / 4 / 4 / 0 / leeg / 287f55d5…; noteer module_wacht_md5 en
+modules_md5) → 0031 → 0032 (elk eigen GO) → leesblok (0032 / 11 / 0 / 3 / true; drie md5's gelijk) → rooktest als owner → STOP.
+De app werkt met de oude en de nieuwe database, dus de volgorde app/database maakt niet uit.
+
