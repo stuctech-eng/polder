@@ -1,4 +1,4 @@
-# HANDOFF — waar we gebleven zijn (bijgewerkt 12 okt 2026)
+# HANDOFF — waar we gebleven zijn (bijgewerkt 13 okt 2026)
 
 Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
@@ -10,16 +10,16 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Platformbeheer (migraties 0026 + 0027, v1.0.83)**: in productie sinds 10 okt, akkoord 11 okt. Beheerscherm `/platform` (inloggen als stuctech@gmail.com, apart account zonder restaurantprofiel): restaurants zien, aanmaken, aan/uit, eerste eigenaar uitnodigen, logboek. Beheeractie + logregel in één transactie. Beheerder toevoegen alleen met SQL (`prod-platform-beheerder.sql`).
 - **Mail-links (v1.0.84/v1.0.85)**: wachtwoord herstellen en uitnodigingen werken in elke browser (server vraagt de herstelmail aan; /reset-password leest de sessie uit de link). Geen aanpassing in Supabase nodig.
 - **Fase 4 — modules per restaurant (migraties 0028–0030, v1.0.88)**: in productie sinds 11 okt, akkoord 12 okt. In het beheerscherm per restaurant Dagafsluiting, Betalingen registreren en Goedkeuring aan/uit (alleen de platformbeheerder; logregel per wijziging). Uit = verborgen in menu/pagina's, routes geven 403 en de databasewacht weigert schrijfacties. Alle modules staan standaard aan. Productie `guards_md5` = `287f55d538eeb47386154595baf42dee` (controle met `prod-modules-checks.sql`).
+- **Hardening stap 10 — rolrechten facturen (migraties 0031–0032, app v1.0.91)**: in productie sinds 13 okt 15:52. Controle vooraf 0030/4/4/0/leeg, na 0032 0032/11/0/3/true; `guards_md5` (287f55d5…), `module_wacht_md5` (1d1de1f5…) en `modules_md5` (6fa1b0af…) vóór en na gelijk. Rooktest door Dick als owner geslaagd (factuur 2026-0011 gemaakt, drie deelbetalingen, volledig betaald, dashboard zichtbaar). Alleen owner/administratie maken en wijzigen facturen en betalingen; niemand wist ze; betaald is eindstand. Zie architecture 13.22.
 - Productie-database staat op **migratie 0030** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
-- **Hardening stap 10 — rolrechten facturen (migraties 0031–0032 + betalingsroute, 12 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Zie architecture 13.22. Productiecontrole: `supabase/hardening/prod-facturen-checks.sql`.
 
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 klaar voor productie; daarna 11 dagafsluiting/stamdata, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 in productie; daarna 11 dagafsluiting/stamdata, 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)

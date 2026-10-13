@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17), nog niet in productie.
+**v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17); in productie op 13 okt (0031 + 0032, app v1.0.91), controle en rooktest geslaagd.
 
 **v1.68** — Ongebruikt vakje "Goedkeuring vereist vóór factureren" (facturatieregel, `workflow_rules.requires_approval`) uit het bedrijfsscherm gehaald; `PUT /api/companies/[id]/workflow-rule` slaat het niet meer op (een meegestuurde waarde wordt genegeerd), de kolom en bestaande waarden blijven ongewijzigd; GET van die route kreeg een rolcontrole (`MANAGE_SETTINGS`). Goedkeuring loopt uitsluitend via de module Goedkeuring. App-test t13 (5 checks; de oude route faalt er 4). Geen migratie.
 
@@ -2007,6 +2007,8 @@ gevangen (o.a. paid->sent, bedrag na draft, service_role-uitzondering, invoker-w
 alleen houdt een directe sent-factuur ook tegen). App-tests t7-t13 per regel gelijk (oude code op 0030 vs nieuwe code op 0032);
 t14 13/13 (oude route 2 FAIL, database zonder 0031-0032 4 FAIL). Bestaande cases die uitgingen van "owner mag facturen/betalingen
 wissen" zijn aangepast: de controle loopt waar nodig als service_role, of de case verwacht vanaf stap 10 "voor niemand toegestaan".
+
+**Productie (13 okt).** Vooraf 0030/4/4/0/leeg; na 0031 0031/11/0/0/leeg; na 0032 0032/11/0/3/true. `guards_md5` 287f55d5…, `module_wacht_md5` 1d1de1f5…, `modules_md5` 6fa1b0af… telkens gelijk. 0031 per ongeluk twee keer gedraaid: de voorcontrole brak af, niets gewijzigd. Rooktest als owner geslaagd.
 
 **Rollback = noodmaatregel.** `rollbacks/0032` dan `0031` herstelt de oude werking en daarmee ook het oude lek; alleen tijdelijk.
 
