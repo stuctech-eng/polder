@@ -12,17 +12,16 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Fase 4 — modules per restaurant (migraties 0028–0030, v1.0.88)**: in productie sinds 11 okt, akkoord 12 okt. In het beheerscherm per restaurant Dagafsluiting, Betalingen registreren en Goedkeuring aan/uit (alleen de platformbeheerder; logregel per wijziging). Uit = verborgen in menu/pagina's, routes geven 403 en de databasewacht weigert schrijfacties. Alle modules staan standaard aan. Productie `guards_md5` = `287f55d538eeb47386154595baf42dee` (controle met `prod-modules-checks.sql`).
 - **Hardening stap 10 — rolrechten facturen (migraties 0031–0032, app v1.0.91)**: in productie sinds 13 okt 15:52. Controle vooraf 0030/4/4/0/leeg, na 0032 0032/11/0/3/true; `guards_md5` (287f55d5…), `module_wacht_md5` (1d1de1f5…) en `modules_md5` (6fa1b0af…) vóór en na gelijk. Rooktest door Dick als owner geslaagd (factuur 2026-0011 gemaakt, drie deelbetalingen, volledig betaald, dashboard zichtbaar). Alleen owner/administratie maken en wijzigen facturen en betalingen; niemand wist ze; betaald is eindstand. Zie architecture 13.22.
 - **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, v1.0.94)**: in productie sinds 13 okt 17:35. Controle vooraf 0032/12/12/12/12/leeg, na 0033 0033/12/19/6/6, na 0034 0034/12/22/0/0/true; `guards_md5` (a324f688…), `module_wacht_md5` (1d1de1f5…), `modules_md5` (6fa1b0af…) en `overige_md5` (1a66865a…) telkens gelijk. Rooktest door Dick als owner: "alles lijkt oké" (dagafsluiting-pagina leesbaar). Geen ALL-policy meer in de database. email_settings bestaat in productie niet (eerste controle gaf 12 i.p.v. 13; 0034, rollback en leesblok daarop aangepast vóór uitvoering). Zie architecture 13.23.
+- **Hardening stap 12 — PIN-gegevens (app v1.0.96 + migratie 0035)**: app live 13 okt 18:56, migratie 18:59. Controle vooraf 0034|true|true|10|false|true|true, na 0035 0035|true|false|8|false|true|true; vijf md5's (guards a324f688…, module_wacht 1d1de1f5…, modules 6fa1b0af…, policies c25cd844…, rechten 99e393ef…) gelijk. Rooktest door Dick geslaagd (PIN instellen, opslaan zonder PIN, foute PIN geweigerd, juiste PIN goedgekeurd). Medewerkers kunnen pin_hash/pin_salt niet meer lezen; de server leest ze alleen in de goedkeurroute. Zie architecture 13.24.
 - Productie-database staat op **migratie 0030** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
-- **Hardening stap 12 — PIN-gegevens (app + migratie 0035, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Volgorde: eerst de app, dan 0035. Zie architecture 13.24. Productiecontrole: `supabase/hardening/prod-pin-checks.sql`.
-
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 en 11 in productie; 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10, 11 en 12 in productie; nog 13 (opruimen grants); 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
@@ -31,6 +30,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Na stap 11 blijven open: PIN-kolommen leesbaar voor iedereen (stap 12) en tabelrechten (grants) opruimen (stap 13).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
 - PIN-pogingenlimiet: wie APPROVE_RECEIPTS heeft kan via de goedkeurroute onbeperkt PIN's proberen (apart punt, niet in stap 12).
+- 13 okt 19:04: één POST /api/open-tabs duurde 11,4 s en gaf 500 "Internal server error." (niets opgeslagen; daarna werkte het weer; geen hangende transacties). Vermoedelijk tijdelijke traagheid Supabase/Vercel. Twee testrekeningen (Demo Kantoor BV, 19:03, zonder tafel) staan nog open. Bij herhaling: Vercel- en Supabase-logs bekijken.
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).

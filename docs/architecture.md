@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17), nog niet in productie.
+**v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17); in productie op 13 okt (app v1.0.96, daarna 0035), controle en rooktest geslaagd.
 
 **v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17); in productie op 13 okt (0033 + 0034, v1.0.94), controle en rooktest geslaagd.
 
@@ -2081,6 +2081,8 @@ nieuwe kolom op approval_settings is daarna niet vanzelf leesbaar voor authentic
 (oude app op 0034 = nieuwe app op 0034 = nieuwe app op 0035); t16 20/20 op 0034 en 0035. De oude app op 0035 geeft t7 52 FAIL en
 t12 1 FAIL: bewijs dat de app eerst moet. App-mutaties gevangen: geen rolcontrole (1), PIN lezen vóór de statuscontrole (2),
 fail-open goedkeurroute (2) en instellingenroute (1), PIN in de response (1), interne foutmelding (2), getApprovalSettings leest PIN (8).
+
+**Productie (13 okt).** App v1.0.96 eerst (18:56), daarna 0035 (18:59). Vooraf 0034|true|true|10|false|true|true; na 0035 0035|true|false|8|false|true|true; vijf md5's gelijk (`policies_md5` c25cd844… gelijk aan de lokale test). Rooktest geslaagd.
 
 **Restrisico.** Onbeperkt PIN's proberen via de goedkeurroute (wie APPROVE_RECEIPTS heeft): apart open punt (pogingenlimiet).
 
