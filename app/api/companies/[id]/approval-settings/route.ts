@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { requireFeature } from "@/lib/features/feature-service";
 import { hashPin } from "@/lib/approval/providers/pin-provider";
+import { hasApprovalPin, ApprovalPinError } from "@/lib/approval/approval-pin";
 import { z } from "zod";
 
 const settingsSchema = z.object({
@@ -89,13 +90,19 @@ export async function PUT(
   }
 
   if (parsed.data.enabled && parsed.data.method === "pin" && !parsed.data.newPin) {
-    // Alleen verplicht als er nog geen PIN bestaat — check bestaande rij
-    const { data: existing } = await supabase
-      .from("approval_settings")
-      .select("pin_hash")
-      .eq("company_id", params.id)
-      .maybeSingle();
-    if (!existing?.pin_hash) {
+    // Alleen verplicht als er nog geen PIN bestaat. Sinds stap 12 (migratie 0035) mag een gebruiker pin_hash niet lezen:
+    // de server bepaalt alleen ja/nee, ná de rolcontrole en de controle hierboven dat het bedrijf van het eigen restaurant is.
+    // Bij een leesfout weigeren (fail closed): nooit aannemen dat er geen PIN is.
+    let pinBestaat: boolean;
+    try {
+      pinBestaat = await hasApprovalPin(params.id);
+    } catch (err) {
+      if (err instanceof ApprovalPinError) {
+        return NextResponse.json({ error: "PIN-status kon niet worden gecontroleerd" }, { status: 500 });
+      }
+      throw err;
+    }
+    if (!pinBestaat) {
       return NextResponse.json(
         { error: "Stel eerst een PIN in voordat je PIN-goedkeuring activeert" },
         { status: 400 }

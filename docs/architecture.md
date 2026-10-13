@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17), nog niet in productie.
+
 **v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17); in productie op 13 okt (0033 + 0034, v1.0.94), controle en rooktest geslaagd.
 
 **v1.69** — HARDENING STAP 10, ROLRECHTEN FACTUREN: migraties `0031_rolrechten_facturen.sql` (policies per bewerking voor invoices, invoice_lines, payments, documents in plaats van "alleen eigen restaurant") en `0032_factuur_wacht.sql` (`invoices_guard`, `invoice_child_guard`) + rollbacks (noodmaatregel); betalingsroute meldt een mislukte statuswijziging; besluit D6 (draft -> paid blijft); `prod-facturen-checks.sql`, 57 FACTUURWACHT-cases, `facturen-tests.sh` (36), app-test t14 (13); sectie 13.22. Lokaal getest (PG16 + PG17); in productie op 13 okt (0031 + 0032, app v1.0.91), controle en rooktest geslaagd.
@@ -2056,4 +2058,32 @@ het harnas expliciet OVERGESLAGEN (nieuwe kolom `vereist` in `hardening_test.cas
 
 **Uitrol.** Push → `prod-stamdata-checks.sql` (productie: 0032/12/12/12/12/leeg; noteer de vier md5's) → 0033 → leesblok (0033/12/19/6/6)
 → 0034 → leesblok (0034/12/22/0/0/true; vier md5's gelijk) → rooktest (bedrijf wijzigen, rekening openen als bediening, dag afsluiten) → STOP.
+
+### 13.24 HARDENING STAP 12 — PIN-gegevens afschermen (app + migratie 0035, 2026-10-13)
+
+**Probleem.** `approval_settings.pin_hash` en `pin_salt` waren leesbaar voor elke rol van het restaurant. Een korte PIN is met
+hash en salt buiten de app snel te raden; daarmee kan iemand een bon "namens de klant" goedkeuren. De browser kreeg de velden nergens.
+
+**App (eerst uitrollen).**
+- `getApprovalSettings` leest alleen aan/uit, methode, auto-lock en e-mail.
+- `lib/approval/approval-pin.ts`: `getApprovalPin` / `hasApprovalPin` lezen met de service-sleutel, alleen op de server; elke leesfout = `ApprovalPinError` (nooit "geen PIN" aannemen).
+- Goedkeurroute, vaste volgorde: `requireRole("APPROVE_RECEIPTS")` → bon via de gebruikerssessie (RLS) en status "wacht" → bedrijf van die bon (zonder bedrijf 400) → pas dan, alleen bij methode PIN, de PIN van dat bedrijf. Leesfout: 500 "PIN-controle is nu niet mogelijk, probeer het opnieuw", bon onveranderd.
+- Instellingenroute: na `requireRole("MANAGE_SETTINGS")` en de bestaande controle dat het bedrijf van het eigen restaurant is, alleen ja/nee "PIN bestaat". Leesfout: 500 "PIN-status kon niet worden gecontroleerd", niets opgeslagen.
+- Hash en salt komen nooit in een response, log of foutmelding (t16-20 controleert de tekst van elke response).
+
+**Database (0035, ná de app).** Tabel-SELECT voor `authenticated` ingetrokken; SELECT teruggegeven op de 8 open kolommen. `anon` had
+vóór 0035 al geen SELECT (tabel noch kolom); dat wordt vooraf, achteraf en in de rollback gecontroleerd, en anon wordt niet aangeraakt.
+Daardoor ook geen afleiding via `WHERE pin_hash ...` of `RETURNING pin_hash` (PK03/PK04). INSERT/UPDATE ongewijzigd (RLS:
+MANAGE_SETTINGS); `service_role` leest alles. Voorcontrole: precies de 10 bekende kolommen, authenticated met tabel-SELECT, anon zonder SELECT op welke kolom ook. **Let op:** een
+nieuwe kolom op approval_settings is daarna niet vanzelf leesbaar voor authenticated (bewust openzetten).
+
+**Tests.** Harnas `run(12)` 1151 PASS + 1 OPEN (PG16 + PG17); op 0034 7 FAIL. `pin-tests.sh` 27/27. App: t7-t15 per regel gelijk
+(oude app op 0034 = nieuwe app op 0034 = nieuwe app op 0035); t16 20/20 op 0034 en 0035. De oude app op 0035 geeft t7 52 FAIL en
+t12 1 FAIL: bewijs dat de app eerst moet. App-mutaties gevangen: geen rolcontrole (1), PIN lezen vóór de statuscontrole (2),
+fail-open goedkeurroute (2) en instellingenroute (1), PIN in de response (1), interne foutmelding (2), getApprovalSettings leest PIN (8).
+
+**Restrisico.** Onbeperkt PIN's proberen via de goedkeurroute (wie APPROVE_RECEIPTS heeft): apart open punt (pogingenlimiet).
+
+**Uitrol.** Push → Vercel toont de nieuwe versie → `prod-pin-checks.sql` (verwacht 0034|true|true|10|false|true|true; noteer de
+vijf md5's) → 0035 → leesblok (0035|true|false|8|false|true|true; md5's gelijk) → rooktest (bon goedkeuren met PIN, PIN wijzigen) → STOP.
 

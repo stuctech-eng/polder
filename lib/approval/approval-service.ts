@@ -3,6 +3,7 @@ import type { ApprovalMethod, ApprovalAttempt } from "./types";
 import { pinProvider } from "./providers/pin-provider";
 import { restaurantConfirmProvider } from "./providers/restaurant-confirm-provider";
 import { sendEmail } from "@/lib/email/email-service";
+import type { ApprovalPin } from "./approval-pin";
 
 const PROVIDERS = {
   pin: pinProvider,
@@ -16,8 +17,6 @@ export interface ApprovalSettings {
   enabled: boolean;
   method: ApprovalMethod | null;
   autoLock: boolean;
-  pinHash: string | null;
-  pinSalt: string | null;
   notifyEmail: string | null;
 }
 
@@ -27,7 +26,9 @@ export async function getApprovalSettings(
 ): Promise<ApprovalSettings> {
   const { data } = await supabase
     .from("approval_settings")
-    .select("is_required, method, auto_lock, pin_hash, pin_salt, notify_email")
+    // geen pin_hash/pin_salt: die zijn sinds migratie 0035 niet leesbaar voor gebruikers en worden alleen op de server
+    // gelezen in de goedkeurroute (lib/approval/approval-pin.ts)
+    .select("is_required, method, auto_lock, notify_email")
     .eq("company_id", companyId)
     .maybeSingle();
 
@@ -35,8 +36,6 @@ export async function getApprovalSettings(
     enabled: data?.is_required ?? false,
     method: (data?.method as ApprovalMethod) ?? null,
     autoLock: data?.auto_lock ?? true,
-    pinHash: data?.pin_hash ?? null,
-    pinSalt: data?.pin_salt ?? null,
     notifyEmail: data?.notify_email ?? null,
   };
 }
@@ -88,7 +87,8 @@ export async function notifyApprovalRequested(params: {
  */
 export async function verifyApproval(
   settings: ApprovalSettings,
-  attempt: ApprovalAttempt
+  attempt: ApprovalAttempt,
+  pin?: ApprovalPin
 ): Promise<{ success: boolean; reason?: string }> {
   if (!settings.method) {
     return { success: false, reason: "Geen goedkeuringsmethode ingesteld" };
@@ -99,5 +99,5 @@ export async function verifyApproval(
     return { success: false, reason: `Deze methode wordt niet via dit kanaal bevestigd: ${settings.method}` };
   }
 
-  return provider.verify(attempt, { pinHash: settings.pinHash, pinSalt: settings.pinSalt });
+  return provider.verify(attempt, { pinHash: pin?.pinHash ?? null, pinSalt: pin?.pinSalt ?? null });
 }

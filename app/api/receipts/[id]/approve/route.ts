@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { requireFeature } from "@/lib/features/feature-service";
 import { getApprovalSettings, verifyApproval } from "@/lib/approval/approval-service";
+import { getApprovalPin, ApprovalPinError, type ApprovalPin } from "@/lib/approval/approval-pin";
 import { z } from "zod";
 
 const approveSchema = z.object({
@@ -52,7 +53,24 @@ export async function POST(
   }
 
   const companyId = (receipt.open_tabs as any)?.company_id;
+  if (!companyId) {
+    return NextResponse.json({ error: "Bon hoort niet bij een bedrijf" }, { status: 400 });
+  }
   const settings = await getApprovalSettings(supabase, companyId);
+
+  // Volgorde (stap 12): rol gecontroleerd -> bon via de gebruikerssessie (RLS) -> bedrijf van die bon -> pas nu de
+  // PIN-gegevens, alleen op de server. Bij een leesfout weigeren (fail closed); hash/salt nooit in de response.
+  let pin: ApprovalPin | undefined;
+  if (settings.method === "pin") {
+    try {
+      pin = await getApprovalPin(companyId);
+    } catch (err) {
+      if (err instanceof ApprovalPinError) {
+        return NextResponse.json({ error: "PIN-controle is nu niet mogelijk, probeer het opnieuw" }, { status: 500 });
+      }
+      throw err;
+    }
+  }
 
   const { data: userProfile } = await supabase
     .from("users")
@@ -62,10 +80,11 @@ export async function POST(
 
   // De Receipt Manager / deze route kent alleen de Approval Service — geen
   // kennis van PIN-hashing of providerdetails (klant-instructie, sectie 10.7).
-  const result = await verifyApproval(settings, {
-    credential: parsed.data.credential,
-    approverName: userProfile?.full_name ?? "Onbekend",
-  });
+  const result = await verifyApproval(
+    settings,
+    { credential: parsed.data.credential, approverName: userProfile?.full_name ?? "Onbekend" },
+    pin
+  );
 
   if (!result.success) {
     return NextResponse.json({ error: result.reason ?? "Goedkeuring mislukt" }, { status: 400 });

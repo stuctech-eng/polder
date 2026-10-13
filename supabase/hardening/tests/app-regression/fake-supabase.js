@@ -35,7 +35,10 @@ function builder(role, sub, table){
   async function exec(){
     // cfg.writeFault = "<tabel>": elke insert/update/delete op die tabel geeft een fout (zichtbaarheid van schrijffouten)
     if(cfg.writeFault===table && q.op!=="select") return {data:null,error:{message:"boom"},count:null};
-    if(cfg.fault && cfg.fault.table===table && q.op==="select"){ if(cfg.fault.mode==="throw") throw new Error("boom"); return {data:null,error:{message:"boom"},count:null}; }
+    // cfg.reads: logboek van SELECTs (rol, tabel, kolommen) — om te toetsen wie wat leest en in welke volgorde
+    if(q.op==="select") cfg.reads=(cfg.reads||[]).concat([{role,table,cols:q.cols}]);
+    // cfg.fault.role (optioneel): alleen SELECTs van die rol falen (bv. alleen de serverlezing met de service-sleutel)
+    if(cfg.fault && cfg.fault.table===table && q.op==="select" && (!cfg.fault.role || cfg.fault.role===role)){ if(cfg.fault.mode==="throw") throw new Error("boom"); return {data:null,error:{message:"boom"},count:null}; }
     const P=[]; const w=q.conds.map(f=>f(P)).join(" and ");
     const toks=splitTop(q.cols); const embeds=[]; const base=[];
     for(const t of toks){ const m=t.match(/^(\w+)\((.*)\)$/s); if(m&&REL[table]&&REL[table][m[1]]) embeds.push([m[1],m[2]]); else base.push(t); }

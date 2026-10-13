@@ -18,6 +18,8 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
+- **Hardening stap 12 — PIN-gegevens (app + migratie 0035, 13 okt)**: lokaal gebouwd en getest (PG16 + PG17), nog NIET in productie. Volgorde: eerst de app, dan 0035. Zie architecture 13.24. Productiecontrole: `supabase/hardening/prod-pin-checks.sql`.
+
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
 2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10 en 11 in productie; 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
@@ -28,6 +30,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 11 blijven open: PIN-kolommen leesbaar voor iedereen (stap 12) en tabelrechten (grants) opruimen (stap 13).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
+- PIN-pogingenlimiet: wie APPROVE_RECEIPTS heeft kan via de goedkeurroute onbeperkt PIN's proberen (apart punt, niet in stap 12).
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).

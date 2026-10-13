@@ -645,8 +645,8 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026) en de moduletabellen (0028)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026), de moduletabellen (0028) en approval_settings (vanaf stap 12 kolomrechten: zie PK12)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features','approval_settings') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
 case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platform- en moduletabellen (0026/0028, bewust smaller: zie PA-/MX-cases)", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
@@ -1283,6 +1283,42 @@ case("RR71", RR, "13 + 9 policies, allemaal voor authenticated, geen ALL en geen
      "'configurations','workflow_rules','approval_settings') and (cmd in ('ALL','DELETE') or roles <> '{authenticated}'))", False, True, S11)
 case("RR72", RR, "dagafsluiting: insert-policy eist closed_by = auth.uid()", "postgres", "check",
      "select coalesce((select with_check like '%closed_by = auth.uid()%' from pg_policies where policyname = 'daily_closings insert'), false)", False, True, S11)
+
+# ---------------------------------------------------------------- PIN-KOLOMMEN (stap 12, migratie 0035)
+# authenticated leest pin_hash/pin_salt niet meer (kolomrechten), ook niet via WHERE of RETURNING; overige kolommen wel;
+# schrijven ongewijzigd (RLS: MANAGE_SETTINGS); service_role leest alles (server-side PIN-controle).
+PK = "PIN12"
+S12 = 12
+def geen_recht(sql): return f"select hardening_test.refused_with($${sql}$$, 'permission denied')"
+AS100 = f"company_id = '{A(100)}'"
+OPEN8 = "id, company_id, method, is_required, auto_lock, notify_email, created_at, updated_at"
+case("PK01", PK, "bediening: select * op approval_settings geweigerd (bevat PIN-kolommen)", BED, "check",
+     geen_recht(f"select * from approval_settings where {AS100}"), False, True, S12)
+case("PK02", PK, "owner leest pin_salt: geweigerd", OWNER, "check", geen_recht(f"select pin_salt from approval_settings where {AS100}"), False, True, S12)
+case("PK03", PK, "owner filtert op pin_hash (WHERE): geweigerd, geen afleiding via filter", OWNER, "check",
+     geen_recht("select count(*) from approval_settings where pin_hash is not null"), False, True, S12)
+case("PK04", PK, "administratie: update met RETURNING pin_hash geweigerd (geen lek via returning)", ADM, "check",
+     geen_recht(f"update approval_settings set method = method where {AS100} returning pin_hash"), False, True, S12)
+case("PK05", PK, "bediening leest de 8 open kolommen: toegestaan", BED, "select", f"select {OPEN8} from approval_settings where {AS100}", True)
+case("PK06", PK, "service_role leest pin_hash en pin_salt: toegestaan (server-side PIN-controle)", "service_role", "select",
+     f"select pin_hash, pin_salt from approval_settings where {AS100}", True)
+case("PK07", PK, "anon leest approval_settings (methode): geweigerd", "anon", "check", geen_recht(f"select method from approval_settings where {AS100}"), True)
+case("PK08", PK, "administratie zet een nieuwe PIN (update pin_hash/pin_salt): toegestaan", ADM, "dml",
+     f"update approval_settings set pin_hash = 'nieuw', pin_salt = 'zout' where {AS100}", True)
+case("PK09", PK, "administratie maakt instelling met PIN aan (bedrijf 105): toegestaan", ADM, "dml",
+     f"insert into approval_settings (company_id, method, is_required, pin_hash, pin_salt) values ('{A(105)}','pin',true,'h','s')", True)
+case("PK10", PK, "manager zet een nieuwe PIN: 0 rijen (RLS, MANAGE_SETTINGS)", MGR, "dml",
+     f"update approval_settings set pin_hash = 'x' where {AS100}", True, False, STAP_STAMDATA)
+case("PK11", PK, "bediening zet een nieuwe PIN: 0 rijen", BED, "dml", f"update approval_settings set pin_hash = 'x' where {AS100}", True, False, STAP_STAMDATA)
+case("PK12", PK, "catalogus: authenticated precies de 8 open kolommen, geen tabel-SELECT; anon niets; service_role pin_hash", "postgres", "check",
+     "select not has_table_privilege('authenticated','public.approval_settings','SELECT') "
+     "and not has_column_privilege('authenticated','public.approval_settings','pin_hash','SELECT') "
+     "and not has_column_privilege('authenticated','public.approval_settings','pin_salt','SELECT') "
+     "and (select count(*) from information_schema.column_privileges where table_schema='public' and table_name='approval_settings' "
+     "and grantee='authenticated' and privilege_type='SELECT') = 8 "
+     "and not has_column_privilege('anon','public.approval_settings','method','SELECT') "
+     "and has_column_privilege('service_role','public.approval_settings','pin_hash','SELECT') "
+     "and has_table_privilege('authenticated','public.approval_settings','INSERT,UPDATE')", False, True, S12)
 
 # -- plan 7b (migratie 0023): afgewezen bon niet factureren. Gedeelde scenariolijst met de app-test.
 # Migratie 0023 is voorbereid maar NIET uitgevoerd (besluit 9 okt). Deze cases staan daarom op een eigen stap (99):
