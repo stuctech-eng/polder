@@ -15,7 +15,7 @@ let pass = 0, fail = 0; const out: string[] = [];
 function ok(name: string, c: boolean, d = "") { (c ? pass++ : fail++); out.push(`${c ? "PASS" : "FAIL"} ${name}${c ? "" : "  -> " + d}`); }
 const A100 = "a0000000-0000-0000-0000-000000000100";
 (async () => {
-  const q = new Client({ host: "/home/pgtest", port: 55432, database: "s3", user: "pgtest" }); await q.connect();
+  const q = new Client({ host: process.env.PGHOST || "/home/pgtest", port: +(process.env.PGPORT || 55432), database: process.env.TESTDB || "s3", user: process.env.PGUSER || "pgtest" }); await q.connect();
   const uid = async (e: string) => (await q.query("select id from auth.users where email=$1", [e])).rows[0].id;
   const RA = (await q.query("select restaurant_id from users where id=$1", [await uid("a.owner@staging.test")])).rows[0].restaurant_id;
   const U: any = {};

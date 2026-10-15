@@ -12,6 +12,9 @@ let pass = 0, fail = 0; const out: string[] = [];
 function ok(name: string, c: boolean, d = "") { (c ? pass++ : fail++); out.push(`${c ? "PASS" : "FAIL"} ${name}${c ? "" : "  -> " + d}`); }
 const RA = "a0000000-0000-0000-0000-000000000001";
 const A = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+// geweigerd = 0 rijen (RLS) of, vanaf stap 13 (0036, geen tabelrecht meer), "permission denied" (42501)
+const nulOfGeenRecht = (r: { data: unknown[] | null; error: { code?: string; message: string } | null }) =>
+  r.error ? r.error.code === "42501" && /permission denied/.test(r.error.message) : (r.data ?? []).length === 0;
 (async () => {
   const q = new Client({ host: process.env.PGHOST, port: +(process.env.PGPORT || 55432), database: process.env.TESTDB, user: process.env.PGUSER });
   await q.connect();
@@ -71,7 +74,7 @@ const A = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}
   ok("12 bediening leest geen facturen en geen betalingen meer (0 rijen, geen fout)", !s.error && !p.error && (s.data ?? []).length === 0 && (p.data ?? []).length === 0, JSON.stringify([s, p]).slice(0, 300));
   as("admin"); c = createSupabaseServerClient();
   let d = await c.from("payments").delete().eq("invoice_id", A(502)).select("id");
-  ok("13 administratie wist betaling rechtstreeks: 0 rijen, betaling blijft", !d.error && (d.data ?? []).length === 0 && (await npay(A(502))) === n0, JSON.stringify(d));
+  ok("13 administratie wist betaling rechtstreeks: 0 rijen of geen recht, betaling blijft", nulOfGeenRecht(d) && (await npay(A(502))) === n0, JSON.stringify(d));
 
   console.log(out.join("\n")); console.log(`${pass} PASS, ${fail} FAIL`);
   await q.end(); await end(); process.exit(fail ? 1 : 0);

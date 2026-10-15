@@ -18,6 +18,9 @@ let pass = 0, fail = 0; const out: string[] = [];
 function ok(name: string, c: boolean, d = "") { (c ? pass++ : fail++); out.push(`${c ? "PASS" : "FAIL"} ${name}${c ? "" : "  -> " + d}`); }
 const RA = "a0000000-0000-0000-0000-000000000001";
 const A = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+// geweigerd = 0 rijen (RLS) of, vanaf stap 13 (0036, geen tabelrecht meer), "permission denied" (42501)
+const nulOfGeenRecht = (r: { data: unknown[] | null; error: { code?: string; message: string } | null }) =>
+  r.error ? r.error.code === "42501" && /permission denied/.test(r.error.message) : (r.data ?? []).length === 0;
 (async () => {
   const q = new Client({ host: process.env.PGHOST, port: +(process.env.PGPORT || 55432), database: process.env.TESTDB, user: process.env.PGUSER });
   await q.connect();
@@ -62,7 +65,7 @@ const A = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}
   let d = await c.from("daily_closings").insert({ restaurant_id: RA, closing_date: "2001-03-02", closed_by: U.owner.id }).select("id");
   ok("11 manager zet afsluiting op naam van de owner: geweigerd (RLS)", !!d.error && /row-level security/.test(d.error.message), JSON.stringify(d));
   let u = await c.from("daily_closings").update({ total_revenue: 1 }).eq("closing_date", "2001-03-01").select("id");
-  ok("12 manager wijzigt eigen afsluiting: 0 rijen", !u.error && (u.data ?? []).length === 0, JSON.stringify(u));
+  ok("12 manager wijzigt eigen afsluiting: 0 rijen of geen recht", nulOfGeenRecht(u), JSON.stringify(u));
   as("bed"); c = createSupabaseServerClient();
   let s = await c.from("companies").select("id").eq("restaurant_id", RA);
   let s2 = await c.from("departments").select("id").eq("company_id", C);
@@ -74,7 +77,7 @@ const A = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}
   as("owner"); c = createSupabaseServerClient();
   let w = await c.from("workflow_rules").delete().eq("company_id", C).select("id");
   let ip = await c.from("integration_plugins").select("id");
-  ok("16 owner wist workflowregel: 0 rijen; owner leest integration_plugins: 0 rijen", !w.error && (w.data ?? []).length === 0 && !ip.error && (ip.data ?? []).length === 0, JSON.stringify([w, ip]));
+  ok("16 owner wist workflowregel: 0 rijen of geen recht; owner leest integration_plugins: 0 rijen of geen recht", nulOfGeenRecht(w) && nulOfGeenRecht(ip), JSON.stringify([w, ip]));
 
   console.log(out.join("\n")); console.log(`${pass} PASS, ${fail} FAIL`);
   await q.end(); await end(); process.exit(fail ? 1 : 0);

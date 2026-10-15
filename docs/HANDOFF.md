@@ -1,4 +1,4 @@
-# HANDOFF — waar we gebleven zijn (bijgewerkt 13 okt 2026)
+# HANDOFF — waar we gebleven zijn (bijgewerkt 14 okt 2026)
 
 Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
@@ -16,18 +16,19 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Productie-database staat op **migratie 0030** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
+- **Hardening stap 13 — overbodige rechten (migratie 0036)**: lokaal gebouwd en getest (14 okt), **niet gepusht en niet in productie**. Productie eerst gemeten (13a, alleen lezen; PostgreSQL 17.6, volledig leesbaar; uitslag in `supabase/hardening/tests/prod-inventaris-13a.txt`). 0036 trekt 34 rechten zonder policy, MAINTAIN en het recht op `platform_log_id_seq` in bij authenticated, en MAINTAIN voor anon/authenticated in de standaardrechten voor nieuwe tabellen. Alleen voor de gemeten PG17-stand: elke afwijking (ook een kolomrecht van anon of service_role) laat 0036 afbreken zonder wijziging; op PostgreSQL 16 breekt hij bewust af. Tests: `rechten-tests.sh` 63/63 (PG17) en 4/4 (PG16); harnas 0 FAIL; de zeven gedraaide testscripts op PG16 en PG17 zonder FAIL (tenantswitch, aan/uit, platform, modules, facturen, stamdata, pin; `preflight-0023-tests.sh` niet gedraaid, hoort bij 0023); app t7–t16 vóór en na 0036 per regel gelijk (t7: 14 bekende FAIL zonder 0023, zoals altijd). Zie architecture 13.25. Volgende: push en productie, elk met eigen GO; eerste productiestap is `prod-rechten-checks.sql` (moet `voor 0036|34|25|t|0` tonen).
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
 
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10, 11 en 12 in productie; nog 13 (opruimen grants); 12 PIN-geheimen, 13 opruimen), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10, 11 en 12 in productie; 13 (opruimen grants) lokaal klaar, nog niet in productie), privacyfase, gecontroleerde supporttoegang.
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
-- Na stap 11 blijven open: PIN-kolommen leesbaar voor iedereen (stap 12) en tabelrechten (grants) opruimen (stap 13).
+- Stap 13 (grants opruimen) is lokaal klaar; productie volgt. Daarna blijven de standaardrechten van supabase_admin ruim (niet door ons aan te passen; geldt alleen voor objecten die supabase_admin aanmaakt).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
 - PIN-pogingenlimiet: wie APPROVE_RECEIPTS heeft kan via de goedkeurroute onbeperkt PIN's proberen (apart punt, niet in stap 12).
 - 13 okt 19:04: één POST /api/open-tabs duurde 11,4 s en gaf 500 "Internal server error." (niets opgeslagen; daarna werkte het weer; geen hangende transacties). Vermoedelijk tijdelijke traagheid Supabase/Vercel. Twee testrekeningen (Demo Kantoor BV, 19:03, zonder tafel) staan nog open. Bij herhaling: Vercel- en Supabase-logs bekijken.
@@ -52,7 +53,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 
 **Documentatie**
 - `docs/architecture.md`: hoofddocument (roadmap-punt 7 met productdoel meerdere restaurants en besluiten B1–B6; audit sectie 13; 13.16 = 0022 + 7b; 13.17 = fase 1; changelog).
-- `supabase/hardening/README.md`: tabel van alle stappen (0–12, plus 7b) en hun status.
+- `supabase/hardening/README.md`: tabel van alle stappen (0–13, plus 7b) en hun status.
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**

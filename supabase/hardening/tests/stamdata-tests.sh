@@ -30,7 +30,8 @@ rest() { geldig "$(sql "select md5(coalesce((select string_agg(proname||md5(pros
     from pg_policies where schemaname='public' and tablename not in ($T)),''))" | tail -1)"; }
 fails() { sql "select count(*) from hardening_test.run($1) where result = 'FAIL'"; }
 # email_settings bestaat in productie niet (migratie 0002 nooit uitgevoerd): het harnas slaat precies die 5 cases expliciet over (SKIP)
-skips() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'SKIP'"; }
+# alleen de RR-cases: OR05-OR07 (stap 13, MAINTAIN) worden op PostgreSQL 16 ook overgeslagen, MAINTAIN bestaat daar niet
+skips() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'SKIP' and id like 'RR%'"; }
 # het productie-leesblok: stand|tabellen|policies|policies_all|all_in_public|dicht_ok
 leesblok() { $PSQL -d sd_test -At -F'|' -f hardening/prod-stamdata-checks.sql 2>&1 | grep -v '^$' | head -1 | cut -d'|' -f1-6; }
 

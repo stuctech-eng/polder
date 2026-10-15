@@ -424,8 +424,10 @@ WAAROM = {STAP_FACTUREN: "vanaf stap 10 voor niemand toegestaan", STAP_STAMDATA:
 def geweigerd_expr(args, tbl, op):
     x = f"(hardening_test.inactief_dml({args}))"
     if (tbl, op) in VERBODEN:
-        # iedereen geweigerd: 0 rijen (SELECT/UPDATE/DELETE) of RLS-fout (INSERT), voor de actieve EN de geweigerde gebruiker
-        return f"select {x}.geweigerd or {x}.detail ~ '^actief: (rijen=0|.*row-level security.*) [|] [a-z]+: (rijen=0|.*row-level security.*)$'"
+        # iedereen geweigerd: 0 rijen (SELECT/UPDATE/DELETE) of RLS-fout (INSERT), voor de actieve EN de geweigerde gebruiker;
+        # vanaf stap 13 (0036, geen tabelrecht meer) is het "permission denied"
+        w = "(rijen=0|.*row-level security.*|.*permission denied.*)"
+        return f"select {x}.geweigerd or {x}.detail ~ '^actief: {w} [|] [a-z]+: {w}$'"
     return f"select {x}.geweigerd"
 TS_TABELLEN = ["companies", "invoices", "documents", "workflow_rules", "configurations", "notifications", "integration_plugins",
                "contacts", "departments", "cost_centers", "projects", "company_codes", "approval_settings", "invoice_lines", "payments"]
@@ -645,14 +647,15 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, 2)
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
-case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026), de moduletabellen (0028) en approval_settings (vanaf stap 12 kolomrechten: zie PK12)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features','approval_settings') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True)
+case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026), de moduletabellen (0028) en approval_settings (vanaf stap 12 kolomrechten: zie PK12); vanaf stap 13 niet meer (0036: zie OR-cases)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features','approval_settings') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True, False, 13, "stap 13: dode rechten ingetrokken")
 case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platform- en moduletabellen (0026/0028, bewust smaller: zie PA-/MX-cases)", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
      "select has_table_privilege('authenticated','public.restaurants','select') and not has_table_privilege('authenticated','public.restaurants','insert,update,delete')", False, True, 2)
-case("PR27", "PRIVILEGES", "standaardrechten voor nieuwe tabellen bevatten geen TRUNCATE/TRIGGER/REFERENCES voor anon/authenticated/service_role", "postgres", "check",
-     "select not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a where d.defaclnamespace='public'::regnamespace and d.defaclobjtype='r' and a.privilege_type in ('TRUNCATE','TRIGGER','REFERENCES') and a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated','service_role')))", True)
+# PR27 alleen de standaardrechten van postgres (maakt al onze objecten aan); die van supabase_admin zijn in productie ruim en niet door ons aan te passen (stap 13a)
+case("PR27", "PRIVILEGES", "standaardrechten van postgres voor nieuwe tabellen bevatten geen TRUNCATE/TRIGGER/REFERENCES voor anon/authenticated/service_role", "postgres", "check",
+     "select not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a where d.defaclnamespace='public'::regnamespace and d.defaclrole='postgres'::regrole and d.defaclobjtype='r' and a.privilege_type in ('TRUNCATE','TRIGGER','REFERENCES') and a.grantee in (select oid from pg_roles where rolname in ('anon','authenticated','service_role')))", True)
 case("PR28", "PRIVILEGES", "elke tabel in public heeft nog RLS aan na stap 2", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and not c.relrowsecurity)", True)
 
@@ -1200,6 +1203,8 @@ case("FW81", FW, "betalingen uit: paid -> sent: geweigerd door de factuurwacht (
 RR = "ROLRECHTEN11"
 S11 = STAP_STAMDATA
 def rls(sql): return f"select hardening_test.refused_with($${sql}$$, 'row-level security')"
+# vanaf stap 13 (0036) heeft authenticated op de dichte tabellen geen tabelrecht meer: dan "permission denied" in plaats van de RLS-fout
+def rls_of_recht(sql): return f"select hardening_test.refused_with($${sql}$$, 'row-level security') or hardening_test.refused_with($${sql}$$, 'permission denied')"
 AFS = lambda who_id, d: f"insert into daily_closings (restaurant_id, closing_date, closed_by) values ('{RA}', '{d}', {who_id})"
 # dagafsluiting
 case("RR01", RR, "bediening sluit de dag af (eigen naam): geweigerd", BED, "check", rls(AFS(f"'{A(13)}'", "2001-02-01")), False, True, S11)
@@ -1265,7 +1270,7 @@ for i, (tbl, (w, ins, set_, setup)) in enumerate(DICHT.items(), start=60):
     vr = "to_regclass('public.email_settings') is not null" if tbl == "email_settings" else None
     case(f"RR{i}c", RR, f"controle: {tbl} heeft rijen van A (service_role ziet ze)", "service_role", "select", f"select 1 from {tbl} where {w}", True, setup=setup, vereist=vr)
     case(f"RR{i}s", RR, f"owner leest {tbl}: 0 rijen", OWNER, "select", f"select 1 from {tbl} where {w}", True, False, S11, setup=setup, vereist=vr)
-    case(f"RR{i}i", RR, f"owner maakt {tbl} aan: RLS-fout", OWNER, "check", rls(ins), False, True, S11, setup=setup, vereist=vr)
+    case(f"RR{i}i", RR, f"owner maakt {tbl} aan: RLS-fout (vanaf stap 13: geen recht)", OWNER, "check", rls_of_recht(ins), False, True, S11, setup=setup, vereist=vr)
     case(f"RR{i}u", RR, f"owner wijzigt {tbl}: 0 rijen", OWNER, "dml", f"update {tbl} set {set_} where {w}", True, False, S11, setup=setup, vereist=vr)
     vers = REPL(f"insert into contacts (id, company_id, full_name) values ('{A(9160)}','{A(100)}','rr');") if tbl == "contacts" else ""
     wd = f"id = '{A(9160)}'" if tbl == "contacts" else w   # contacts: verse rij zonder verwijzing (foreign key)
@@ -1374,6 +1379,44 @@ case("H690", H, "open_tabs_guard bevat de afwijzingsblokkade; trigger actief; fu
      "select position('afgewezen bon is nog niet opnieuw goedgekeurd' in pg_get_functiondef('public.open_tabs_guard()'::regprocedure)) > 0 "
      "and (select count(*) from pg_trigger where not tgisinternal and tgenabled='O' and tgname='open_tabs_guard') = 1 "
      "and not has_function_privilege('authenticated','public.open_tabs_guard()','EXECUTE') and not has_function_privilege('service_role','public.open_tabs_guard()','EXECUTE')", False, True, STAP_0023)
+
+# ---------------------------------------------------------------- OVERBODIGE RECHTEN (stap 13, migratie 0036)
+# Catalogus-lint: per tabel en per bewerking heeft authenticated een recht ALS EN ALLEEN ALS er een policy is die die bewerking
+# dekt (rol authenticated of public). Kolomrechten tellen mee (approval_settings: SELECT op 8 kolommen). Plus MAINTAIN (PostgreSQL 17)
+# en de standaardrechten van postgres voor nieuwe tabellen. De functionele cases (RR, PK, FW ...) blijven toetsen WAT een policy toestaat.
+RE = "RECHTEN13"
+S13 = 13
+PG17 = "current_setting('server_version_num')::int >= 170000"   # MAINTAIN bestaat pas vanaf PostgreSQL 17 (productie: 17.6)
+LINT = ("select not exists (select 1 from pg_class c, unnest('{SELECT,INSERT,UPDATE,DELETE}'::text[]) o "
+        "where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname not like '\\_%' "
+        "and (case o when 'DELETE' then has_table_privilege('authenticated', c.oid, o) else has_any_column_privilege('authenticated', c.oid, o) end) "
+        "<> exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname and p.cmd in (o, 'ALL') "
+        "and p.roles && '{authenticated,public}'))")
+case("OR01", RE, "lint: elk tabelrecht van authenticated heeft een policy voor die bewerking, en elke policy een recht", "postgres", "check", LINT, False, True, S13)
+case("OR02", RE, "RLS staat aan op elke tabel in public", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname not like '\\_%' and not c.relrowsecurity)", True)
+case("OR03", RE, "bewust dichte tabellen: authenticated heeft er geen enkel recht", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace = 'public'::regnamespace and c.relname in "
+     "('contacts','integration_plugins','notifications','email_settings','features','restaurant_features','platform_admins','platform_log') "
+     "and has_table_privilege('authenticated', c.oid, 'select,insert,update,delete,truncate,references,trigger'))", False, True, S13)
+case("OR04", RE, "authenticated heeft geen recht op platform_log_id_seq", "postgres", "check",
+     "select not has_sequence_privilege('authenticated', 'public.platform_log_id_seq', 'usage,select,update')", False, True, S13)
+case("OR05", RE, "geen MAINTAIN voor anon en authenticated op tabellen in public", "postgres", "check",
+     "select not exists (select 1 from pg_class c, aclexplode(c.relacl) x where c.relnamespace = 'public'::regnamespace "
+     "and x.grantee::regrole::text in ('anon','authenticated') and x.privilege_type = 'MAINTAIN')", False, True, S13, vereist=PG17)
+case("OR06", RE, "standaardrechten van postgres voor nieuwe tabellen: geen MAINTAIN voor anon en authenticated", "postgres", "check",
+     "select not exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) x where d.defaclrole = 'postgres'::regrole "
+     "and d.defaclnamespace in (0, 'public'::regnamespace) and d.defaclobjtype = 'r' and x.grantee::regrole::text in ('anon','authenticated') "
+     "and x.privilege_type = 'MAINTAIN')", False, True, S13, vereist=PG17)
+case("OR07", RE, "service_role houdt MAINTAIN op de restauranttabellen (ongemoeid)", "postgres", "check",
+     "select (select count(*) from pg_class c, aclexplode(c.relacl) x where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' "
+     "and x.grantee = 'service_role'::regrole and x.privilege_type = 'MAINTAIN') > 0", True, vereist=PG17)
+for cid, who, sql in [("OR10", OWNER, f"delete from contacts where company_id = '{A(100)}'"),
+                      ("OR11", OWNER, f"update payments set amount = amount where invoice_id = '{A(502)}'"),
+                      ("OR12", OWNER, f"delete from approvals where true"),
+                      ("OR13", MGR, f"update daily_closings set closing_date = closing_date where restaurant_id = '{RA}'")]:
+    case(cid, RE, f"{sql.split()[0]} op {sql.split()[1] if sql.startswith('update') else sql.split()[2]}: geen tabelrecht meer (was al 0 rijen via RLS)", who, "check",
+         geen_recht(sql), False, True, S13)
 
 # ---------------------------------------------------------------- uitvoer
 def b(x): return "null" if x is None else ("true" if x else "false")

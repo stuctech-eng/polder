@@ -1,0 +1,39 @@
+# Uitvoer van prod-rechten-inventaris.sql op productie (stap 13a, 14 okt 2026, PostgreSQL 17.6). Kolommen gescheiden door |, gesorteerd (LC_ALL=C).
+1|sequence|platform_log_id_seq|postgres|false|SELECT,USAGE|-|SELECT,USAGE|0|-|ja
+1|tabel|activity_log|postgres|true|INSERT,MAINTAIN,SELECT|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|8|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|approval_settings|postgres|true|DELETE,INSERT,MAINTAIN,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|8|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|approvals|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|12|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|audit_log|postgres|true|INSERT,MAINTAIN,SELECT|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|9|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|companies|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|12|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|company_codes|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|8|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|configurations|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|contacts|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|-|ja
+1|tabel|cost_centers|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|daily_closings|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|11|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|departments|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|4|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|documents|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|7|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|domain_events|postgres|true|INSERT,MAINTAIN,SELECT|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|features|postgres|true|-|-|SELECT|0|-|ja
+1|tabel|integration_plugins|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|9|-|ja
+1|tabel|invoice_lines|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|5|DELETE:authenticated INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|invoices|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|11|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|notifications|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|8|-|ja
+1|tabel|open_tabs|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|12|DELETE:authenticated INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|payments|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|5|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|platform_admins|postgres|true|-|-|SELECT|0|-|ja
+1|tabel|platform_log|postgres|true|-|-|SELECT|0|-|ja
+1|tabel|projects|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|receipt_lines|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|7|INSERT:authenticated SELECT:authenticated|ja
+1|tabel|receipts|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|14|DELETE:authenticated INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+1|tabel|restaurant_features|postgres|true|-|-|SELECT|0|-|ja
+1|tabel|restaurants|postgres|true|MAINTAIN,SELECT|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|5|SELECT:public|ja
+1|tabel|users|postgres|true|MAINTAIN,SELECT|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|8|SELECT:public SELECT:public|ja
+1|tabel|workflow_rules|postgres|true|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|-|DELETE,INSERT,MAINTAIN,SELECT,UPDATE|6|INSERT:authenticated SELECT:authenticated UPDATE:authenticated|ja
+2|standaardrecht|S|postgres|public|postgres=rwU/postgres authenticated=rU/postgres service_role=rU/postgres|||||ja
+2|standaardrecht|S|supabase_admin|public|postgres=rwU/supabase_admin anon=rwU/supabase_admin authenticated=rwU/supabase_admin service_role=rwU/supabase_admin|||||ja
+2|standaardrecht|f|postgres|public|postgres=X/postgres|||||ja
+2|standaardrecht|f|supabase_admin|public|postgres=X/supabase_admin anon=X/supabase_admin authenticated=X/supabase_admin service_role=X/supabase_admin|||||ja
+2|standaardrecht|r|postgres|public|postgres=arwdDxtm/postgres anon=m/postgres authenticated=arwdm/postgres service_role=arwdm/postgres|||||ja
+2|standaardrecht|r|supabase_admin|public|postgres=arwdDxtm/supabase_admin anon=arwdDxtm/supabase_admin authenticated=arwdDxtm/supabase_admin service_role=arwdDxtm/supabase_admin|||||ja
+3|functie-eigenaar|postgres|35|||||||ja
+4|versie|17.6|postgres|||||||ja, alle objecten

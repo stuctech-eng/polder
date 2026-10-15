@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.72** — HARDENING STAP 13, OVERBODIGE RECHTEN (lokaal gebouwd en getest, NIET in productie): productie gemeten (13a, PG17.6); migratie `0036_overbodige_rechten.sql` + rollback (alleen voor de gemeten PG17-stand; PG16 breekt bewust af); vingerafdruk over tabel-, sequence-, kolom- en standaardrechten; `prod-rechten-checks.sql`, `prod-rechten-inventaris.sql`, `tests/prod-inventaris-13a.txt`, `tests/local-prod17-stand.sql` (`PRODSTAND=1`), `rechten-tests.sh` (63 PG17, 4 PG16; met kolomrechten en mutatiebewijs), 11 RECHTEN13-cases; sectie 13.25.
+
 **v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17); in productie op 13 okt (app v1.0.96, daarna 0035), controle en rooktest geslaagd.
 
 **v1.70** — HARDENING STAP 11, ROLRECHTEN DAGAFSLUITING/BEDRIJVEN/INSTELLINGEN: migraties `0033_rolrechten_dagafsluiting_bedrijven.sql` en `0034_rolrechten_instellingen.sql` + rollbacks (noodmaatregel); geen app-wijziging; besluiten 13 okt (dagafsluiting op eigen naam in de database, contacts dicht, bedrijfsgegevens leesbaar voor iedereen); `prod-stamdata-checks.sql`, 74 ROLRECHTEN11-cases, `stamdata-tests.sh` (35), app-test t15 (16); sectie 13.23. Lokaal getest (PG16 + PG17); in productie op 13 okt (0033 + 0034, v1.0.94), controle en rooktest geslaagd.
@@ -2089,3 +2091,68 @@ fail-open goedkeurroute (2) en instellingenroute (1), PIN in de response (1), in
 **Uitrol.** Push → Vercel toont de nieuwe versie → `prod-pin-checks.sql` (verwacht 0034|true|true|10|false|true|true; noteer de
 vijf md5's) → 0035 → leesblok (0035|true|false|8|false|true|true; md5's gelijk) → rooktest (bon goedkeuren met PIN, PIN wijzigen) → STOP.
 
+### 13.25 HARDENING STAP 13 — overbodige rechten opruimen (migratie 0036, 2026-10-14) — LOKAAL GETEST, NIET IN PRODUCTIE
+
+**Probleem.** Na stap 10–12 bepalen de policies (RLS) wie wat mag. Daaronder lagen nog tabelrechten uit de begintijd: `authenticated`
+had op bijna elke tabel lezen, toevoegen, wijzigen en wissen, ook waar geen policy bestaat. RLS blokkeerde die bewerkingen al
+(0 rijen of RLS-fout), dus de rechten waren "dood"; maar ze vormden geen tweede vangnet als later een policy vergeten wordt.
+Laag risico, opruimwerk (verdediging in de diepte). Geen app-wijziging.
+
+**13a — productie gemeten (14 okt, alleen lezen).** `prod-rechten-inventaris.sql` op productie; uitslag letterlijk vastgelegd in
+`tests/prod-inventaris-13a.txt`. PostgreSQL **17.6**; alle objecten van `postgres` (= current_user), dus volledig leesbaar.
+Tabelrechten en policies gelijk aan de lokale stand, behalve: MAINTAIN (PG17) bij authenticated op 25 tabellen (alle tabellen
+waar authenticated rechten heeft; niet op de 4 platform- en moduletabellen) en bij service_role op alle 29 tabellen;
+standaardrechten van `postgres` (nieuwe tabellen anon=m, authenticated/service_role=arwdm; functies alleen postgres=X); ruime
+standaardrechten van `supabase_admin` (niet door ons aan te passen, gelden alleen voor objecten die supabase_admin aanmaakt; al
+onze objecten zijn van postgres); 35 eigen functies in `public` (uitbreidingen staan daar niet in `public`).
+
+**0036 (alleen voor deze gemeten stand op PostgreSQL 17.6).**
+- authenticated: de 34 rechten zonder policy ingetrokken, expliciet per tabel (D op approval_settings, approvals, companies,
+  configurations, invoices, workflow_rules; U+D op company_codes, cost_centers, daily_closings, departments, documents, payments,
+  projects, receipt_lines; alles op contacts, integration_plugins, notifications); MAINTAIN op alle 25 tabellen; SELECT/USAGE op
+  `platform_log_id_seq`.
+- Standaardrechten van `postgres` voor nieuwe tabellen: MAINTAIN eraf voor anon en authenticated (nieuwe tabel: anon niets,
+  authenticated SELECT/INSERT/UPDATE/DELETE, service_role ongewijzigd).
+- Ongemoeid: service_role, functies, de standaardrechten voor sequences en functies, die van supabase_admin, policies.
+- **Voor- en nacontrole met één vingerafdruk** (md5, volgorde `collate "C"`) van: alle tabel- en sequencerechten van anon,
+  authenticated en service_role; **alle kolomrechten** (`attacl`) van die drie rollen; alle standaardrechten in public en globaal
+  (alle rollen). Vooraf exact `469416b6…` (gemeten stand), anders "0036 vooraf: stand wijkt af" en niets gewijzigd. Achteraf exact
+  `afd46a82…` plus de lint (elk recht van authenticated heeft een policy voor die bewerking en omgekeerd), anders "0036 achteraf"
+  en de hele transactie terug. Rollback: precies omgekeerd (vooraf `afd46a82…`, achteraf `469416b6…`).
+- **PostgreSQL 16: breekt bewust volledig af** (MAINTAIN bestaat daar niet, dus de stand wijkt af). Niet "overslaan": 0036 is
+  alleen voor de gemeten PG17-productiestand. Bewaakt in `rechten-tests.sh` (PG16-deel).
+- Controleblok `prod-rechten-checks.sql` (alleen lezen): `voor 0036|34|25|t|0` → `na 0036|0|0|f|0`; elke afwijking = ONBEKEND;
+  drie md5's (service_role, standaardrechten supabase_admin, policies+functies) vóór en na gelijk.
+
+**Lokaal gelijk aan productie.** `tests/local-prod17-stand.sql` (via `local-build.sh PRODSTAND=1`, alleen PG17) bootst de
+gemeten stand na: email_settings weg, uitbreidingen in schema `extensions`, standaardrechten van postgres en supabase_admin exact,
+`rls_auto_enable` als nabootsing. Daarna geeft de inventaris lokaal regel voor regel dezelfde uitvoer als productie; anders stopt
+`rechten-tests.sh` meteen.
+
+**Tests.**
+- `rechten-tests.sh` PG17: 63/63. Uitgangsstand = productie; heen (lint 0, geen MAINTAIN voor anon/authenticated, 8 PIN-kolommen,
+  service_role en supabase_admin exact gelijk, al het andere exact gelijk, nieuwe tabel zonder MAINTAIN, medewerker krijgt
+  "permission denied"); tweede keer afgebroken; rollback exact terug (ook standaardrechten en grantor), inventaris weer gelijk aan
+  productie. 8 afwijkende uitgangsstanden en 11 kapotte migraties/rollbacks: afgebroken, niets half achtergelaten.
+- **Kolomrechten (vast):** onverwacht kolomrecht van anon of service_role vóór 0036 (4 gevallen) → ONBEKEND, 0036 afgebroken,
+  niets gewijzigd; na 0036 (2) → rollback afgebroken; kapotte 0036 die zelf een kolomrecht aan anon of service_role geeft (2) →
+  nacontrole faalt, alles terug. **Mutatiebewijs:** met een vingerafdruk die kolomrechten van anon en service_role negeert, falen
+  alle 10 nieuwe kolomtests.
+- PG16: 4/4 (0036 en rollback breken af, controleblok ONBEKEND).
+- Harnas: 1163 cases; 11 nieuwe in categorie RECHTEN13 (OR01–OR13: lint, RLS overal, dichte tabellen, sequence, MAINTAIN,
+  standaardrechten, permission denied). PG17 productiestand `run(12)` en na 0036 `run(13)`: 1157 PASS, 1 OPEN, 5 SKIP
+  (email_settings). Vóór 0036 faalt `run(13)` precies op de 11 cases met een stap-13-overgang: 9 nieuwe (OR01, OR03–OR06, OR10–OR13) plus de
+  bestaande PR08 en PR24 (bewijs dat ze kunnen falen); OR02 (RLS overal) en OR07 (service_role houdt MAINTAIN) zijn altijd waar. PG16 `run(12)`: 0 FAIL
+  (OR05–OR07 SKIP: geen MAINTAIN). Weigeringen accepteren vanaf nu ook "permission denied" (TS/RW/RR...i); PR27 kijkt alleen naar
+  de standaardrechten van postgres.
+- De zeven gedraaide testscripts op PG16 en PG17 zonder FAIL (tenantswitch 22, aan/uit 19, platform 22, modules 24, facturen 36, stamdata 43, pin 27).
+  `preflight-0023-tests.sh` is niet gedraaid (hoort bij de niet-uitgevoerde migratie 0023).
+- App t7–t16 op de PG17-productiestand vóór en na 0036: per regel 0 verschillen (t7 14 bekende FAIL zonder 0023). t14/t15 accepteren
+  "0 rijen of geen recht"; t7/t8 volgen nu PGHOST/PGPORT/TESTDB (eerder vast op de PG16-testdatabase).
+
+**Restrisico.** Na 0036 krijgt een directe databasepoging van een medewerker "permission denied" in plaats van 0 rijen; geen
+app-route doet zo'n poging. Standaardrechten van supabase_admin blijven ruim (niet aanpasbaar). Nieuwe tabellen krijgen voor
+authenticated nog automatisch S/I/U/D (bewust: elke nieuwe tabel krijgt eigen policies; de lint OR01 bewaakt de koppeling).
+
+**Uitrol (nog niet uitgevoerd, elk met GO).** Push → `prod-rechten-checks.sql` (verwacht `voor 0036|34|25|t|0`; noteer de drie
+md5's) → 0036 → controleblok (`na 0036|0|0|f|0`, md5's gelijk) → rooktest → STOP.
