@@ -850,7 +850,7 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
-**v1.72** — HARDENING STAP 13, OVERBODIGE RECHTEN (lokaal gebouwd en getest, NIET in productie): productie gemeten (13a, PG17.6); migratie `0036_overbodige_rechten.sql` + rollback (alleen voor de gemeten PG17-stand; PG16 breekt bewust af); vingerafdruk over tabel-, sequence-, kolom- en standaardrechten; `prod-rechten-checks.sql`, `prod-rechten-inventaris.sql`, `tests/prod-inventaris-13a.txt`, `tests/local-prod17-stand.sql` (`PRODSTAND=1`), `rechten-tests.sh` (63 PG17, 4 PG16; met kolomrechten en mutatiebewijs), 11 RECHTEN13-cases; sectie 13.25.
+**v1.72** — HARDENING STAP 13, OVERBODIGE RECHTEN (in productie 15 okt, push v1.0.98): productie gemeten (13a, PG17.6); migratie `0036_overbodige_rechten.sql` + rollback (alleen voor de gemeten PG17-stand; PG16 breekt bewust af); vingerafdruk over tabel-, sequence-, kolom- en standaardrechten; `prod-rechten-checks.sql`, `prod-rechten-inventaris.sql`, `tests/prod-inventaris-13a.txt`, `tests/local-prod17-stand.sql` (`PRODSTAND=1`), `rechten-tests.sh` (63 PG17, 4 PG16; met kolomrechten en mutatiebewijs), 11 RECHTEN13-cases; sectie 13.25.
 
 **v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17); in productie op 13 okt (app v1.0.96, daarna 0035), controle en rooktest geslaagd.
 
@@ -2091,7 +2091,7 @@ fail-open goedkeurroute (2) en instellingenroute (1), PIN in de response (1), in
 **Uitrol.** Push → Vercel toont de nieuwe versie → `prod-pin-checks.sql` (verwacht 0034|true|true|10|false|true|true; noteer de
 vijf md5's) → 0035 → leesblok (0035|true|false|8|false|true|true; md5's gelijk) → rooktest (bon goedkeuren met PIN, PIN wijzigen) → STOP.
 
-### 13.25 HARDENING STAP 13 — overbodige rechten opruimen (migratie 0036, 2026-10-14) — LOKAAL GETEST, NIET IN PRODUCTIE
+### 13.25 HARDENING STAP 13 — overbodige rechten opruimen (migratie 0036, 2026-10-14/15) — IN PRODUCTIE (15 okt)
 
 **Probleem.** Na stap 10–12 bepalen de policies (RLS) wie wat mag. Daaronder lagen nog tabelrechten uit de begintijd: `authenticated`
 had op bijna elke tabel lezen, toevoegen, wijzigen en wissen, ook waar geen policy bestaat. RLS blokkeerde die bewerkingen al
@@ -2154,5 +2154,8 @@ gemeten stand na: email_settings weg, uitbreidingen in schema `extensions`, stan
 app-route doet zo'n poging. Standaardrechten van supabase_admin blijven ruim (niet aanpasbaar). Nieuwe tabellen krijgen voor
 authenticated nog automatisch S/I/U/D (bewust: elke nieuwe tabel krijgt eigen policies; de lint OR01 bewaakt de koppeling).
 
-**Uitrol (nog niet uitgevoerd, elk met GO).** Push → `prod-rechten-checks.sql` (verwacht `voor 0036|34|25|t|0`; noteer de drie
-md5's) → 0036 → controleblok (`na 0036|0|0|f|0`, md5's gelijk) → rooktest → STOP.
+**Productie (15 okt).** Push v1.0.98 (alleen migratie, tests en docs; geen app-wijziging). Controleblok vooraf
+`voor 0036|34|25|true|0`, vingerafdruk `469416b6…`; 0036 geslaagd (06:53); controleblok na `na 0036|0|0|false|0`, vingerafdruk
+`afd46a82…`; de drie md5's vóór en na gelijk (service `36f1d931…`, supabase_admin `a7e1a474…`, policies+functies
+`c25cd844…def3072f…`; anders dan lokaal door de lokale testtabel en functies, alleen bedoeld voor vóór/na in productie).
+Rooktest door Dick geslaagd (dashboard, rekening, bon met PIN goedkeuren, factuur, betaling, dagafsluiting, instellingen).
