@@ -82,9 +82,13 @@ export default async function OpenTabDetailPage({
       ...approvalForReceipt(r.approvals ?? []),
       // goedgekeurd terwijl een regel nog pending staat: waarschuwing uit de database, verdwijnt pas als het opgelost is
       approval_warning: approvalWarningFor(r.status, r.approvals ?? []),
+      // Stap 14b: bedrijf vereist goedkeuring, bon nog niet ingediend (de factuurroute weigert hem; hier alleen tonen + knop)
+      submission_needed:
+        !!approvalSettings?.enabled && (r.status === "linked" || r.status === "draft") && !isRejectionBlocked(r, r.approvals ?? []),
     };
   });
   const blockedReceiptCount = (receipts ?? []).filter((r: any) => r.rejection_blocked).length;
+  const notSubmittedCount = (receipts ?? []).filter((r: any) => r.submission_needed).length;
 
   const approvalOn = await isFeatureOn("approval");
 
@@ -161,6 +165,14 @@ export default async function OpenTabDetailPage({
           ⚠ {blockedReceiptCount === 1 ? "Eén bon is" : `${blockedReceiptCount} bonnen zijn`} afgewezen en nog niet
           opnieuw goedgekeurd. Deze rekening kan pas gefactureerd worden nadat {blockedReceiptCount === 1 ? "die bon" : "die bonnen"} opnieuw
           {" "}is ingediend en goedgekeurd, of verwijderd is.
+        </p>
+      )}
+
+      {tab.status === "closed" && notSubmittedCount > 0 && (
+        <p className="mt-6 text-sm text-red-600" role="alert">
+          ⚠ {notSubmittedCount === 1 ? "Eén bon is" : `${notSubmittedCount} bonnen zijn`} nog niet ingediend, terwijl dit bedrijf
+          goedkeuring vereist. Deze rekening kan pas gefactureerd worden nadat {notSubmittedCount === 1 ? "die bon is" : "die bonnen zijn"}
+          {" "}ingediend en goedgekeurd, of verwijderd.
         </p>
       )}
 

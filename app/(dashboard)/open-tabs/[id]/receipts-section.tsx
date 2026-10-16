@@ -31,6 +31,8 @@ type Receipt = {
   rejected_by?: string | null;
   rejection_reason?: string | null;
   rejection_blocked?: boolean;
+  /** Stap 14b: het bedrijf vereist goedkeuring en deze bon is nog niet ingediend (draft/linked, niet afgewezen). */
+  submission_needed?: boolean;
   notes?: string | null;
   /** Stap 14a: methode van deze bon (wachtende regel, anders bedrijfsinstelling); ontbreekt bij een net aangemaakte bon. */
   approval_method?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
@@ -368,6 +370,7 @@ function ReceiptItem({
         status: "pending_approval",
         approval_token: result.approvalToken,
         rejection_blocked: false,
+        submission_needed: false,
       });
       if (result.approvalWarning) setError(result.approvalWarning);
       router.refresh();
@@ -421,6 +424,11 @@ function ReceiptItem({
         <div className="text-xs font-medium text-red-600 mt-1">
           ⚠ eerder afgewezen door {receipt.rejected_by}
           {receipt.rejection_reason ? `: "${receipt.rejection_reason}"` : ""} — nu weer bewerkbaar
+        </div>
+      )}
+      {!editing && receipt.submission_needed && !receipt.rejection_blocked && (receipt.status === "linked" || receipt.status === "draft") && (
+        <div className="text-xs text-amber-700 mt-1">
+          Nog niet ingediend: dit bedrijf vereist goedkeuring. Deze bon kan pas gefactureerd worden nadat hij is ingediend en goedgekeurd.
         </div>
       )}
       {!editing && receipt.rejection_blocked && receipt.status !== "pending_approval" && (
@@ -499,13 +507,13 @@ function ReceiptItem({
             </>
           ) : (
             <>
-              {approvalEnabled && receipt.rejection_blocked && (receipt.status === "linked" || receipt.status === "draft") && (
+              {approvalEnabled && (receipt.rejection_blocked || receipt.submission_needed) && (receipt.status === "linked" || receipt.status === "draft") && (
                 <button
                   onClick={handleResubmit}
                   disabled={loading}
                   className="text-xs text-neutral-900 font-medium underline disabled:opacity-50"
                 >
-                  {loading ? "Bezig..." : "Opnieuw indienen"}
+                  {loading ? "Bezig..." : receipt.rejection_blocked ? "Opnieuw indienen" : "Indienen"}
                 </button>
               )}
               <button

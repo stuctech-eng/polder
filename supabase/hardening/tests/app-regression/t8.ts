@@ -51,7 +51,7 @@ const A100 = "a0000000-0000-0000-0000-000000000100";
   for (const sc of SC) {
     const tab = await mk(sc); const w0 = await writes();
     const gi = await call(genInvoice.POST, undefined, { id: tab });
-    if (sc.expect.invoice) {
+    if (sc.expect.invoice_required) {   // stap 14b: het bedrijf vereist goedkeuring (setMethod), dus ook S01/S02/S12 geblokkeerd
       ok(`${sc.id} zonder 0023: route 400 en nul schrijfacties (factuur, regels, document, upload)`, gi.status === 400 && (await writes()) === w0, `${gi.status} ${w0} -> ${await writes()} ${JSON.stringify(gi.json)}`);
       ok(`${sc.id} zonder 0023: rekening blijft gesloten`, (await one("select status from open_tabs where id=$1", [tab])).status === "closed");
     } else {
@@ -60,7 +60,7 @@ const A100 = "a0000000-0000-0000-0000-000000000100";
     }
   }
   // 2. de goedkeuringsquery faalt (foutmelding) -> fail closed, nul schrijfacties
-  const rejSc = SC.find((s: any) => s.expect.rejection), okSc = SC.find((s: any) => !s.expect.invoice && s.receipts.length === 1);
+  const rejSc = SC.find((s: any) => s.expect.rejection), okSc = SC.find((s: any) => !s.expect.invoice_required && s.receipts.length === 1);   // een echt goedgekeurde bon (14b)
   for (const [label, mode] of [["foutmelding", "error"], ["exception", "throw"]]) {
     for (const [nm, sc] of [["afgewezen bon", rejSc], ["goedgekeurde bon", okSc]] as any) {
       const tab = await mk(sc); const w0 = await writes();

@@ -64,6 +64,15 @@ const bon = (id: string, status: string, approval_method?: any, extra: any = {})
   ok("17 module Goedkeuring uit: geen timer", timers().length === 0, String(timers().length));
   await toon([bon("5", "pending_approval", "email")], true, "pin");
   ok("18 wachtende e-mailbon bij een PIN-bedrijf (methode per bon): wel een timer", timers().length === 1, String(timers().length));
+  // stap 14b: bon nog niet ingediend bij een bedrijf dat goedkeuring vereist -> melding en knop "Indienen"
+  const knoppen = () => [...document.querySelectorAll("button")].map((b) => b.textContent ?? "");
+  await toon([bon("8", "linked", "pin", { submission_needed: true }), bon("9", "linked", "pin", { rejection_blocked: true })], true, "pin");
+  ok("21 bon nog niet ingediend: melding 'Nog niet ingediend' en knop 'Indienen'; afgewezen bon houdt 'Opnieuw indienen'",
+     /Nog niet ingediend: dit bedrijf vereist goedkeuring/.test(tekst()) && knoppen().includes("Indienen") && knoppen().includes("Opnieuw indienen"), JSON.stringify(knoppen()));
+  await toon([bon("8", "linked", "pin", { submission_needed: true })], false, "pin");
+  ok("22 module Goedkeuring uit: geen knop 'Indienen'", !knoppen().includes("Indienen"), JSON.stringify(knoppen()));
+  await toon([bon("8", "linked", "pin", { submission_needed: false })], true, "pin");
+  ok("23 bedrijf zonder verplichting: geen melding en geen knop", !/Nog niet ingediend/.test(tekst()) && !knoppen().includes("Indienen"), JSON.stringify(knoppen()));
   await act(async () => { root.unmount(); });
   ok("19 pagina verlaten: timer opgeruimd", timers().length === 0, String(timers().length));
   g.__refreshes = 0; await act(async () => { g.__setVisible(false); g.__setVisible(true); });

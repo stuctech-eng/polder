@@ -153,6 +153,9 @@ const A100 = "a0000000-0000-0000-0000-000000000100";
     const tabInv = sc.receipts.some((rc: any) => isInvoiceBlocked({ status: rc.status }, rc.approvals.map((s: string) => ({ status: s }))));
     ok(`7b ${sc.id} app-functie: afwijzingsblokkade = ${sc.expect.rejection}`, tabRej === sc.expect.rejection, sc.title);
     ok(`7b ${sc.id} app-functie: facturatieblokkade = ${sc.expect.invoice}`, tabInv === sc.expect.invoice, sc.title);
+    // stap 14b: hetzelfde met verplichte goedkeuring (het bedrijf in deze reeks vereist goedkeuring)
+    const tabInvReq = sc.receipts.some((rc: any) => isInvoiceBlocked({ status: rc.status }, rc.approvals.map((s: string) => ({ status: s })), true));
+    ok(`7b ${sc.id} app-functie met verplichte goedkeuring: facturatieblokkade = ${sc.expect.invoice_required}`, tabInvReq === sc.expect.invoice_required, sc.title);
     // (b) dezelfde situatie in de echte database opbouwen; de app-functie op de DB-rijen laten oordelen
     const needMove = sc.receipts.some((rc: any) => rc.moved);
     const tabX = (await rep("insert into open_tabs (restaurant_id, company_id, status) values ($1,$2,$3) returning id", [RA, A100, needMove ? "open" : "closed"]))[0].id;
@@ -173,19 +176,24 @@ const A100 = "a0000000-0000-0000-0000-000000000100";
       dbRej = dbRej || isRejectionBlocked(rc, ap); dbInv = dbInv || isInvoiceBlocked(rc, ap);
     }
     ok(`7b ${sc.id} app-functie op rijen uit de database: zelfde uitkomst`, dbRej === sc.expect.rejection && dbInv === sc.expect.invoice, `${dbRej}/${dbInv}`);
-    // (c) de route: bij facturatieblokkade nul schrijfacties en de juiste reden; anders gewoon factureren
+    // (c) de route: bij facturatieblokkade nul schrijfacties en de juiste reden; anders gewoon factureren.
+    // Stap 14b: dit bedrijf vereist goedkeuring, dus de route volgt expect.invoice_required (S01, S02 en S12: bon nooit
+    // goedgekeurd -> nu geweigerd met "nog niet goedgekeurd"; voor 14b werden die gefactureerd).
     as("owner"); const w0 = await writes();
     const gi = await call(genInvoice.POST, undefined, { id: tabY });
-    if (sc.expect.invoice) {
+    if (sc.expect.invoice_required) {
       const hasPending = sc.receipts.some((rc: any) => rc.status === "pending_approval");
-      const msgOk = hasPending ? /wachten nog op goedkeuring/.test(gi.json.error ?? "") : /afgewezen en nog niet opnieuw goedgekeurd/.test(gi.json.error ?? "");
-      ok(`7b ${sc.id} route: 400 met juiste reden (${hasPending ? "wacht op goedkeuring" : "afgewezen"})`, gi.status === 400 && msgOk, JSON.stringify(gi.json));
+      const reden = hasPending ? "wacht op goedkeuring" : sc.expect.rejection ? "afgewezen" : "nog niet goedgekeurd";
+      const msgOk = hasPending ? /wachten nog op goedkeuring/.test(gi.json.error ?? "")
+        : sc.expect.rejection ? /afgewezen en nog niet opnieuw goedgekeurd/.test(gi.json.error ?? "")
+        : /nog niet goedgekeurd en dit bedrijf vereist goedkeuring/.test(gi.json.error ?? "");
+      ok(`7b ${sc.id} route: 400 met juiste reden (${reden})`, gi.status === 400 && msgOk, JSON.stringify(gi.json));
       ok(`7b ${sc.id} route: nul schrijfacties (geen factuur, regels, document of upload)`, (await writes()) === w0, `${w0} -> ${await writes()}`);
       ok(`7b ${sc.id} rekening nog gesloten na geweigerde factuur`, (await one("select status from open_tabs where id=$1", [tabY])).status === "closed");
       // (d) direct naar de database, buiten de app om: geweigerd precies bij afwijzingsblokkade
       const dr = await own7.from("open_tabs").update({ status: "invoiced" }).eq("id", tabY).select("id");
       if (sc.expect.rejection) ok(`7b ${sc.id} database: closed -> invoiced geweigerd (afwijzingsblokkade)`, !!dr.error && /afgewezen bon/.test(dr.error.message), JSON.stringify(dr));
-      else ok(`7b ${sc.id} database: closed -> invoiced toegestaan (bekend verschil: pending_approval alleen in de app)`, !dr.error && (dr.data ?? []).length === 1, JSON.stringify(dr));
+      else ok(`7b ${sc.id} database: closed -> invoiced toegestaan (bekend verschil: wachten en nog-niet-goedgekeurd alleen in de app)`, !dr.error && (dr.data ?? []).length === 1, JSON.stringify(dr));
     } else {
       ok(`7b ${sc.id} route: factuur wordt gemaakt (201)`, gi.status === 201, JSON.stringify(gi.json));
       ok(`7b ${sc.id} rekening gefactureerd`, (await one("select status from open_tabs where id=$1", [tabY])).status === "invoiced");

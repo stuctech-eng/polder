@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateInvoicePdf } from "@/lib/documents/invoice-pdf";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { invoiceBlockReason } from "@/lib/approval/invoice-blocking";
+import { getApprovalRequired } from "@/lib/approval/approval-service";
 
 /**
  * Facturatie — genereert een factuur voor een gesloten open rekening.
@@ -51,6 +52,18 @@ export async function POST(
     );
   }
 
+  // Stap 14b: vereist het bedrijf van DEZE rekening (via de eigen sessie gelezen) goedkeuring? Fail closed: bij een
+  // leesfout stoppen, vóór factuurnummer, factuur, regels, pdf, document en statuswijziging.
+  let approvalRequired: boolean;
+  try {
+    approvalRequired = await getApprovalRequired(supabase, tab.company_id);
+  } catch {
+    return NextResponse.json(
+      { error: "Goedkeuringsinstelling van dit bedrijf kon niet worden gecontroleerd — kan geen factuur genereren" },
+      { status: 500 }
+    );
+  }
+
   const { data: receipts, error: receiptsError } = await supabase
     .from("receipts")
     .select("*")
@@ -96,26 +109,33 @@ export async function POST(
   }
   const reasons = receipts.map((r) => ({
     receipt: r,
-    reason: invoiceBlockReason(r, approvalsByReceipt.get(r.id) ?? []),
+    reason: invoiceBlockReason(r, approvalsByReceipt.get(r.id) ?? [], approvalRequired),
   }));
-  if (reasons.some((x) => x.reason === "pending")) {
-    return NextResponse.json(
-      { error: "Eén of meer bonnen wachten nog op goedkeuring — kan geen factuur genereren" },
-      { status: 400 }
-    );
-  }
+  // Alle bonnen zijn beoordeeld; de melding noemt alle problemen tegelijk (per reden), en er is nog niets aangemaakt.
+  const naam = (r: any) => (r.receipt_number ? `bon ${r.receipt_number}` : `bon zonder nummer (€${Number(r.total ?? 0).toFixed(2)})`);
+  const pendingReceipts = reasons.filter((x) => x.reason === "pending").map((x) => x.receipt);
   const rejectedReceipts = reasons.filter((x) => x.reason === "rejected").map((x) => x.receipt);
-  if (rejectedReceipts.length > 0) {
-    const names = rejectedReceipts
-      .map((r) => (r.receipt_number ? `bon ${r.receipt_number}` : `bon zonder nummer (€${Number(r.total ?? 0).toFixed(2)})`))
-      .join(", ");
+  const notSubmittedReceipts = reasons.filter((x) => x.reason === "not_submitted").map((x) => x.receipt);
+  if (pendingReceipts.length + rejectedReceipts.length + notSubmittedReceipts.length > 0) {
+    const parts: string[] = [];
+    if (pendingReceipts.length > 0) {
+      parts.push("Eén of meer bonnen wachten nog op goedkeuring — kan geen factuur genereren");
+    }
+    if (rejectedReceipts.length > 0) {
+      parts.push(
+        `Kan geen factuur genereren: ${rejectedReceipts.map(naam).join(", ")} is afgewezen en nog niet opnieuw goedgekeurd. ` +
+          "Dien de bon opnieuw in en laat hem goedkeuren, of verwijder de bon."
+      );
+    }
+    if (notSubmittedReceipts.length > 0) {
+      parts.push(
+        `Kan geen factuur genereren: ${notSubmittedReceipts.map(naam).join(", ")} is nog niet goedgekeurd en dit bedrijf vereist goedkeuring. ` +
+          "Dien de bon in en laat hem goedkeuren, of verwijder de bon."
+      );
+    }
+    const blocked = [...rejectedReceipts, ...notSubmittedReceipts];
     return NextResponse.json(
-      {
-        error:
-          `Kan geen factuur genereren: ${names} is afgewezen en nog niet opnieuw goedgekeurd. ` +
-          "Dien de bon opnieuw in en laat hem goedkeuren, of verwijder de bon.",
-        blockedReceiptIds: rejectedReceipts.map((r) => r.id),
-      },
+      { error: parts.join(" "), ...(blocked.length > 0 ? { blockedReceiptIds: blocked.map((r) => r.id) } : {}) },
       { status: 400 }
     );
   }

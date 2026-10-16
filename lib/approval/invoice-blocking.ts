@@ -12,7 +12,9 @@
  *    Een regel met alleen 'expired' blokkeert niet.
  *
  * 2. Facturatieblokkade — mag de bon nu in een factuur? Afwijzingsblokkade OF de bon
- *    wacht op goedkeuring (status 'pending_approval'). Dat laatste staat alleen in de app.
+ *    wacht op goedkeuring (status 'pending_approval') OF (stap 14b) het bedrijf vereist goedkeuring
+ *    en de bon is niet goedgekeurd (alleen 'approved'/'locked' telt; die status bewaakt de database).
+ *    Dat laatste staat alleen in de app.
  *
  * Geen databasetoegang en geen bijwerkingen: pure functies, los te testen.
  */
@@ -20,7 +22,7 @@
 export type ReceiptLike = { status: string };
 export type ApprovalLike = { status: string };
 
-export type InvoiceBlockReason = "pending" | "rejected";
+export type InvoiceBlockReason = "pending" | "rejected" | "not_submitted";
 
 /** Afwijzingsblokkade: afgewezen en nog niet opnieuw goedgekeurd. */
 export function isRejectionBlocked(receipt: ReceiptLike, approvals: ApprovalLike[]): boolean {
@@ -31,16 +33,22 @@ export function isRejectionBlocked(receipt: ReceiptLike, approvals: ApprovalLike
 }
 
 /** Facturatieblokkade: afwijzingsblokkade of bon in wacht op goedkeuring. */
-export function isInvoiceBlocked(receipt: ReceiptLike, approvals: ApprovalLike[]): boolean {
-  return invoiceBlockReason(receipt, approvals) !== null;
+export function isInvoiceBlocked(receipt: ReceiptLike, approvals: ApprovalLike[], approvalRequired = false): boolean {
+  return invoiceBlockReason(receipt, approvals, approvalRequired) !== null;
 }
 
 /**
  * Reden van de facturatieblokkade. 'pending' gaat voor 'rejected': een opnieuw ingediende bon
  * krijgt de bestaande melding "wacht nog op goedkeuring".
  */
-export function invoiceBlockReason(receipt: ReceiptLike, approvals: ApprovalLike[]): InvoiceBlockReason | null {
+export function invoiceBlockReason(
+  receipt: ReceiptLike,
+  approvals: ApprovalLike[],
+  approvalRequired = false
+): InvoiceBlockReason | null {
   if (receipt.status === "pending_approval") return "pending";
   if (isRejectionBlocked(receipt, approvals)) return "rejected";
+  // Stap 14b: bij verplichte goedkeuring telt alleen een goedgekeurde bon; elke andere status (linked, draft, onbekend) blokkeert.
+  if (approvalRequired && receipt.status !== "approved" && receipt.status !== "locked") return "not_submitted";
   return null;
 }

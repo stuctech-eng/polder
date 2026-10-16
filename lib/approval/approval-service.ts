@@ -41,6 +41,33 @@ export async function getApprovalSettings(
   };
 }
 
+export class ApprovalRequirementError extends Error {
+  constructor() {
+    super("Goedkeuringsinstelling kon niet worden gelezen");
+  }
+}
+
+/**
+ * Stap 14b: vereist dit bedrijf goedkeuring? Streng (fail closed) voor de facturatie: bij elke leesfout of exception een
+ * ApprovalRequirementError, nooit "niet vereist". Alleen als er voor dit bedrijf echt geen instelling is: false.
+ * (getApprovalSettings blijft zoals hij is; daar is "uit" bij een fout geen risico.)
+ */
+export async function getApprovalRequired(supabase: SupabaseClient, companyId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from("approval_settings")
+      .select("company_id, is_required")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (error) throw new ApprovalRequirementError();
+    if (!data) return false;
+    if (data.company_id !== companyId || typeof data.is_required !== "boolean") throw new ApprovalRequirementError();
+    return data.is_required;
+  } catch {
+    throw new ApprovalRequirementError();
+  }
+}
+
 /**
  * Side-effect bij het AANVRAGEN van goedkeuring (niet bij het bevestigen).
  * Voor PIN/restaurant_confirms is dit een no-op (niets te versturen). Voor
