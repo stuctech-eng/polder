@@ -35,6 +35,9 @@ function builder(role, sub, table){
   async function exec(){
     // cfg.writeFault = "<tabel>": elke insert/update/delete op die tabel geeft een fout (zichtbaarheid van schrijffouten)
     if(cfg.writeFault===table && q.op!=="select") return {data:null,error:{message:"boom"},count:null};
+    // cfg.hook(soort, naam) (14a): wordt aangeroepen vlak voor elke schrijfactie ("insert"/"update"/"delete", tabel) en elke rpc ("rpc", functie),
+    // om iets "tussendoor" te laten gebeuren (PIN wijzigen, tijd verschuiven, tweede verzoek)
+    if(cfg.hook && q.op!=="select") await cfg.hook(q.op, table);
     // cfg.reads: logboek van SELECTs (rol, tabel, kolommen) — om te toetsen wie wat leest en in welke volgorde
     if(q.op==="select") cfg.reads=(cfg.reads||[]).concat([{role,table,cols:q.cols}]);
     // cfg.fault.role (optioneel): alleen SELECTs van die rol falen (bv. alleen de serverlezing met de service-sleutel)
@@ -77,7 +80,7 @@ function createClient(url,key,opts){ cfg.clients=(cfg.clients||[]).concat([{key,
   return { from:t=>builder(role,sub,t),
     // rpc: roept public.<fn>() aan als deze gebruiker; cfg.rpcFault = "<fn>" geeft een fout terug (fail-closed-test)
     // met argumenten: rpc(fn, { p_a: 1, p_b: 2 }) -> select public.fn(p_a => $1, p_b => $2)
-    rpc: async (fn,args)=>{ if(cfg.rpcFault===fn) return {data:null,error:{message:"boom"}};
+    rpc: async (fn,args)=>{ if(cfg.rpcFault===fn) return {data:null,error:{message:"boom"}}; if(cfg.hook) await cfg.hook("rpc", fn);
       const ks=Object.keys(args||{}); const named=ks.map((k,i)=>`${k} => $${i+1}`).join(", ");
       const r=await runAs(role,sub,`select public.${fn}(${named}) as v`,ks.map(k=>args[k])); return r.error?{data:null,error:r.error}:{data:r.rows[0].v,error:null}; },
     auth:{ getUser: async ()=>({ data:{ user: sub?{id:sub}:null }, error:null }),

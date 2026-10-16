@@ -4,11 +4,15 @@ import { requireRole, PermissionError } from "@/lib/user-management/permission-s
 import { requireFeature } from "@/lib/features/feature-service";
 import { getApprovalSettings, verifyApproval } from "@/lib/approval/approval-service";
 import { getApprovalPin, ApprovalPinError, type ApprovalPin } from "@/lib/approval/approval-pin";
+import { methodForReceipt, type ApprovalRule } from "@/lib/approval/approval-method";
+import { startPinAttempt, finishPinAttempt, formatBlockedUntil, PinAttemptError } from "@/lib/approval/pin-attempts";
 import { z } from "zod";
 
 const approveSchema = z.object({
   credential: z.string().optional(), // PIN bij method=pin, leeg bij restaurant_confirms
 });
+
+const PIN_NIET_MOGELIJK = "PIN-controle is nu niet mogelijk, probeer het opnieuw";
 
 export async function POST(
   request: Request,
@@ -52,21 +56,54 @@ export async function POST(
     );
   }
 
-  const companyId = (receipt.open_tabs as any)?.company_id;
+  // Methode per bon (stap 14a): de wachtende regel bepaalt de methode en het bedrijf; zonder regel de bedrijfsinstelling.
+  // Dezelfde regel als de database (pin_eis) en het scherm (lib/approval/approval-method.ts). Leesfout = weigeren.
+  const { data: rules, error: rulesError } = await supabase
+    .from("approvals")
+    .select("method, company_id, status")
+    .eq("receipt_id", params.id)
+    .eq("status", "pending");
+  if (rulesError) {
+    return NextResponse.json({ error: "Goedkeuringsregels konden niet worden gelezen, probeer het opnieuw" }, { status: 500 });
+  }
+  const pendingRules = (rules ?? []) as ApprovalRule[];
+  const tabCompanyId: string | null = (receipt.open_tabs as any)?.company_id ?? null;
+  const companyId = pendingRules[0]?.company_id ?? tabCompanyId;
   if (!companyId) {
     return NextResponse.json({ error: "Bon hoort niet bij een bedrijf" }, { status: 400 });
   }
   const settings = await getApprovalSettings(supabase, companyId);
+  const forReceipt = methodForReceipt(pendingRules, tabCompanyId, settings.method);
+  if (!forReceipt.ok) {
+    return NextResponse.json({ error: forReceipt.reason }, { status: 409 });
+  }
+  const method = forReceipt.method;
 
-  // Volgorde (stap 12): rol gecontroleerd -> bon via de gebruikerssessie (RLS) -> bedrijf van die bon -> pas nu de
-  // PIN-gegevens, alleen op de server. Bij een leesfout weigeren (fail closed); hash/salt nooit in de response.
+  // Volgorde (stap 12 + 14a): rol -> bon via de gebruikerssessie (RLS) -> bedrijf van die bon -> poging reserveren
+  // (telt meteen mee) -> pas dan de PIN-gegevens, alleen op de server. Elke fout: weigeren (fail closed).
   let pin: ApprovalPin | undefined;
-  if (settings.method === "pin") {
+  let attempt: { id: string; remaining: number; blockedUntil: string | null } | undefined;
+  if (method === "pin") {
+    if (!parsed.data.credential) {
+      return NextResponse.json({ error: "PIN is verplicht" }, { status: 400 });
+    }
     try {
+      const start = await startPinAttempt(companyId, params.id);
+      if (!start.allowed) {
+        if (start.reason === "geblokkeerd") {
+          const tot = formatBlockedUntil(start.blockedUntil);
+          return NextResponse.json(
+            { error: `Te veel onjuiste pogingen. PIN-goedkeuring voor dit bedrijf is geblokkeerd${tot ? ` tot ${tot}` : ""}.` },
+            { status: 429 }
+          );
+        }
+        return NextResponse.json({ error: "Deze bon wacht niet (meer) op een PIN-goedkeuring. Vernieuw de pagina." }, { status: 409 });
+      }
+      attempt = { id: start.id, remaining: start.remaining, blockedUntil: start.blockedUntil };
       pin = await getApprovalPin(companyId);
     } catch (err) {
-      if (err instanceof ApprovalPinError) {
-        return NextResponse.json({ error: "PIN-controle is nu niet mogelijk, probeer het opnieuw" }, { status: 500 });
+      if (err instanceof PinAttemptError || err instanceof ApprovalPinError) {
+        return NextResponse.json({ error: PIN_NIET_MOGELIJK }, { status: 500 });
       }
       throw err;
     }
@@ -81,10 +118,32 @@ export async function POST(
   // De Receipt Manager / deze route kent alleen de Approval Service — geen
   // kennis van PIN-hashing of providerdetails (klant-instructie, sectie 10.7).
   const result = await verifyApproval(
-    settings,
+    { ...settings, method },
     { credential: parsed.data.credential, approverName: userProfile?.full_name ?? "Onbekend" },
     pin
   );
+
+  if (attempt) {
+    let finished;
+    try {
+      finished = await finishPinAttempt(attempt.id, result.success);
+    } catch {
+      return NextResponse.json({ error: PIN_NIET_MOGELIJK }, { status: 500 });
+    }
+    if (finished === "verlopen") {
+      return NextResponse.json({ error: "De PIN is net gewijzigd. Probeer het opnieuw met de nieuwe PIN." }, { status: 409 });
+    }
+    if (finished !== "ok") {
+      return NextResponse.json({ error: "Deze PIN-poging is al afgehandeld. Probeer het opnieuw." }, { status: 409 });
+    }
+    if (!result.success) {
+      const tot = formatBlockedUntil(attempt.blockedUntil);
+      const rest = attempt.remaining > 0
+        ? `Nog ${attempt.remaining} ${attempt.remaining === 1 ? "poging" : "pogingen"}.`
+        : `Te veel onjuiste pogingen: geblokkeerd${tot ? ` tot ${tot}` : ""}.`;
+      return NextResponse.json({ error: `${result.reason ?? "Onjuiste PIN"}. ${rest}`, remaining: attempt.remaining }, { status: 400 });
+    }
+  }
 
   if (!result.success) {
     return NextResponse.json({ error: result.reason ?? "Goedkeuring mislukt" }, { status: 400 });
@@ -92,15 +151,29 @@ export async function POST(
 
   const newReceiptStatus = settings.autoLock ? "locked" : "approved";
 
-  const { error: receiptUpdateError } = await supabase
+  // Alleen een bon die nog wacht: een tweede (dubbel) verzoek werkt 0 rijen bij en krijgt een nette melding.
+  const { data: updated, error: receiptUpdateError } = await supabase
     .from("receipts")
     .update({ status: newReceiptStatus })
-    .eq("id", params.id);
+    .eq("id", params.id)
+    .eq("status", "pending_approval")
+    .select("id");
   if (receiptUpdateError) {
+    if (/PIN-goedkeuring ontbreekt of is verlopen/.test(receiptUpdateError.message)) {
+      return NextResponse.json(
+        { error: "De PIN-controle is verlopen of ontbreekt. Voer de PIN opnieuw in." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: receiptUpdateError.message }, { status: 500 });
   }
+  if (!updated || updated.length === 0) {
+    return NextResponse.json({ error: "Deze bon is al afgehandeld." }, { status: 409 });
+  }
 
-  await supabase
+  // De bon IS nu goedgekeurd. Mislukt het bijwerken van de regel, dan geen foutmelding maar een waarschuwing:
+  // de goedkeuring staat, alleen de administratie is niet volledig bijgewerkt (regel blijft pending, later bij te werken).
+  const { error: ruleUpdateError } = await supabase
     .from("approvals")
     .update({
       status: "approved",
@@ -109,11 +182,14 @@ export async function POST(
     })
     .eq("receipt_id", params.id)
     .eq("status", "pending");
+  const warning = ruleUpdateError
+    ? "Goedgekeurd, maar de administratie is nog niet volledig bijgewerkt (goedkeuringsregel). Meld dit aan een beheerder."
+    : null;
 
   await supabase.from("domain_events").insert({
     restaurant_id: ctx.restaurantId,
     event_type: "ApprovalCompleted",
-    payload: { receipt_id: params.id, company_id: companyId, method: settings.method },
+    payload: { receipt_id: params.id, company_id: companyId, method },
     published_by: ctx.userId,
   });
 
@@ -129,10 +205,10 @@ export async function POST(
   await supabase.from("activity_log").insert({
     restaurant_id: ctx.restaurantId,
     user_id: ctx.userId,
-    action: `keurde een bon goed (${settings.method})`,
+    action: `keurde een bon goed (${method})`,
     target_table: "receipts",
     target_id: params.id,
   });
 
-  return NextResponse.json({ status: newReceiptStatus, approvedBy: userProfile?.full_name ?? null });
+  return NextResponse.json({ status: newReceiptStatus, approvedBy: userProfile?.full_name ?? null, warning });
 }

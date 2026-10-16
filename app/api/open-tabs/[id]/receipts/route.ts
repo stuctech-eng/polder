@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
-import { generateApprovalToken } from "@/lib/approval/token";
+import { getApprovalSettings, notifyApprovalRequested, submitForApproval } from "@/lib/approval/approval-service";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { isFeatureOn } from "@/lib/features/feature-service";
 import { z } from "zod";
@@ -161,37 +160,27 @@ export async function POST(
   if (tab.company_id) {
     const settings = await getApprovalSettings(supabase, tab.company_id);
     if (settings.enabled && settings.method) {
-      const { error: statusError } = await supabase
-        .from("receipts")
-        .update({ status: "pending_approval" })
-        .eq("id", receipt.id);
-
-      if (!statusError) {
+      // Indienen in een keer (bon + regel, methode uit de bedrijfsinstelling; migratie 0041). Lukt het niet, dan blijft
+      // de bon gekoppeld (niet wachtend) en ziet de gebruiker waarom: nooit een wachtende bon zonder goedkeuringsregel.
+      const submitted = await submitForApproval(supabase, receipt.id);
+      if (!submitted.ok) {
+        approvalWarning = submitted.settingChanged
+          ? "Goedkeuring is niet aangevraagd: de goedkeuringsinstelling van dit bedrijf is net gewijzigd. Dien de bon opnieuw in."
+          : `Goedkeuring is niet aangevraagd: ${submitted.error}. Dien de bon opnieuw in.`;
+      } else if (submitted.method) {
+        const method = submitted.method;
         finalStatus = "pending_approval";
-
-        // Token alleen nodig voor de publieke link-flows (email/qr) —
-        // PIN/restaurant_confirms lopen via de ingelogde, geauthenticeerde route.
-        if (settings.method === "email" || settings.method === "qr") {
-          approvalToken = generateApprovalToken();
-        }
-
-        await supabase.from("approvals").insert({
-          receipt_id: receipt.id,
-          company_id: tab.company_id,
-          method: settings.method,
-          status: "pending",
-          verification_code: approvalToken,
-        });
+        approvalToken = submitted.approvalToken;
 
         // Keuze A (fase 4): staat de module Goedkeuring uit, dan wacht de bon wel, maar gaat er geen mail uit.
-        if (settings.method === "email" && (await isFeatureOn("approval"))) {
+        if (method === "email" && (await isFeatureOn("approval"))) {
           const { data: restaurant } = await supabase
             .from("restaurants")
             .select("name")
             .eq("id", ctx.restaurantId)
             .single();
           const notifyResult = await notifyApprovalRequested({
-            settings,
+            settings: { ...settings, method },
             token: approvalToken!,
             restaurantName: restaurant?.name ?? "Restaurant",
             receiptTotal: total,
@@ -205,7 +194,7 @@ export async function POST(
         await supabase.from("domain_events").insert({
           restaurant_id: ctx.restaurantId,
           event_type: "ApprovalRequested",
-          payload: { receipt_id: receipt.id, company_id: tab.company_id, method: settings.method },
+          payload: { receipt_id: receipt.id, company_id: tab.company_id, method },
           published_by: ctx.userId,
         });
       }

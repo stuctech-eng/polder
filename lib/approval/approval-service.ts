@@ -4,6 +4,7 @@ import { pinProvider } from "./providers/pin-provider";
 import { restaurantConfirmProvider } from "./providers/restaurant-confirm-provider";
 import { sendEmail } from "@/lib/email/email-service";
 import type { ApprovalPin } from "./approval-pin";
+import { generateApprovalToken } from "./token";
 
 const PROVIDERS = {
   pin: pinProvider,
@@ -100,4 +101,27 @@ export async function verifyApproval(
   }
 
   return provider.verify(attempt, { pinHash: pin?.pinHash ?? null, pinSalt: pin?.pinSalt ?? null });
+}
+
+export type SubmitForApprovalResult =
+  | { ok: true; method: ApprovalMethod | null; approvalToken: string | null }
+  | { ok: false; error: string; settingChanged: boolean };
+
+/**
+ * Bon indienen voor goedkeuring in EEN databasetransactie (migratie 0041, bon_indienen, als de gebruiker: RLS geldt):
+ * bon op pending_approval + goedkeuringsregel met de methode uit de bedrijfsinstelling. Lukt een deel niet, dan
+ * verandert er niets (nooit een wachtende bon zonder regel). method null = goedkeuring staat voor dit bedrijf uit.
+ * De token wordt alleen bewaard en teruggegeven bij e-mail en QR.
+ */
+export async function submitForApproval(
+  supabase: SupabaseClient,
+  receiptId: string
+): Promise<SubmitForApprovalResult> {
+  const token = generateApprovalToken();
+  const { data, error } = await supabase.rpc("bon_indienen", { p_bon: receiptId, p_token: token });
+  if (error) {
+    return { ok: false, error: error.message, settingChanged: /wijkt af van de bedrijfsinstelling/i.test(error.message) };
+  }
+  const method = (data as ApprovalMethod | null) ?? null;
+  return { ok: true, method, approvalToken: method === "email" || method === "qr" ? token : null };
 }

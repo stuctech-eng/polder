@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getApprovalSettings, notifyApprovalRequested } from "@/lib/approval/approval-service";
-import { generateApprovalToken } from "@/lib/approval/token";
+import { getApprovalSettings, notifyApprovalRequested, submitForApproval } from "@/lib/approval/approval-service";
 import { requireRole, PermissionError } from "@/lib/user-management/permission-service";
 import { requireFeature } from "@/lib/features/feature-service";
 
@@ -48,47 +47,36 @@ export async function POST(
     );
   }
 
-  const settings = await getApprovalSettings(supabase, companyId);
-  if (!settings.enabled || !settings.method) {
+  // Indienen in een keer (bon + regel, methode uit de bedrijfsinstelling); lukt het niet, dan is er niets gewijzigd.
+  const submitted = await submitForApproval(supabase, params.id);
+  if (!submitted.ok) {
+    if (submitted.settingChanged) {
+      return NextResponse.json(
+        { error: "De goedkeuringsinstelling van dit bedrijf is net gewijzigd. Probeer het opnieuw." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: submitted.error }, { status: 500 });
+  }
+  const method = submitted.method;
+  if (!method) {
     return NextResponse.json(
       { error: "Goedkeuring is niet ingeschakeld voor dit bedrijf" },
       { status: 400 }
     );
   }
-
-  const { error: updateError } = await supabase
-    .from("receipts")
-    .update({ status: "pending_approval" })
-    .eq("id", params.id);
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
-  }
-
-  let approvalToken: string | null = null;
-  if (settings.method === "email" || settings.method === "qr") {
-    approvalToken = generateApprovalToken();
-  }
-
-  const { error: approvalError } = await supabase.from("approvals").insert({
-    receipt_id: params.id,
-    company_id: companyId,
-    method: settings.method,
-    status: "pending",
-    verification_code: approvalToken,
-  });
-  if (approvalError) {
-    return NextResponse.json({ error: approvalError.message }, { status: 500 });
-  }
+  const approvalToken = submitted.approvalToken;
 
   let approvalWarning: string | null = null;
-  if (settings.method === "email") {
+  if (method === "email") {
+    const settings = await getApprovalSettings(supabase, companyId);
     const { data: restaurant } = await supabase
       .from("restaurants")
       .select("name")
       .eq("id", ctx.restaurantId)
       .single();
     const notifyResult = await notifyApprovalRequested({
-      settings,
+      settings: { ...settings, method },
       token: approvalToken!,
       restaurantName: restaurant?.name ?? "Restaurant",
       receiptTotal: Number(receipt.total ?? 0),
@@ -102,7 +90,7 @@ export async function POST(
   await supabase.from("domain_events").insert({
     restaurant_id: ctx.restaurantId,
     event_type: "ApprovalRequested",
-    payload: { receipt_id: params.id, company_id: companyId, method: settings.method },
+    payload: { receipt_id: params.id, company_id: companyId, method },
     published_by: ctx.userId,
   });
 
@@ -116,7 +104,7 @@ export async function POST(
 
   return NextResponse.json({
     status: "pending_approval",
-    method: settings.method,
+    method,
     approvalToken,
     approvalWarning,
   });

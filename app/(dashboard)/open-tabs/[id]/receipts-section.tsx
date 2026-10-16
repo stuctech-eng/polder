@@ -31,6 +31,12 @@ type Receipt = {
   rejection_reason?: string | null;
   rejection_blocked?: boolean;
   notes?: string | null;
+  /** Stap 14a: methode van deze bon (wachtende regel, anders bedrijfsinstelling); ontbreekt bij een net aangemaakte bon. */
+  approval_method?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  /** Tegenstrijdige wachtende regels: niet goedkeurbaar, melding tonen. */
+  approval_conflict?: string | null;
+  /** Goedgekeurd, maar de goedkeuringsregel kon niet worden bijgewerkt. */
+  approval_warning?: string | null;
 };
 
 const VAT_RATES = [
@@ -433,13 +439,23 @@ function ReceiptItem({
         </p>
       )}
 
-      {receipt.status === "pending_approval" && approvalEnabled && (
+      {receipt.status === "pending_approval" && approvalEnabled && receipt.approval_conflict && (
+        <p className="text-xs text-red-600 mt-2" role="alert">{receipt.approval_conflict}</p>
+      )}
+
+      {receipt.status === "pending_approval" && approvalEnabled && !receipt.approval_conflict && (
         <ApprovalBlock
           receiptId={receipt.id}
-          method={approvalMethod}
+          method={receipt.approval_method !== undefined ? receipt.approval_method : approvalMethod}
           approvalToken={receipt.approval_token ?? null}
-          onApproved={(status, approvedBy) => onUpdated({ id: receipt.id, status, approved_by: approvedBy })}
+          onApproved={(status, approvedBy, warning) =>
+            onUpdated({ id: receipt.id, status, approved_by: approvedBy, approval_warning: warning ?? null })
+          }
         />
+      )}
+
+      {receipt.approval_warning && receipt.status !== "pending_approval" && (
+        <p className="text-xs text-amber-700 mt-1" role="status">{receipt.approval_warning}</p>
       )}
 
       {!isInvoiced && receipt.status !== "locked" && receipt.status !== "pending_approval" && (
@@ -507,7 +523,7 @@ function ApprovalBlock({
   receiptId: string;
   method: "pin" | "restaurant_confirms" | "email" | "qr" | null;
   approvalToken: string | null;
-  onApproved: (status: string, approvedBy?: string) => void;
+  onApproved: (status: string, approvedBy?: string, warning?: string | null) => void;
 }) {
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -518,26 +534,34 @@ function ApprovalBlock({
     setLoading(true);
     setError(null);
 
-    const response = await fetch(`/api/receipts/${receiptId}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(method === "pin" ? { credential: pin } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/receipts/${receiptId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(method === "pin" ? { credential: pin } : {}),
+      });
+    } catch {
+      setLoading(false);
+      setError("Geen verbinding met de server: de bon is niet goedgekeurd. Probeer het opnieuw.");
+      return;
+    }
 
-    const body = await response.json();
+    const body = await response.json().catch(() => ({}));
     setLoading(false);
+    setPin("");
 
     if (!response.ok) {
       setError(body.error || "Goedkeuring mislukt.");
       return;
     }
 
-    onApproved(body.status, body.approvedBy);
+    onApproved(body.status, body.approvedBy, body.warning ?? null);
   }
 
   if (method === "pin") {
     return (
-      <form onSubmit={handleApprove} className="flex gap-2 mt-2 items-center">
+      <form onSubmit={handleApprove} className="flex flex-wrap gap-2 mt-2 items-center">
         <input
           type="password"
           inputMode="numeric"
@@ -553,7 +577,7 @@ function ApprovalBlock({
         >
           {loading ? "..." : "Goedkeuren"}
         </button>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="w-full text-xs text-red-600" role="alert">{error}</p>}
       </form>
     );
   }

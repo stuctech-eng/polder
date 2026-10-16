@@ -8,6 +8,7 @@ import GenerateInvoiceButton from "./generate-invoice-button";
 import DownloadInvoiceButton from "./download-invoice-button";
 import TabEditControls from "./tab-edit-controls";
 import { isRejectionBlocked } from "@/lib/approval/invoice-blocking";
+import { methodForReceipt } from "@/lib/approval/approval-method";
 import { isFeatureOn } from "@/lib/features/feature-service";
 import Link from "next/link";
 
@@ -45,16 +46,25 @@ export default async function OpenTabDetailPage({
   const { data: receiptsRaw } = await supabase
     .from("receipts")
     .select(
-      "*, receipt_lines(*), approvals(verification_code, status, approved_by, approved_at, metadata)"
+      "*, receipt_lines(*), approvals(verification_code, status, approved_by, approved_at, metadata, method, company_id)"
     )
     .eq("open_tab_id", params.id)
     .order("created_at", { ascending: false });
+
+  const approvalSettings = tab.company_id
+    ? await getApprovalSettings(supabase, tab.company_id)
+    : null;
 
   // Guardian Mode-les: het goedkeuringstoken mag niet alleen in tijdelijke
   // client-state leven (dat verdween bij een page-refresh, zie diagnose
   // van v1.34-testronde) — hier halen we het altijd opnieuw uit de database.
   // approvedBy/rejectedBy: het meest recente afgeronde resultaat, apart per
   // uitkomst zodat een afwijzing niet ten onrechte als goedkeuring oogt.
+  const approvalForReceipt = (rules: any[]) => {
+    const m = methodForReceipt(rules, tab.company_id ?? null, approvalSettings?.method ?? null);
+    if (!m.ok) return { approval_method: null, approval_conflict: m.reason };
+    return { approval_method: m.method === "signature" ? null : m.method, approval_conflict: null };
+  };
   const receipts = receiptsRaw?.map((r: any) => {
     const pendingApproval = r.approvals?.find((a: any) => a.status === "pending");
     const resolved = (r.approvals ?? [])
@@ -68,14 +78,13 @@ export default async function OpenTabDetailPage({
       rejection_reason: resolved?.status === "rejected" ? resolved.metadata?.reason ?? null : null,
       // Plan 7b: dezelfde definitie als de facturatie-controle en de database (lib/approval/invoice-blocking.ts)
       rejection_blocked: isRejectionBlocked(r, r.approvals ?? []),
+      // Stap 14a: methode per bon, dezelfde regel als de goedkeurroute en de database (lib/approval/approval-method.ts)
+      ...approvalForReceipt(r.approvals ?? []),
     };
   });
   const blockedReceiptCount = (receipts ?? []).filter((r: any) => r.rejection_blocked).length;
 
   const approvalOn = await isFeatureOn("approval");
-  const approvalSettings = tab.company_id
-    ? await getApprovalSettings(supabase, tab.company_id)
-    : null;
 
   let invoice = null;
   if (tab.status === "invoiced") {
