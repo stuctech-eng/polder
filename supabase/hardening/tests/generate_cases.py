@@ -236,7 +236,7 @@ XR = [  # (id, titel, uitvoerder, sql, nu, na, noot)
  ("XR27", "factuurregel met eigen bon (geldig)", ADM, f"insert into invoice_lines (invoice_id, receipt_id, description, amount) values ('{A(500)}','{A(303)}','ok',1)", True, True, ""),
  ("XR28", "factuurregel in A naar bon van B (via service-role)", SVC, f"insert into invoice_lines (invoice_id, receipt_id, description, amount) values ('{A(500)}','{B(300)}','x',1)", True, False, ""),
  ("XR29", "factuurregel zonder bon blijft mogelijk", ADM, f"insert into invoice_lines (invoice_id, description, amount) values ('{A(500)}','vrij',1)", True, True, ""),
- ("XR30", "goedkeuring voor eigen bon en eigen bedrijf (geldig)", OWNER, f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','qr','pending')", True, True, ""),
+ ("XR30", "goedkeuring voor eigen bon en eigen bedrijf (geldig; methode = die van het bedrijf, vanaf 14a verplicht)", OWNER, f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','pin','pending')", True, True, ""),
  ("XR31", "goedkeuring: bon van A met bedrijf van B (via service-role)", SVC, f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{B(100)}','qr','pending')", True, False, ""),
  ("XR32", "configuratie in A met bedrijf van B", OWNER, f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}','{B(100)}','kx','{{}}')", True, False, ""),
  ("XR33", "configuratie in A met eigen bedrijf (geldig)", OWNER, f"insert into configurations (restaurant_id, company_id, key, value) values ('{RA}','{A(100)}','kx','{{}}')", True, True, ""),
@@ -648,9 +648,9 @@ case("PR22", "PRIVILEGES", "anon heeft op GEEN enkele tabel enig recht", "postgr
 case("PR23", "PRIVILEGES", "anon heeft op GEEN enkele sequence enig recht", "postgres", "check",
      "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='S' and (case when c.relkind='S' then has_sequence_privilege('anon', c.oid, 'usage,select,update') end))", True)
 case("PR24", "PRIVILEGES", "authenticated behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve restaurants, users, de drie logtabellen, de platformtabellen (0026), de moduletabellen (0028) en approval_settings (vanaf stap 12 kolomrechten: zie PK12); vanaf stap 13 niet meer (0036: zie OR-cases)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features','approval_settings') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True, False, 13, "stap 13: dode rechten ingetrokken")
-case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platform- en moduletabellen (0026/0028, bewust smaller: zie PA-/MX-cases)", "postgres", "check",
-     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not in ('platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not like 'pin\\_%' and c.relname not in ('restaurants','users','activity_log','audit_log','domain_events','platform_admins','platform_log','features','restaurant_features','approval_settings') and not (has_table_privilege('authenticated', c.oid, 'select') and has_table_privilege('authenticated', c.oid, 'insert') and has_table_privilege('authenticated', c.oid, 'update') and has_table_privilege('authenticated', c.oid, 'delete')))", True, False, 13, "stap 13: dode rechten ingetrokken")
+case("PR25", "PRIVILEGES", "service_role behoudt SELECT/INSERT/UPDATE/DELETE op alle tabellen behalve de platform- en moduletabellen (0026/0028, bewust smaller: zie PA-/MX-cases) en de PIN-tabellen (14a, bewust zonder rechten: zie PQ-cases)", "postgres", "check",
+     "select not exists (select 1 from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname not like '\\_%' and c.relname not like 'pin\\_%' and c.relname not in ('platform_admins','platform_log','features','restaurant_features') and not (has_table_privilege('service_role', c.oid, 'select') and has_table_privilege('service_role', c.oid, 'insert') and has_table_privilege('service_role', c.oid, 'update') and has_table_privilege('service_role', c.oid, 'delete')))", True)
 case("PR26", "PRIVILEGES", "authenticated heeft op restaurants alleen SELECT", "postgres", "check",
      "select has_table_privilege('authenticated','public.restaurants','select') and not has_table_privilege('authenticated','public.restaurants','insert,update,delete')", False, True, 2)
 # PR27 alleen de standaardrechten van postgres (maakt al onze objecten aan); die van supabase_admin zijn in productie ruim en niet door ons aan te passen (stap 13a)
@@ -1039,7 +1039,8 @@ case("MW13", MO, "module uit bij A: betaling bij B toevoegen blijft toegestaan (
      f"insert into payments (invoice_id, amount, method) values ('{B(501)}', 1, 'cash')", True, setup=UIT(PAY))
 # goedkeuring: wachtende bon in A (opzet met triggers uit, zoals de seed)
 WACHT_BON = REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9101)}','{RA}','pending_approval',5); "
-                 f"insert into approvals (id, receipt_id, company_id, method, status) values ('{A(9102)}','{A(9101)}','{A(100)}','pin','pending');")
+                 f"insert into approvals (id, receipt_id, company_id, method, status) values ('{A(9102)}','{A(9101)}','{A(100)}','restaurant_confirms','pending');")
+# (14a) methode restaurant_confirms: deze cases toetsen de modulewacht, niet de PIN-eis (die staat in de PQ-cases)
 wacht("MW14", "goedkeuring beslissen (pending -> approved)", f"update approvals set status = 'approved', approved_at = now(), approved_by = 'x' where id = '{A(9102)}'", APP, setup=WACHT_BON)
 wacht("MW15", "goedkeuring afwijzen (pending -> rejected)", f"update approvals set status = 'rejected', approved_at = now() where id = '{A(9102)}'", APP, setup=WACHT_BON)
 wacht("MS05", "omweg stap 2: wachtende bon -> locked", f"update receipts set status = 'locked' where id = '{A(9101)}'", APP, setup=WACHT_BON)
@@ -1190,7 +1191,7 @@ case("FW73", FW, "3 wachttriggers op de juiste tabellen en bewerkingen", "postgr
 case("FW74", FW, "module_wacht en alle bestaande trigger-functies ongewijzigd (vingerafdruk van 0030)", "postgres", "check",
      "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname = 'module_wacht'), '\\s+', ' ', 'g'))) = '1ae0dbb059cec09d9fde20aad42c9a3f' "
      "and (select md5(string_agg(p.proname || md5(p.prosrc), '|' order by p.proname)) from pg_proc p where p.pronamespace = 'public'::regnamespace "
-     "and p.prorettype = 'trigger'::regtype and p.proname not in ('module_wacht','invoices_guard','invoice_child_guard')) = '29c836f2b151411df746182866d2a985'", True)
+     "and p.prorettype = 'trigger'::regtype and p.proname not in ('module_wacht','invoices_guard','invoice_child_guard') and p.proname not like '%pin\\_wacht') = '29c836f2b151411df746182866d2a985'", True)
 # samen met de modulewacht: beide lagen weigeren elk om hun eigen reden
 case("FW80", FW, "betalingen uit: administratie zet sent -> paid: geweigerd door de module (niet door de factuurwacht)", ADM, "check",
      weiger(upd("status = 'paid'", 501), "staat uit"), True, setup=UIT(PAY))
@@ -1417,6 +1418,52 @@ for cid, who, sql in [("OR10", OWNER, f"delete from contacts where company_id = 
                       ("OR13", MGR, f"update daily_closings set closing_date = closing_date where restaurant_id = '{RA}'")]:
     case(cid, RE, f"{sql.split()[0]} op {sql.split()[1] if sql.startswith('update') else sql.split()[2]}: geen tabelrecht meer (was al 0 rijen via RLS)", who, "check",
          geen_recht(sql), False, True, S13)
+
+# ---------------------------------------------------------------- PIN-POGINGEN EN PIN-EIS (stap 14a, migraties 0037-0041)
+# Vanaf 14a bepaalt de database per bon of een PIN nodig is (pin_eis): een wachtende PIN-regel -> PIN van dat bedrijf; een
+# wachtende regel met een andere methode (qr, email, restaurant_confirms) -> geen PIN, ook als het bedrijf later op PIN is gezet;
+# geen wachtende regel -> de huidige instelling van het bedrijf. Een nieuwe regel moet de methode van het bedrijf hebben.
+# Bon 301 heeft in de seed een qr-regel: de bestaande goedkeurcases (AC03, AC15, H439, ...) blijven dus ongewijzigd toegestaan.
+S14 = 14
+PQ = "PIN14"
+PINREGEL = REPL(f"update approvals set method = 'pin' where receipt_id = '{A(301)}';")
+HEEFT14 = "to_regclass('public.pin_reserveringen') is not null"
+case("PQ01", PQ, "rechtstreeks goedkeuren als owner (PIN-bon, geen reservering): geweigerd", OWNER, "dml",
+     f"update receipts set status='approved' where id='{A(301)}'", True, False, S14, setup=PINREGEL)
+case("PQ01m", PQ, "manager vergrendelt PIN-bon rechtstreeks: geweigerd", MGR, "dml",
+     f"update receipts set status='locked' where id='{A(301)}'", True, False, S14, setup=PINREGEL)
+case("PQ01s", PQ, "publieke link (service_role) vergrendelt PIN-bon: geweigerd", "service_role", "dml",
+     f"update receipts set status='locked' where id='{A(301)}'", True, False, S14, setup=PINREGEL)
+case("PQ01g", PQ, "bon zonder wachtende regel bij PIN-bedrijf: rechtstreeks goedkeuren geweigerd", MGR, "dml",
+     f"update receipts set status='approved' where id='{A(301)}'", True, False, S14, setup=REPL(f"delete from approvals where receipt_id = '{A(301)}';"))
+case("PQ10", PQ, "nieuwe goedkeuringsregel met een andere methode dan het bedrijf (qr bij PIN-bedrijf): geweigerd", OWNER, "dml",
+     f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','qr','pending')", True, False, S14)
+case("PQ11", PQ, "nieuwe goedkeuringsregel met de methode van het bedrijf (pin): toegestaan", OWNER, "dml",
+     f"insert into approvals (receipt_id, company_id, method, status) values ('{A(300)}','{A(100)}','pin','pending')", True)
+case("PQ02", PQ, "PIN-regel op approved terwijl de bon wacht (owner): geweigerd", OWNER, "dml",
+     f"update approvals set status='approved', approved_at=now(), approved_by='x' where id='{A(9102)}'", True, False, S14,
+     setup=REPL(f"insert into receipts (id, restaurant_id, status, total) values ('{A(9101)}','{RA}','pending_approval',5); "
+                f"insert into approvals (id, receipt_id, company_id, method, status) values ('{A(9102)}','{A(9101)}','{A(100)}','pin','pending');"))
+for nr, who in (("03", OWNER), ("04", "anon"), ("05", "service_role")):
+    for tbl in ("pin_pogingen", "pin_reserveringen"):
+        case(f"PQ{nr}{tbl[4]}", PQ, f"{who} leest of wijzigt {tbl} rechtstreeks: geen recht", "postgres", "check",
+             f"select not has_table_privilege('{'authenticated' if who == OWNER else who}', 'public.{tbl}', 'select,insert,update,delete,truncate,references,trigger')",
+             True, vereist=HEEFT14)
+case("PQ06", PQ, "authenticated en anon kunnen pin_eis, pin_poging_start en pin_poging_afronden niet uitvoeren; service_role wel", "postgres", "check",
+     "select not has_function_privilege('authenticated','public.pin_poging_start(uuid,uuid)','execute') and not has_function_privilege('anon','public.pin_poging_start(uuid,uuid)','execute') "
+     "and not has_function_privilege('authenticated','public.pin_poging_afronden(uuid,boolean)','execute') and not has_function_privilege('authenticated','public.pin_eis(uuid)','execute') "
+     "and has_function_privilege('service_role','public.pin_poging_start(uuid,uuid)','execute') and has_function_privilege('service_role','public.pin_poging_afronden(uuid,boolean)','execute')",
+     True, vereist=HEEFT14)
+case("PQ07", PQ, "de drie wachtfuncties: alleen postgres mag ze uitvoeren (geen PUBLIC, geen service_role)", "postgres", "check",
+     "select bool_and(not has_function_privilege(r, f::regprocedure, 'execute')) from unnest(array['anon','authenticated','service_role']) r, "
+     "unnest(array['public.receipts_pin_wacht()','public.approvals_pin_wacht()','public.approval_settings_pin_wacht()']) f", True,
+     vereist="to_regprocedure('public.receipts_pin_wacht()') is not null")
+case("PQ08", PQ, "PIN-wachten draaien na de bestaande wachten (naamvolgorde)", "postgres", "check",
+     "select 'receipts_guard' < 'receipts_pin_wacht' and 'approvals_guard' < 'approvals_pin_wacht' and "
+     "(select count(*) from pg_trigger where tgname in ('receipts_pin_wacht','approvals_pin_wacht','approval_settings_pin_wacht') and tgenabled = 'O') = 3", True,
+     vereist="to_regprocedure('public.receipts_pin_wacht()') is not null")
+case("PQ09", PQ, "afwijzen (pending_approval -> linked) door manager blijft toegestaan zonder PIN", MGR, "dml",
+     f"update receipts set status='linked' where id='{A(301)}'", True)
 
 # ---------------------------------------------------------------- uitvoer
 def b(x): return "null" if x is None else ("true" if x else "false")

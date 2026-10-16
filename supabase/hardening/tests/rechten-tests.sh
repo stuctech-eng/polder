@@ -53,7 +53,8 @@ lint() { sql "select count(*) from pg_class c, unnest('{SELECT,INSERT,UPDATE,DEL
              and p.roles && '{authenticated,public}')"; }
 fails() { sql "select count(*) from hardening_test.run($1) where result = 'FAIL'"; }
 faillijst() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'FAIL'"; }
-skips() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'SKIP'"; }
+# alleen de RR-cases: de PQ-cases (stap 14a) worden overgeslagen zolang 0037-0042 er niet zijn
+skips() { sql "select coalesce(string_agg(id, ',' order by id), '') from hardening_test.run($1) where result = 'SKIP' and id like 'RR%'"; }
 # een nieuwe tabel aanmaken als postgres (zoals een toekomstige migratie) en de rechten tonen die hij krijgt; daarna weer weg
 nieuw() { $PSQL -d rt_test -At -c "begin; create table public.t13_proef (id int);
   select coalesce((select string_agg(x.grantee::regrole || ':' || x.privilege_type, ',' order by x.grantee::regrole::text, x.privilege_type)
