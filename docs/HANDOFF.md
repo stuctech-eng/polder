@@ -17,6 +17,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Hardening stap 14a — PIN-pogingen en PIN in de database (migraties 0037–0042, push A v1.0.100 + app push B v1.0.101)**: in productie 16 okt. Volgorde: 0037–0041 (elk met nacontrole) → app → 0042. Nulmeting `0036|000000|true|0`, `bestaand_md5` 010fecff… telkens gelijk; eindstand `0042|111111|true|3`. Rooktest door Dick geslaagd: PIN (fout en juist), QR/e-mail-link en restaurant_confirms. Hooguit 5 PIN-pogingen per 15 min per bedrijf, daarna 15 min blokkade; de database keurt een PIN-bon alleen goed met een juiste, verse reservering; de methode geldt per bon; indienen gaat in één transactie (`bon_indienen`). Zie architecture 13.26.
 - **Rekeningpagina ververst zichzelf (v1.0.103, 16 okt)**: zolang een bon wacht op QR- of e-mailgoedkeuring elke 5 s (alleen als de app zichtbaar is); rooktest door Dick geslaagd. Zie architecture v1.74.
 - **Stap 14b — factureren alleen met goedkeuring (v1.0.105, 16 okt, alleen app)**: vereist het bedrijf goedkeuring, dan weigert facturatie elke bon die niet goedgekeurd is, ook een nooit ingediende; scherm toont "Nog niet ingediend" + knop Indienen. Rooktest door Dick geslaagd (weigering met bonnaam, indienen, goedkeuren, factureren). Sluiten van de rekening blijft bewust toegestaan. Zie architecture v1.75.
+- **Bon toevoegen: duidelijke melding (v1.0.107, 16 okt)**: in plaats van "Validatiefout" de eerste fout in het Nederlands met regelnummer (bv. "Productregel 1: vul een omschrijving in."); app-test t20; door Dick getest.
 - Productie-database staat op **migratie 0042** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 - Vercel-functieregio is op 16 okt door Dick gelijkgezet aan de Supabase-regio (daarvoor standaard VS; elke databaseopdracht ging over de oceaan).
 
@@ -35,7 +36,6 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 13 (in productie 15 okt) blijven de standaardrechten van supabase_admin ruim (niet door ons aan te passen; geldt alleen voor objecten die supabase_admin aanmaakt).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
-- Bon toevoegen met alleen een bonnummer geeft "Validatiefout" zonder uitleg (er moet minstens één productregel met omschrijving zijn). Bestond al; betere melding is een klein apart punt.
 - Na goedkeuren: mislukte logregels (domain_events, activity_log) worden niet gemeld (bestond al zo).
 - 13 okt 19:04: één POST /api/open-tabs duurde 11,4 s en gaf 500 "Internal server error." (niets opgeslagen; daarna werkte het weer; geen hangende transacties). Vermoedelijk tijdelijke traagheid Supabase/Vercel. Twee testrekeningen (Demo Kantoor BV, 19:03, zonder tafel) staan nog open. Bij herhaling: Vercel- en Supabase-logs bekijken.
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
@@ -50,7 +50,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
-- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.105 (+ docs).
+- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.107 (+ docs).
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris).
 
 ## Waar staat wat (bestanden en plekken)
