@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.73** — HARDENING STAP 14a, PIN-POGINGEN EN PIN IN DE DATABASE (in productie 16 okt; push A v1.0.100 = database, push B v1.0.101 = app): migraties `0037`–`0042` + rollbacks (tabellen, `pin_eis` en afronden, reserveren, wachten op instelling en regel, `bon_indienen`, wacht op de bon); controleblok `prod-pin14-checks.sql`; `pinpogingen-tests.sh` (126 op PG16 en PG17), 11 PIN14-cases (harnas 1183); app: goedkeurroute met PIN-poging, methode per bon (`lib/approval/approval-method.ts`), `lib/approval/pin-attempts.ts`, indienen via `bon_indienen`; app-test t17 (34); sectie 13.26.
+
 **v1.72** — HARDENING STAP 13, OVERBODIGE RECHTEN (in productie 15 okt, push v1.0.98): productie gemeten (13a, PG17.6); migratie `0036_overbodige_rechten.sql` + rollback (alleen voor de gemeten PG17-stand; PG16 breekt bewust af); vingerafdruk over tabel-, sequence-, kolom- en standaardrechten; `prod-rechten-checks.sql`, `prod-rechten-inventaris.sql`, `tests/prod-inventaris-13a.txt`, `tests/local-prod17-stand.sql` (`PRODSTAND=1`), `rechten-tests.sh` (63 PG17, 4 PG16; met kolomrechten en mutatiebewijs), 11 RECHTEN13-cases; sectie 13.25.
 
 **v1.71** — HARDENING STAP 12, PIN-GEGEVENS: `getApprovalSettings` leest geen PIN meer; nieuw `lib/approval/approval-pin.ts` (hash/salt alleen op de server, service-sleutel, fail closed); goedkeurroute (volgorde rol → bon → bedrijf → PIN) en instellingenroute (ja/nee "PIN bestaat") aangepast; migratie `0035_pin_kolommen.sql` + rollback (noodmaatregel); `prod-pin-checks.sql`, 12 PIN12-cases, `pin-tests.sh` (21), app-test t16 (20); sectie 13.24. Lokaal getest (PG16 + PG17); in productie op 13 okt (app v1.0.96, daarna 0035), controle en rooktest geslaagd.
@@ -2159,3 +2161,66 @@ authenticated nog automatisch S/I/U/D (bewust: elke nieuwe tabel krijgt eigen po
 `afd46a82…`; de drie md5's vóór en na gelijk (service `36f1d931…`, supabase_admin `a7e1a474…`, policies+functies
 `c25cd844…def3072f…`; anders dan lokaal door de lokale testtabel en functies, alleen bedoeld voor vóór/na in productie).
 Rooktest door Dick geslaagd (dashboard, rekening, bon met PIN goedkeuren, factuur, betaling, dagafsluiting, instellingen).
+
+### 13.26 HARDENING STAP 14a — PIN-pogingen beperken en PIN in de database afdwingen (migraties 0037–0042 + app, 2026-10-15/16) — IN PRODUCTIE (16 okt)
+
+**Probleem.** (1) Wie APPROVE_RECEIPTS had, kon via de goedkeurroute onbeperkt PIN's proberen. (2) De PIN werd alleen in de app
+gecontroleerd: een manager kon een PIN-bon rechtstreeks in de database goedkeuren zonder PIN, ook door de rekening tijdelijk aan
+een ander bedrijf te koppelen. (3) Indienen gebeurde in twee losse stappen (bon op pending_approval, daarna de regel); mislukte de
+tweede, dan bleef een bon wachten zonder regel.
+
+**Besluit methode per bon (15 okt).** Alle methoden blijven: PIN, QR, e-mail en restaurant_confirms. De database bepaalt per bon
+welke methode geldt, zodat een latere wijziging van de bedrijfsinstelling een wachtende bon niet onverwacht blokkeert:
+wachtende PIN-regel → PIN van dat bedrijf; wachtende regel met een andere methode → geen PIN; geen wachtende regel → de huidige
+bedrijfsinstelling. Een nieuwe regel moet de methode van de bedrijfsinstelling hebben. Scherm, goedkeurroute en database volgen
+dezelfde regel (`pin_eis` in de database, `methodForReceipt` in de app); tegenstrijdige wachtende regels → weigeren met melding.
+
+**Database.**
+- `0037` tabellen `pin_pogingen` (per bedrijf: generatie, geblokkeerd_tot) en `pin_reserveringen` (per poging: bon, generatie,
+  status lopend/fout/juist/verlopen); RLS aan, geen rechten en geen policies voor anon/authenticated/service_role.
+- `0038` `pin_eis(bon)` (methode-per-bon-regel) en `pin_poging_afronden(id, juist)`; `0039` `pin_poging_start(bedrijf, bon)`.
+  Alleen service_role (de goedkeurroute, na requireRole). Een poging telt vooraf mee (fout tot het tegendeel blijkt): hooguit 5
+  lopend/fout per glijdend venster van 15 minuten per bedrijf en generatie; de 5e zet 15 minuten blokkade. Een juiste 5e poging
+  keurt die bon wel goed, maar de blokkade blijft (bewust). Slotvolgorde overal: bon → rekening (for share) → bedrijfsslot →
+  reservering; tijd (`clock_timestamp`) pas na het slot.
+- `0040` wachten: PIN wijzigen → generatie + 1 en blokkade weg (lopende pogingen worden "verlopen"); nieuwe goedkeuringsregel moet
+  de methode van de bedrijfsinstelling hebben; een PIN-regel pas op approved nadat de bon zelf is goedgekeurd.
+- `0041` `bon_indienen(bon, token)`, SECURITY INVOKER (dezelfde RLS en wachten als de gebruiker; alleen authenticated): bon op
+  pending_approval + regel met de methode uit de instelling in één transactie. Wijzigt de instelling precies tussendoor, dan
+  weigert de wacht van 0040 de regel en draait alles terug (geen half werk).
+- `0042` wacht op de bon: pending_approval → approved/locked eist bij een PIN-bon een juiste, onverbruikte reservering van deze bon,
+  dit bedrijf en deze generatie, jonger dan 2 minuten, en verbruikt die. Geen uitzondering voor service_role (de publieke link kan
+  een PIN-bon dus niet vergrendelen). Vanaf 0042 kan de oude app een PIN-bon niet meer goedkeuren: daarom 0042 pas na de app.
+- Elke migratie controleert vooraf de vorige stand en achteraf eigenaar, search_path, rechten en triggers; rollbacks alleen in
+  omgekeerde volgorde, precies de eigen objecten (rollback 0042 = noodmaatregel: PIN-bon weer zonder PIN goed te keuren).
+- Controleblok `prod-pin14-checks.sql` (alleen lezen): stand via 6 bits (0036…0042, anders ONBEKEND), `nieuw_ok` (eigenaar,
+  search_path, INVOKER/DEFINER, rechten, RLS, geen policies), aantal wachten (0040/0041 = 2, 0042 = 3), `bestaand_md5` van alle
+  bestaande functies, triggers, policies, tabel-/kolomrechten en standaardrechten (niet: kolommen, constraints, indexen; de
+  migraties maken alleen nieuwe objecten).
+
+**App (push B).** Goedkeurroute: rol → bon via de gebruikerssessie → wachtende regel(s) → methode per bon → bij PIN eerst
+`pin_poging_start` (vóór het lezen van de hash; bij blokkade 429 met tijd en de hash wordt niet gelezen) → hash controleren →
+`pin_poging_afronden` → bon bijwerken met `status = pending_approval`-filter (dubbel verzoek: 409 "al afgehandeld") → regel bijwerken
+(mislukt dat na goedkeuring: 200 met waarschuwing, geen misleidende 500). Meldingen: "Onjuiste PIN. Nog N pogingen", "geblokkeerd
+tot HH:MM", "PIN net gewijzigd", "verlopen, voer de PIN opnieuw in". Fail closed bij elke rpc- of leesfout. Scherm: per bon de
+methode van de wachtende regel; tegenstrijdige regels = melding in plaats van knop. Indienen (request-approval en nieuwe bon)
+via `submitForApproval` → `bon_indienen`; mislukt het, dan blijft de bon gekoppeld en is de fout zichtbaar.
+
+**Tests.** `pinpogingen-tests.sh` 126/126 op PG16 en PG17: volgorde- en rollbacktests, vaste volgordes a–u (blokkade, dubbel
+afronden, PIN-wijziging, 15-minutengrens, 2-minutengrens, hergebruik, bedrijfswissel ook gelijktijdig, methode per bon, indienen
+als gebruiker met RLS, gelijktijdige instellingwijziging in beide volgordes en met verbreed venster), parallel 50 rondes × 30
+sessies zonder deadlocks, ±20 kapotte versies gevangen (o.a. bon_indienen als DEFINER: de tenantcontrole faalt aantoonbaar).
+Harnas 1183 cases (11 PIN14). App-test t17 34/34 (PG16 en PG17; op 0041 zonder wacht precies 1 anders: de 2-minutengrens);
+6 app-mutaties elk gevangen; t7–t16 per regel gelijk (nieuwe app op 0041 en 0042, oude app op 0041); tsc en next build geslaagd.
+
+**Productie (16 okt).** Push A `74d6025` (alleen database en tests). Controleblok vooraf `0036|000000|true|0`, nulmeting
+`bestaand_md5 = 010fecff28332cf4cec81343dcb327dd`. Daarna 0037, 0038, 0039, 0040, 0041 elk met nacontrole
+(`0037|100000|true|0`, `0038|110000|true|0`, `0039|111000|true|0`, `0040|111100|true|2`, `0041|111110|true|2`), vingerafdruk telkens
+gelijk; rooktest oude app na 0040 en na 0041 geslaagd. Push B `4ff4b27` (app); rooktest nieuwe app geslaagd. Daarna 0042,
+nacontrole `0042|111111|true|3`, vingerafdruk gelijk. Rooktest door Dick met 0042: PIN (fout en juist), QR/e-mail-link en
+restaurant_confirms werken. Bij de link was het eerst traag; Dick heeft daarna de Vercel-functieregio gelijkgezet aan de
+Supabase-regio, daarna duidelijk sneller.
+
+**Restrisico en open.** Blokkade is per bedrijf: iemand met APPROVE_RECEIPTS kan een bedrijf 15 minuten blokkeren (bewust; zichtbaar
+in de logregels). Een vastgelopen poging telt hooguit 15 minuten mee. Logfouten na goedkeuren (domain_events, activity_log) worden
+nog niet gemeld (bestond al zo). Approval is in de database nog niet verplicht bij indienen (14b).

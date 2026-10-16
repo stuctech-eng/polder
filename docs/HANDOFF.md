@@ -1,4 +1,4 @@
-# HANDOFF — waar we gebleven zijn (bijgewerkt 15 okt 2026)
+# HANDOFF — waar we gebleven zijn (bijgewerkt 16 okt 2026)
 
 Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
@@ -14,7 +14,9 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Hardening stap 11 — rolrechten dagafsluiting, bedrijven, instellingen (migraties 0033–0034, v1.0.94)**: in productie sinds 13 okt 17:35. Controle vooraf 0032/12/12/12/12/leeg, na 0033 0033/12/19/6/6, na 0034 0034/12/22/0/0/true; `guards_md5` (a324f688…), `module_wacht_md5` (1d1de1f5…), `modules_md5` (6fa1b0af…) en `overige_md5` (1a66865a…) telkens gelijk. Rooktest door Dick als owner: "alles lijkt oké" (dagafsluiting-pagina leesbaar). Geen ALL-policy meer in de database. email_settings bestaat in productie niet (eerste controle gaf 12 i.p.v. 13; 0034, rollback en leesblok daarop aangepast vóór uitvoering). Zie architecture 13.23.
 - **Hardening stap 12 — PIN-gegevens (app v1.0.96 + migratie 0035)**: app live 13 okt 18:56, migratie 18:59. Controle vooraf 0034|true|true|10|false|true|true, na 0035 0035|true|false|8|false|true|true; vijf md5's (guards a324f688…, module_wacht 1d1de1f5…, modules 6fa1b0af…, policies c25cd844…, rechten 99e393ef…) gelijk. Rooktest door Dick geslaagd (PIN instellen, opslaan zonder PIN, foute PIN geweigerd, juiste PIN goedgekeurd). Medewerkers kunnen pin_hash/pin_salt niet meer lezen; de server leest ze alleen in de goedkeurroute. Zie architecture 13.24.
 - **Hardening stap 13 — overbodige rechten (migratie 0036, push v1.0.98)**: in productie 15 okt 06:53. Controle vooraf `voor 0036|34|25|true|0` (vingerafdruk 469416b6…), na `na 0036|0|0|false|0` (afd46a82…); drie md5's (service 36f1d931…, supabase_admin a7e1a474…, policies+functies c25cd844…def3072f…) gelijk. Rooktest door Dick geslaagd. Medewerkers (authenticated) hebben nu alleen nog tabelrechten waar een policy bij hoort; geen MAINTAIN meer voor anon/authenticated, ook niet op nieuwe tabellen. Alleen voor de gemeten PG17.6-stand (op PG16 breekt 0036 bewust af). Zie architecture 13.25.
-- Productie-database staat op **migratie 0036** (0023 niet uitgevoerd). Productie bevat alleen testdata.
+- **Hardening stap 14a — PIN-pogingen en PIN in de database (migraties 0037–0042, push A v1.0.100 + app push B v1.0.101)**: in productie 16 okt. Volgorde: 0037–0041 (elk met nacontrole) → app → 0042. Nulmeting `0036|000000|true|0`, `bestaand_md5` 010fecff… telkens gelijk; eindstand `0042|111111|true|3`. Rooktest door Dick geslaagd: PIN (fout en juist), QR/e-mail-link en restaurant_confirms. Hooguit 5 PIN-pogingen per 15 min per bedrijf, daarna 15 min blokkade; de database keurt een PIN-bon alleen goed met een juiste, verse reservering; de methode geldt per bon; indienen gaat in één transactie (`bon_indienen`). Zie architecture 13.26.
+- Productie-database staat op **migratie 0042** (0023 niet uitgevoerd). Productie bevat alleen testdata.
+- Vercel-functieregio is op 16 okt door Dick gelijkgezet aan de Supabase-regio (daarvoor standaard VS; elke databaseopdracht ging over de oceaan).
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
@@ -22,7 +24,9 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
-2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10, 11 en 12 in productie; 13 (opruimen grants) in productie sinds 15 okt), privacyfase, gecontroleerde supporttoegang.
+2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10–13 en 14a in productie), privacyfase, gecontroleerde supporttoegang.
+3. Afgesproken als eerstvolgende kleine stap (16 okt): de rekeningpagina ververst zichzelf zolang er een bon wacht op QR- of e-mailgoedkeuring.
+4. 14b (nog te plannen): goedkeuring in de database verplicht maken (een bon voor een bedrijf met goedkeuring kan nu nog zonder indienen of zonder regel verder).
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
@@ -30,7 +34,8 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 13 (in productie 15 okt) blijven de standaardrechten van supabase_admin ruim (niet door ons aan te passen; geldt alleen voor objecten die supabase_admin aanmaakt).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
-- PIN-pogingenlimiet: wie APPROVE_RECEIPTS heeft kan via de goedkeurroute onbeperkt PIN's proberen (apart punt, niet in stap 12).
+- Bon toevoegen met alleen een bonnummer geeft "Validatiefout" zonder uitleg (er moet minstens één productregel met omschrijving zijn). Bestond al; betere melding is een klein apart punt.
+- Na goedkeuren: mislukte logregels (domain_events, activity_log) worden niet gemeld (bestond al zo).
 - 13 okt 19:04: één POST /api/open-tabs duurde 11,4 s en gaf 500 "Internal server error." (niets opgeslagen; daarna werkte het weer; geen hangende transacties). Vermoedelijk tijdelijke traagheid Supabase/Vercel. Twee testrekeningen (Demo Kantoor BV, 19:03, zonder tafel) staan nog open. Bij herhaling: Vercel- en Supabase-logs bekijken.
 - TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
@@ -44,7 +49,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
-- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.90.
+- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.101 (+ docs).
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris).
 
 ## Waar staat wat (bestanden en plekken)
@@ -57,13 +62,14 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**
-- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt).
-- `supabase/rollbacks/`: rollbacks per stap (0022–0030).
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt). `0031`–`0042`: in productie (0037–0042 sinds 16 okt).
+- `supabase/rollbacks/`: rollbacks per stap (0022–0042).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 
 **Tests (alles lokaal, nooit op productie)**
 - `supabase/hardening/tests/`: `00_harness.sql` (incl. `inactief_dml`), `generate_cases.py` → `10_cases.sql` (693 cases), `local-build.sh` (`TOT=0022|0024`, `MET_0023=1`; seed met replica), `tenantswitch-tests.sh` (22 checks), `preflight-0023-tests.sh`, `invoice-block-scenarios.json`.
-- `supabase/hardening/tests/app-regression/`: t7 (173 checks; zonder 0023 14 bekende FAIL) en t8 (39). Paden zijn sandboxpaden: aanpassen in een nieuwe omgeving (host, gebruiker, database, repo-pad).
+- `supabase/hardening/tests/app-regression/`: t7 (173 checks; zonder 0023 14 bekende FAIL) t/m t17 (stap 14a, 34 checks); zie de README daar. Paden zijn sandboxpaden: aanpassen in een nieuwe omgeving (host, gebruiker, database, repo-pad).
+- `supabase/hardening/tests/pinpogingen-tests.sh`: stap 14a (126 checks, PG16 en PG17).
 - PostgreSQL 17 lokaal (productie draait 17): `npm install --ignore-scripts @embedded-postgres/linux-x64@17.6.0-beta.15` en de symlinks uit `native/pg-symlinks.json` aanmaken.
 
 **Buiten de repo**
