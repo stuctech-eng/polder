@@ -7,7 +7,7 @@ import * as settingsRoute from "@/app/api/companies/[id]/approval-settings/route
 import * as requestApproval from "@/app/api/receipts/[id]/request-approval/route";
 import * as newReceipt from "@/app/api/open-tabs/[id]/receipts/route";
 import OpenTabDetailPage from "@/app/(dashboard)/open-tabs/[id]/page";
-import { methodForReceipt, CONFLICTING_RULES } from "@/lib/approval/approval-method";
+import { methodForReceipt, CONFLICTING_RULES, ADMIN_INCOMPLETE_WARNING } from "@/lib/approval/approval-method";
 import { hashPin } from "@/lib/approval/providers/pin-provider";
 // @ts-ignore
 import { cfg, end } from "@supabase/supabase-js";
@@ -165,7 +165,12 @@ function walk(el: any, f: (e: any) => void) {
   // ===== 9. goedgekeurd, maar de regel kan niet worden bijgewerkt: 200 met waarschuwing
   cfg.writeFault = "approvals"; r = await approveAls("mgr", k8, "8642"); cfg.writeFault = undefined;
   ok("25 regel bijwerken faalt na goedkeuring: 200 MET waarschuwing, bon vergrendeld, regel nog pending",
-     r.status === 200 && /Goedgekeurd, maar de administratie is nog niet volledig bijgewerkt/.test(r.json.warning ?? "") && (await status(k8)) === "locked" && (await regels(k8)).s === "pin:pending", JSON.stringify(r));
+     r.status === 200 && r.json.warning === ADMIN_INCOMPLETE_WARNING && (await status(k8)) === "locked" && (await regels(k8)).s === "pin:pending", JSON.stringify(r));
+  as("owner");
+  let na: any[] = []; walk(await OpenTabDetailPage({ params: { id: A(200) } }), (e) => { if (Array.isArray(e.props?.initialReceipts)) na = e.props.initialReceipts; });
+  const vn = (id: string) => na.find((b) => b.id === id) ?? {};
+  ok("25b scherm na herladen/verversen: de waarschuwing komt uit de database en blijft staan (k8); volledig afgehandelde bon zonder (k1)",
+     vn(k8).approval_warning === ADMIN_INCOMPLETE_WARNING && vn(k1).approval_warning === null, JSON.stringify([vn(k8).approval_warning, vn(k1).approval_warning]));
 
   // ===== 10. indienen in een keer
   as("mgr");

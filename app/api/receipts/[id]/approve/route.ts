@@ -4,7 +4,7 @@ import { requireRole, PermissionError } from "@/lib/user-management/permission-s
 import { requireFeature } from "@/lib/features/feature-service";
 import { getApprovalSettings, verifyApproval } from "@/lib/approval/approval-service";
 import { getApprovalPin, ApprovalPinError, type ApprovalPin } from "@/lib/approval/approval-pin";
-import { methodForReceipt, type ApprovalRule } from "@/lib/approval/approval-method";
+import { methodForReceipt, ADMIN_INCOMPLETE_WARNING, type ApprovalRule } from "@/lib/approval/approval-method";
 import { startPinAttempt, finishPinAttempt, formatBlockedUntil, PinAttemptError } from "@/lib/approval/pin-attempts";
 import { z } from "zod";
 
@@ -182,9 +182,7 @@ export async function POST(
     })
     .eq("receipt_id", params.id)
     .eq("status", "pending");
-  const warning = ruleUpdateError
-    ? "Goedgekeurd, maar de administratie is nog niet volledig bijgewerkt (goedkeuringsregel). Meld dit aan een beheerder."
-    : null;
+  const warning = ruleUpdateError ? ADMIN_INCOMPLETE_WARNING : null;
 
   await supabase.from("domain_events").insert({
     restaurant_id: ctx.restaurantId,

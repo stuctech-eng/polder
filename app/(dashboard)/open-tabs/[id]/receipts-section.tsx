@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requestResubmit } from "@/lib/approval/resubmit";
+import { needsAutoRefresh, AUTO_REFRESH_MS } from "@/lib/approval/auto-refresh";
 
 type ReceiptLine = {
   description: string;
@@ -35,7 +36,7 @@ type Receipt = {
   approval_method?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
   /** Tegenstrijdige wachtende regels: niet goedkeurbaar, melding tonen. */
   approval_conflict?: string | null;
-  /** Goedgekeurd, maar de goedkeuringsregel kon niet worden bijgewerkt. */
+  /** Goedgekeurd, maar de goedkeuringsregel kon niet worden bijgewerkt (van de server, of net gemeld door de goedkeurroute). */
   approval_warning?: string | null;
 };
 
@@ -63,6 +64,26 @@ export function ReceiptsSection({
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
+  // Na router.refresh() komen er nieuwe gegevens van de server: die overnemen (anders bleef de lijst op de eerste stand staan).
+  useEffect(() => {
+    setReceipts(initialReceipts);
+  }, [initialReceipts]);
+
+  // Wacht er een bon op goedkeuring via QR of e-mail (op een ander toestel), dan elke 5 seconden verversen, alleen
+  // zolang de app zichtbaar is; bij terugkomen in de app meteen een keer. Wacht er niets meer, dan stopt het vanzelf.
+  const autoRefresh = needsAutoRefresh(receipts, approvalEnabled, approvalMethod);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const timer = window.setInterval(refreshIfVisible, AUTO_REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [autoRefresh, router]);
   const [showForm, setShowForm] = useState(false);
   const [receiptNumber, setReceiptNumber] = useState("");
   const [lines, setLines] = useState<ReceiptLine[]>([

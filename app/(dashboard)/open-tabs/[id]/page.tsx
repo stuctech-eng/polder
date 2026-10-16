@@ -8,7 +8,7 @@ import GenerateInvoiceButton from "./generate-invoice-button";
 import DownloadInvoiceButton from "./download-invoice-button";
 import TabEditControls from "./tab-edit-controls";
 import { isRejectionBlocked } from "@/lib/approval/invoice-blocking";
-import { methodForReceipt } from "@/lib/approval/approval-method";
+import { methodForReceipt, approvalWarningFor } from "@/lib/approval/approval-method";
 import { isFeatureOn } from "@/lib/features/feature-service";
 import Link from "next/link";
 
@@ -80,6 +80,8 @@ export default async function OpenTabDetailPage({
       rejection_blocked: isRejectionBlocked(r, r.approvals ?? []),
       // Stap 14a: methode per bon, dezelfde regel als de goedkeurroute en de database (lib/approval/approval-method.ts)
       ...approvalForReceipt(r.approvals ?? []),
+      // goedgekeurd terwijl een regel nog pending staat: waarschuwing uit de database, verdwijnt pas als het opgelost is
+      approval_warning: approvalWarningFor(r.status, r.approvals ?? []),
     };
   });
   const blockedReceiptCount = (receipts ?? []).filter((r: any) => r.rejection_blocked).length;

@@ -20,6 +20,17 @@ export type ReceiptApprovalMethod =
 export const CONFLICTING_RULES =
   "Deze bon heeft tegenstrijdige goedkeuringsregels en kan zo niet worden goedgekeurd. Neem contact op met een beheerder.";
 
+/** Bon is goedgekeurd, maar een goedkeuringsregel staat nog op pending (bijwerken mislukte na de goedkeuring). */
+export const ADMIN_INCOMPLETE_WARNING =
+  "Goedgekeurd, maar de administratie is nog niet volledig bijgewerkt (goedkeuringsregel). Meld dit aan een beheerder.";
+
+/** Waarschuwing uit de servergegevens: blijft staan zolang het probleem echt bestaat (ook na verversen of herladen). */
+export function approvalWarningFor(status: string, rules: { status: string }[]): string | null {
+  return (status === "approved" || status === "locked") && rules.some((r) => r.status === "pending")
+    ? ADMIN_INCOMPLETE_WARNING
+    : null;
+}
+
 export function methodForReceipt(
   rules: ApprovalRule[],
   tabCompanyId: string | null,
