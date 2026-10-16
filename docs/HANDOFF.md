@@ -15,6 +15,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Hardening stap 12 — PIN-gegevens (app v1.0.96 + migratie 0035)**: app live 13 okt 18:56, migratie 18:59. Controle vooraf 0034|true|true|10|false|true|true, na 0035 0035|true|false|8|false|true|true; vijf md5's (guards a324f688…, module_wacht 1d1de1f5…, modules 6fa1b0af…, policies c25cd844…, rechten 99e393ef…) gelijk. Rooktest door Dick geslaagd (PIN instellen, opslaan zonder PIN, foute PIN geweigerd, juiste PIN goedgekeurd). Medewerkers kunnen pin_hash/pin_salt niet meer lezen; de server leest ze alleen in de goedkeurroute. Zie architecture 13.24.
 - **Hardening stap 13 — overbodige rechten (migratie 0036, push v1.0.98)**: in productie 15 okt 06:53. Controle vooraf `voor 0036|34|25|true|0` (vingerafdruk 469416b6…), na `na 0036|0|0|false|0` (afd46a82…); drie md5's (service 36f1d931…, supabase_admin a7e1a474…, policies+functies c25cd844…def3072f…) gelijk. Rooktest door Dick geslaagd. Medewerkers (authenticated) hebben nu alleen nog tabelrechten waar een policy bij hoort; geen MAINTAIN meer voor anon/authenticated, ook niet op nieuwe tabellen. Alleen voor de gemeten PG17.6-stand (op PG16 breekt 0036 bewust af). Zie architecture 13.25.
 - **Hardening stap 14a — PIN-pogingen en PIN in de database (migraties 0037–0042, push A v1.0.100 + app push B v1.0.101)**: in productie 16 okt. Volgorde: 0037–0041 (elk met nacontrole) → app → 0042. Nulmeting `0036|000000|true|0`, `bestaand_md5` 010fecff… telkens gelijk; eindstand `0042|111111|true|3`. Rooktest door Dick geslaagd: PIN (fout en juist), QR/e-mail-link en restaurant_confirms. Hooguit 5 PIN-pogingen per 15 min per bedrijf, daarna 15 min blokkade; de database keurt een PIN-bon alleen goed met een juiste, verse reservering; de methode geldt per bon; indienen gaat in één transactie (`bon_indienen`). Zie architecture 13.26.
+- **Rekeningpagina ververst zichzelf (v1.0.103, 16 okt)**: zolang een bon wacht op QR- of e-mailgoedkeuring elke 5 s (alleen als de app zichtbaar is); rooktest door Dick geslaagd. Zie architecture v1.74.
 - Productie-database staat op **migratie 0042** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 - Vercel-functieregio is op 16 okt door Dick gelijkgezet aan de Supabase-regio (daarvoor standaard VS; elke databaseopdracht ging over de oceaan).
 
@@ -25,8 +26,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 ## Volgende stappen (elk met eigen expliciete GO)
 1. Default Restaurant, afzendernaam per restaurant, factuurnummer uniek per restaurant.
 2. Vóór het eerste echte tweede restaurant: rolrechten (stap 10–13 en 14a in productie), privacyfase, gecontroleerde supporttoegang.
-3. Afgesproken als eerstvolgende kleine stap (16 okt): de rekeningpagina ververst zichzelf zolang er een bon wacht op QR- of e-mailgoedkeuring.
-4. 14b (nog te plannen): goedkeuring in de database verplicht maken (een bon voor een bedrijf met goedkeuring kan nu nog zonder indienen of zonder regel verder).
+3. 14b (nog te plannen): goedkeuring in de database verplicht maken (een bon voor een bedrijf met goedkeuring kan nu nog zonder indienen of zonder regel verder).
    Besluiten 12 okt: D6 = draft -> paid blijft toegestaan; ongebruikte tabellen (integration_plugins, email_settings, notifications) in stap 11 helemaal dicht voor restaurantrollen; volgorde 10 → 11 → 12 → 13.
 
 ## Open punten (niet vergeten)
@@ -37,7 +37,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Bon toevoegen met alleen een bonnummer geeft "Validatiefout" zonder uitleg (er moet minstens één productregel met omschrijving zijn). Bestond al; betere melding is een klein apart punt.
 - Na goedkeuren: mislukte logregels (domain_events, activity_log) worden niet gemeld (bestond al zo).
 - 13 okt 19:04: één POST /api/open-tabs duurde 11,4 s en gaf 500 "Internal server error." (niets opgeslagen; daarna werkte het weer; geen hangende transacties). Vermoedelijk tijdelijke traagheid Supabase/Vercel. Twee testrekeningen (Demo Kantoor BV, 19:03, zonder tafel) staan nog open. Bij herhaling: Vercel- en Supabase-logs bekijken.
-- TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, receipt-pagina ververst niet automatisch, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
+- TM11/D2 blijft OPEN. D1–D9, UTC-weergavefout, Resend-domeinverificatie, gesloten rekening heropenen, creditnota, orphan account D4 (niet verwijderen), `rls_auto_enable()` nooit wijzigen.
 - Testrestaurant "Test restaurant" staat in productie (testdata, aangemaakt via het beheerscherm).
 - "Eigenaar uitnodigen" is nog niet in productie getest (mail valt onder de Resend-testlimiet).
 - Zijtak `plan-7b-0023-voorbereid` op GitHub: alle bestanden staan ook op main, maar de zijtak bevat de enige kopie van de oude commitgeschiedenis (v1.0.2–v1.0.74; main begint bij v1.0.76). Bewust laten staan (archief). De rode "Error" in Vercel hoort bij een oude preview van die tak en is onschuldig.
@@ -49,7 +49,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
-- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.101 (+ docs).
+- Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.103 (+ docs).
 - Geen algemene service_role-bypass in triggers; service_role-rechten niet blind verwijderen (eerst inventaris).
 
 ## Waar staat wat (bestanden en plekken)
