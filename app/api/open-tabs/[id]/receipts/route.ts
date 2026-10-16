@@ -6,18 +6,27 @@ import { isFeatureOn } from "@/lib/features/feature-service";
 import { z } from "zod";
 
 const receiptLineSchema = z.object({
-  description: z.string().min(1, "Omschrijving is verplicht"),
-  quantity: z.number().positive(),
-  unitPrice: z.number().nonnegative(),
-  vatRate: z.number().nonnegative(),
+  description: z.string().trim().min(1, "vul een omschrijving in"),
+  quantity: z.number({ invalid_type_error: "het aantal is geen getal" }).positive("het aantal moet groter zijn dan 0"),
+  unitPrice: z.number({ invalid_type_error: "de prijs is geen getal" }).nonnegative("de prijs mag niet negatief zijn"),
+  vatRate: z.number({ invalid_type_error: "het btw-percentage is geen getal" }).nonnegative("het btw-percentage mag niet negatief zijn"),
 });
 
 const receiptSchema = z.object({
   receiptNumber: z.string().optional(),
   receiptDate: z.string().optional(),
   notes: z.string().optional(),
-  lines: z.array(receiptLineSchema).min(1, "Minimaal één productregel is verplicht"),
+  lines: z.array(receiptLineSchema).min(1, "Voeg minstens één productregel toe."),
 });
+
+/** Leesbare melding voor de gebruiker: de eerste fout, bij een productregel met het regelnummer (16 okt: was "Validatiefout"). */
+function validationMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "De bon is niet volledig ingevuld.";
+  const [field, index] = issue.path;
+  if (field === "lines" && typeof index === "number") return `Productregel ${index + 1}: ${issue.message}.`;
+  return issue.message;
+}
 
 export async function GET(
   request: Request,
@@ -65,7 +74,7 @@ export async function POST(
   const parsed = receiptSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Validatiefout", details: parsed.error.flatten() },
+      { error: validationMessage(parsed.error), details: parsed.error.flatten() },
       { status: 400 }
     );
   }
