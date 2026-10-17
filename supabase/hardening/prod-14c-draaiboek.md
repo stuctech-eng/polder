@@ -1,7 +1,8 @@
 # Draaiboek productie stap 14c — handtekening van de klant
 
-Status: lokaal klaar en beoordeeld (REVIEW GO, 17 okt 2026). **Nog niets gepusht, niets in productie.** Elke push en elke
-productiestap vraagt een eigen, expliciete GO van Dick. Eén stap per bericht; na elke stap stoppen en beoordelen.
+Status: **uitgevoerd 17 okt 2026.** Push A (`e79967b`), stap 0–6 met elke uitkomst exact zoals in de tabel hieronder, daarna push B
+(`ee594af`) en de rooktest (tekenen, PIN, QR en restaurant bevestigt geslaagd). Dit draaiboek blijft staan als naslag en voor een eventuele rollback.
+Elke push en elke productiestap vroeg een eigen, expliciete GO van Dick. Eén stap per bericht; na elke stap stoppen en beoordelen.
 
 ## Stopregel (geldt bij elke stap)
 

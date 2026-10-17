@@ -1,4 +1,4 @@
-# HANDOFF — waar we gebleven zijn (bijgewerkt 16 okt 2026)
+# HANDOFF — waar we gebleven zijn (bijgewerkt 17 okt 2026)
 
 Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. Details staan in `docs/architecture.md` (13.16 = 0022/7b, **13.17 = fase 1 meerdere restaurants**, **13.18 = fase 2 restaurant aan/uit**, **13.19 = platformbeheer**, **13.20 = mail-links**, **13.21 = fase 4 modules**, roadmap-punt 7 = productdoel en besluiten B1–B6, changelog v1.61–v1.67) en `supabase/hardening/README.md`.
 
@@ -18,11 +18,11 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - **Rekeningpagina ververst zichzelf (v1.0.103, 16 okt)**: zolang een bon wacht op QR- of e-mailgoedkeuring elke 5 s (alleen als de app zichtbaar is); rooktest door Dick geslaagd. Zie architecture v1.74.
 - **Stap 14b — factureren alleen met goedkeuring (v1.0.105, 16 okt, alleen app)**: vereist het bedrijf goedkeuring, dan weigert facturatie elke bon die niet goedgekeurd is, ook een nooit ingediende; scherm toont "Nog niet ingediend" + knop Indienen. Rooktest door Dick geslaagd (weigering met bonnaam, indienen, goedkeuren, factureren). Sluiten van de rekening blijft bewust toegestaan. Zie architecture v1.75.
 - **Bon toevoegen: duidelijke melding (v1.0.107, 16 okt)**: in plaats van "Validatiefout" de eerste fout in het Nederlands met regelnummer (bv. "Productregel 1: vul een omschrijving in."); app-test t20; door Dick getest.
-- Productie-database staat op **migratie 0042** (0023 niet uitgevoerd). Productie bevat alleen testdata.
+- **Stap 14c — handtekening van de klant (migraties 0043–0048, push A v1.0.109 + app push B v1.0.110)**: in productie 17 okt. Volgorde: push A (alleen database, controleblokken, tests, documentatie) → 0043 t/m 0048 (één per stap, na elke stap controleblok A en vanaf 0047 ook F) → push B (app). Nulmeting `0042|000000|true|0|d84e54,9d3540`, `bestaand_md5` f911b041… bij elke stap gelijk; eindstand `0048|111111|true|2|f09a66,50feb6`; blok F na 0047 en 0048 `GELIJK` (083a2f1e…), `kenmerken_ok` true, recht eerst alleen postgres, na 0048 ook authenticated. Rooktest door Dick geslaagd: tekenen door de klant, en PIN, QR en restaurant bevestigt werken nog; een vastgelopen e-mailbon (geen Resend ingesteld, mail nooit verstuurd) losgemaakt via de normale goedkeuringslink uit de database. Module Handtekening staat standaard uit; de platformbeheerder zet hem per restaurant aan. Zie architecture 13.27.
+- Productie-database staat op **migratie 0048** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 - Vercel-functieregio is op 16 okt door Dick gelijkgezet aan de Supabase-regio (daarvoor standaard VS; elke databaseopdracht ging over de oceaan).
 
 ## Wat is LOKAAL GEBOUWD maar NOG NIET GEPUSHT
-- **Stap 14c — handtekening van de klant (migraties 0043–0048 + app, 16 okt)**: GO voor lokaal bouwen gekregen; gebouwd en getest; na de review (17 okt) hersteld: echte PNG-controle (`png_geldig`, 0048) en bedrijf van de rekening = bedrijf van de regel (vergrendeld, in de vingerafdruk, bedrijfsnaam op het tekenscherm). Tweede review: wachtende regel nu vergrendeld bij tekenen (gelijktijdig afwijzen gaf een vergrendelde bon zonder handtekening) en eerlijke herstelteksten. Extra controleblok `prod-teken14c-functie.sql` (code van `bon_ondertekenen` = goedgekeurde versie). Draaiboek met de exacte verwachte uitkomst per stap: `supabase/hardening/prod-14c-draaiboek.md`. Database 165/165 op PG16 en PG17, app t21 29/29 en t22 15/15, t7–t20 per regel gelijk, next build geslaagd. Wacht op review; daarna aparte GO voor push en productie. Zie architecture 13.27.
 
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
@@ -40,6 +40,8 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Stap 14c: een handtekeningbon kan in de app niet worden afgewezen (geen afwijsknop; bewust niet gebouwd). Herstel alleen door de beheerder in de SQL-editor met `set local role service_role` (zie architecture 13.27; in productie nog niet uitgeprobeerd).
 - Stap 14c: na het tekenen kan het bedrijf van de rekening nog worden gewijzigd (geldt al voor alle goedkeuringsmethoden; tijdens het tekenen is de rekening wel vergrendeld).
 - Stap 14c: de PNG-controle (`png_geldig`) controleert begin (PNG-handtekening en IHDR), afmetingen en einde (IEND), maar niet de controlegetallen en beeldgegevens in het midden; een beschadigde PNG met juist begin en eind wordt aangenomen (de handtekening wordt nergens getoond).
+- E-mailgoedkeuring zonder Resend (`RESEND_API_KEY` niet ingesteld): de mail wordt niet verstuurd, maar het scherm zegt toch "Goedkeuringsmail verstuurd" (de waarschuwing van de server wordt bij een wachtende bon niet getoond). Bestond al vóór 14c. Losmaken: link opzoeken met `select 'https://polder.vercel.app/approve/' || verification_code from approvals where status = 'pending' and method = 'email';` en openen (goedkeuren of afwijzen).
+- Een e-mail- of QR-bon kan in de app zelf niet worden afgewezen of opnieuw verstuurd; alleen via de link. Bestond al vóór 14c.
 - Bestaand probleem (alle goedkeuringsmethoden, buiten 14c; eigen audit nodig): tijdens een goedkeuring kan via de API nog een extra wachtende goedkeuringsregel worden toegevoegd (de bewaking van 0022 kijkt naar de status van vóór het wachten). Gevolg: vergrendelde bon met een extra wachtende regel; het scherm toont dan "administratie niet volledig".
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 13 (in productie 15 okt) blijven de standaardrechten van supabase_admin ruim (niet door ons aan te passen; geldt alleen voor objecten die supabase_admin aanmaakt).
@@ -72,7 +74,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**
-- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt). `0031`–`0042`: in productie (0037–0042 sinds 16 okt). `0043`–`0048` (14c): lokaal gebouwd, niet gepusht.
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt). `0031`–`0042`: in productie (0037–0042 sinds 16 okt). `0043`–`0048` (14c): in productie (17 okt).
 - `supabase/rollbacks/`: rollbacks per stap (0022–0048).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 
