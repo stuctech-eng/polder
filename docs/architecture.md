@@ -850,6 +850,8 @@ rechten; restaurant veilig te deactiveren; centraal platformbeheer. Audits: zie 
 
 ## 11. WIJZIGINGSHISTORIE
 
+**v1.76** — STAP 14c, HANDTEKENING VAN DE KLANT (lokaal gebouwd en getest 16 okt, NIET gepusht, niet in productie): module `signature` (standaard uit), methode `signature` per bedrijf; de bediening start, de klant tekent op het toestel van het restaurant; `bon_ondertekenen` werkt bon en regel in één transactie bij met een smalle, NULL-veilige uitzondering in de twee guards (rol postgres + markering van deze bon) en een nieuwe `teken_wacht`. Migraties `0043`–`0048` + rollbacks, controleblok `prod-teken14c-checks.sql`, `handtekening-tests.sh` (165), controleblokken `prod-teken14c-checks.sql` + `prod-teken14c-functie.sql`, app-tests t21 (29) en t22 (15); na review hersteld: echte PNG-controle, bedrijf rekening = regel, regel vergrendeld bij tekenen; sectie 13.27.
+
 **v1.75** — STAP 14b, FACTUREREN ALLEEN MET GOEDKEURING (live 16 okt, v1.0.105, alleen app, optie A): vereist het bedrijf van de rekening goedkeuring (`approval_settings.is_required`), dan weigert de factuurroute elke bon die niet `approved`/`locked` is, ook een bon die nooit is ingediend (reden `not_submitted` in `invoice-blocking.ts`). Volgorde: rol → rekening (eigen sessie) → eis van dát bedrijf (`getApprovalRequired`, fail closed: leesfout = 500, nooit "niet vereist") → alle bonnen → alle regels → alle bonnen beoordelen → pas dan factuurnummer en schrijfacties. Melding noemt alle problemen tegelijk. Scherm: "Nog niet ingediend" + knop Indienen (bestaande handler) en waarschuwing boven de factuurknop. Een `approved`/`locked` bon zonder regel mag mee (status bewaakt door de database). Sluiten van de rekening blijft bewust toegestaan. Tests: t19 (25, 6 mutaties), t18 (25), t7/t8: scenario's S01/S02/S12 (nooit goedgekeurd, bedrijf met verplichte goedkeuring) nu terecht geweigerd, `invoice_required` in de scenariolijst. Restrisico: alleen in de app (een directe databasepoging kan een rekening nog op invoiced zetten). Rooktest door Dick geslaagd.
 
 **v1.74** — REKENINGPAGINA VERVERST ZICHZELF (live 16 okt, v1.0.103, geen database): de bonnenlijst neemt nieuwe servergegevens over (verversen had daarvoor geen effect op de lijst); elke 5 s `router.refresh()` zolang een bon wacht op QR- of e-mailgoedkeuring, alleen als de app zichtbaar is, meteen bij terugkomen, stopt als niets meer wacht of bij verlaten (`lib/approval/auto-refresh.ts`). De waarschuwing "administratie niet volledig bijgewerkt" komt nu uit de database (`approvalWarningFor`: bon goedgekeurd, regel nog pending) en blijft staan tot het opgelost is. App-test t18 (22, echt scherm in jsdom), t17 35. Rooktest door Dick geslaagd.
@@ -2228,3 +2230,96 @@ Supabase-regio, daarna duidelijk sneller.
 **Restrisico en open.** Blokkade is per bedrijf: iemand met APPROVE_RECEIPTS kan een bedrijf 15 minuten blokkeren (bewust; zichtbaar
 in de logregels). Een vastgelopen poging telt hooguit 15 minuten mee. Logfouten na goedkeuren (domain_events, activity_log) worden
 nog niet gemeld (bestond al zo). Approval is in de database nog niet verplicht bij indienen (14b).
+
+### 13.27 STAP 14c — handtekening van de klant (migraties 0043–0048 + app, 2026-10-16) — LOKAAL GEBOUWD, NIET IN PRODUCTIE
+
+**Doel.** Per restaurant een module "Handtekening" (platformbeheer, standaard uit). Per bedrijf de goedkeuringsmethode
+`signature` naast PIN, QR, e-mail en restaurant_confirms. De klant leest de bon op het toestel van het restaurant, vult zijn naam
+in en tekent; de handtekening hoort bij de bon (de goedkeuringsregel), niet bij de factuur. De bediening start dit
+(MANAGE_RECEIPTS) en krijgt daarvoor GEEN APPROVE_RECEIPTS.
+
+**Database.**
+- `0043` module `signature` in `features` (standaard uit) en `bon_vingerafdruk(bon)` (INVOKER, alleen authenticated): md5 van bon,
+  bedrijf van de rekening, wachtende regel(s) en productregels. Afgewezen en opnieuw ingediend = nieuwe regel = andere vingerafdruk.
+- `0044` / `0045` smalle uitzondering in `receipts_guard` en `approvals_guard`: precies één voorwaarde uitgebreid. De migratie
+  neemt de tekst die in de database staat, vervangt die ene voorwaarde (moet precies 1x voorkomen) en controleert vooraf en
+  achteraf een vingerafdruk zonder commentaar en witruimte (daardoor passen de blokken in de editor en maakt een verschil in
+  commentaar tussen repo en productie niet uit). Toegestaan alleen als: uitvoerende rol `postgres` (eigenaar van
+  `bon_ondertekenen`) EN markering `polder.ondertekening` = id van DEZE bon, NULL-veilig (`coalesce`; zonder markering geeft
+  de vergelijking anders NULL en werd de weigering overgeslagen: in de proef aangetoond en zo opgelost). Alleen bon
+  pending_approval → approved/locked en regel → approved. Rollback zet de tekst byte voor byte terug.
+- `0046` `teken_wacht` (draait als de aanroeper, geldt voor iedereen, weigert alleen): een handtekeningbon (wachtende
+  signature-regel, of zonder regel de bedrijfsinstelling) gaat alleen naar approved/locked mét markering (rol postgres +
+  markering); de markering werkt alleen bij zo'n bon; `signature_data` en het goedkeuren van een signature-regel alleen met de
+  markering. Een manager die zelf de markering zet, wordt dus ook geweigerd.
+- `0047` `bon_ondertekenen(bon, naam, handtekening, vingerafdruk)`, SECURITY DEFINER (eigenaar postgres, vaste search_path):
+  actieve medewerker met MANAGE_RECEIPTS, bon van het eigen restaurant (`for update`), modules Goedkeuring en Handtekening aan,
+  wachtende regel(s) `for update` vergrendeld (een gelijktijdige afwijzing wacht, of het tekenen wacht op de afwijzing en weigert),
+  bon wacht, precies één soort wachtende regel en die is `signature`, rekening van hetzelfde bedrijf als de regel (rekening `for share`
+  vergrendeld, zodat een gelijktijdige bedrijfswissel wacht en daarna weigert), vingerafdruk gelijk, naam 2–100 tekens, echte PNG
+  (`png_geldig`). Slotvolgorde bon → regel → rekening; geen bestaand pad houdt een regel vast en wacht dan op een bon (de
+  goedkeurroute en de publieke link werken bon en regel in losse transacties bij; de PIN-paden vergrendelen geen regels). Dan in EEN
+  transactie: markering zetten → bon locked (of approved bij auto_lock uit) → regel(s) approved (approved_by = naam klant,
+  signature_data, metadata gestart_door + vingerafdruk) → aantal bijgewerkte regels moet gelijk zijn aan het aantal vergrendelde,
+  anders "Regel gewijzigd" en alles terug → markering leeg. Fout = alles terug (ook de markering). De nacontrole van
+  `bon_ondertekenen` (eigenaar, DEFINER, search_path) staat in 0048, omdat 0047 anders boven de 3000 tekens kwam. `0048` maakt `png_geldig(tekst)` (geldige base64, PNG-handtekening, eerst IHDR met breedte 1–2048 en hoogte 1–1024,
+  eindigt op IEND, data-URL 100–200.000 tekens; geen volledige decodering van de beeldgegevens of CRC-controle; niemand mag hem
+  aanroepen) en geeft pas dan het recht op `bon_ondertekenen` aan authenticated (anon en service_role nooit); controleert ook dat alleen
+  `bon_ondertekenen` de markering zet. `png_geldig` staat in 0048 omdat 0043 en 0047 anders boven de 3000 tekens kwamen.
+- Controleblok `prod-teken14c-checks.sql` (alleen lezen): stand via 6 bits (0042…0048), `nieuw_ok`, aantal wachten,
+  `wachten_md5` (approvals_guard, receipts_guard), `bestaand_md5` (alle overige functies, triggers, policies, rechten).
+- Tweede controleblok `prod-teken14c-functie.sql` (alleen lezen, begin … rollback): of de code van `bon_ondertekenen` exact de
+  goedgekeurde versie uit 0047 is. `oordeel` = GELIJK / AFWIJKEND / ONTBREEKT, `code_md5` = md5 van de functietekst zonder
+  commentaar en met samengevoegde witruimte, `verwacht` = dezelfde berekening op het bestand `0047_bon_ondertekenen.sql` (niet op
+  een database; de test rekent hem opnieuw uit het bestand na), `kenmerken_ok` (DEFINER, eigenaar postgres, vaste search_path,
+  parameters, returns text, plpgsql), `recht` en `aantal_versies`. Alleen witruimte of commentaar anders = GELIJK; elke andere
+  codewijziging = AFWIJKEND. Wordt 0047 later gewijzigd, dan moet `verwacht` mee (de test faalt anders).
+- Harnas: MG01 accepteert naast de 0022-stand ook de 14c-stand van beide guards; FW74 laat `teken_wacht` en de twee guards buiten
+  de vingerafdruk (MG01 dekt de guards).
+
+**App.** Route `POST /api/receipts/[id]/sign`: requireRole(MANAGE_RECEIPTS) → requireFeature(approval) → requireFeature(signature)
+→ invoer (`lib/approval/signature.ts`, dezelfde grenzen als de database) → rpc `bon_ondertekenen` → databasefout naar een
+Nederlandse melding (onbekend = 500 "niet gewijzigd") → logregels. Scherm: per bon de methode (signature niet meer weggefilterd),
+vingerafdruk uit de database per wachtende handtekeningbon, knop "Laten tekenen door de klant", tekenscherm op volledig scherm
+(safe-area, bedrijf van de rekening, naam, tekenvlak, Wissen, Annuleren, Bevestigen pas na naam én tekening), daarna "✓ getekend door <naam>". Module
+uit: melding in plaats van knop. Bedrijfsinstelling: optie "Handtekening van de klant" alleen als de module aan staat (route
+weigert anders met 403). Platformbeheer toont de vierde module vanzelf (`FEATURES`). Goedkeurroute (manager) weigert een
+handtekeningbon (alleen de klant tekent). Geen automatisch verversen voor deze methode.
+
+**Tests.** `handtekening-tests.sh` 165/165 op PG16 en PG17 (incl. 17 voor het functieblok) (heen/terug stap voor stap, controleblok, rechten, misbruik van de
+markering, andere DEFINER-functie, fout na de updates, subtransactie, gelijktijdig tekenen, PNG-controle met kapotte PNG's en
+grenzen, bedrijfswissel vooraf en gelijktijdig, afwijzen en tekenen tegelijk in beide volgordes, telling, herstelroute van de
+beheerder, bestaande methoden, 26 bewust kapotte versies van de database waaronder de gecombineerde oorspronkelijke fout, plus 9
+afwijkende functieversies voor controleblok F). `pinpogingen-tests.sh` 126/126 (PG16 en
+PG17). App: t21 29/29 (PG17; 11 app-mutaties gevangen), t22 15/15 (tekenscherm in jsdom; 6 mutaties gevangen), t7–t20 per regel gelijk (oude en nieuwe app op 0042 en 0048; t12 aangepast aan de
+vierde module). tsc en next build geslaagd.
+
+**Volgorde productie (voorstel).** Database 0043–0048 eerst (module staat overal uit, oude app merkt niets; getest), daarna de
+app. Andersom kan ook (nieuwe app op 0042: module onbekend = uit; getest).
+Per stap: eerst `prod-teken14c-checks.sql` als nulmeting; dan één migratieblok uitvoeren; daarna `prod-teken14c-checks.sql` (en vanaf
+0047 ook `prod-teken14c-functie.sql`) uitvoeren en de uitkomst beoordelen (stand, `nieuw_ok = t`, `bestaand_md5` gelijk aan de
+nulmeting, en na 0047/0048 `oordeel = GELIJK`, `kenmerken_ok = t`, `recht` zoals verwacht); pas daarna de volgende stap. Wijkt
+iets af: stoppen, niets repareren, eerst uitzoeken. De exacte verwachte uitkomst per stap staat in `supabase/hardening/prod-14c-draaiboek.md`. Na 0047 is het controleblok de enige nacontrole van 0047 (die zit verder in 0048).
+
+**Herstel na review (17 okt).** Eerst werd alleen het voorvoegsel en de tekenset gecontroleerd (willekeurige tekst werd
+aangenomen) en kon een bon worden ondertekend voor een ander bedrijf dan dat van de rekening. Beide hersteld (zie hierboven).
+Tweede review (17 okt): de wachtende regel was niet vergrendeld. Wees een manager de regel rechtstreeks via de API af terwijl de
+klant tekende, dan bleef een vergrendelde bon over zonder handtekening (bon locked, regel rejected). Hersteld met de regelvergrendeling
+en de telling; getest met twee echte gelijktijdige transacties in beide volgordes.
+
+**Een vastgelopen handtekeningbon (wat er echt kan).** De app kan een handtekeningbon NIET afwijzen (afwijzen kan in de app alleen
+via de publieke link van QR/e-mail; een handtekeningregel heeft geen link) en kan het bedrijf van een rekening niet wijzigen.
+- Module Handtekening uit: tekenen kan pas weer als de platformbeheerder de module aanzet (beheerscherm). Dat is nodig, niet altijd
+  genoeg: alle andere voorwaarden (rol, bon wacht, regel, bedrijf, vingerafdruk) blijven gelden. Het scherm zegt dit zo.
+- Rekening hoort bij een ander bedrijf dan de regel: dat kan alleen buiten de app zijn ontstaan. Het scherm zegt "neem contact op
+  met de beheerder".
+- Afwijzen door de beheerder: in de Supabase SQL-editor met de rol `service_role` (`set local role service_role`), bon
+  pending_approval → linked en regel → rejected. Dat is de bestaande smalle uitzondering van de publieke link; de databasewachten
+  blijven gelden. Als `postgres` zonder die rol weigert de bonwacht dit. Daarna kan de bediening de bon opnieuw indienen (nieuwe
+  regel) en laten tekenen. Lokaal getest; in productie nog niet uitgeprobeerd (of de SQL-editor `set local role service_role`
+  toestaat, is daar nog niet gecontroleerd).
+
+**Restrisico en open.** De handtekening is nog niet terug te zien in het scherm (wel opgeslagen bij de regel). Na het tekenen kan
+het bedrijf van de rekening nog wijzigen (geldt voor alle methoden; buiten 14c). De PNG-controle kijkt niet naar de controlegetallen
+en beeldgegevens in het midden (een beschadigde PNG met juist begin en eind wordt aangenomen; de handtekening wordt nergens
+getoond). Een bon zonder regel bij een handtekeningbedrijf (alleen van vóór 0041) is niet te ondertekenen.

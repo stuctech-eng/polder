@@ -21,6 +21,9 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Productie-database staat op **migratie 0042** (0023 niet uitgevoerd). Productie bevat alleen testdata.
 - Vercel-functieregio is op 16 okt door Dick gelijkgezet aan de Supabase-regio (daarvoor standaard VS; elke databaseopdracht ging over de oceaan).
 
+## Wat is LOKAAL GEBOUWD maar NOG NIET GEPUSHT
+- **Stap 14c — handtekening van de klant (migraties 0043–0048 + app, 16 okt)**: GO voor lokaal bouwen gekregen; gebouwd en getest; na de review (17 okt) hersteld: echte PNG-controle (`png_geldig`, 0048) en bedrijf van de rekening = bedrijf van de regel (vergrendeld, in de vingerafdruk, bedrijfsnaam op het tekenscherm). Tweede review: wachtende regel nu vergrendeld bij tekenen (gelijktijdig afwijzen gaf een vergrendelde bon zonder handtekening) en eerlijke herstelteksten. Extra controleblok `prod-teken14c-functie.sql` (code van `bon_ondertekenen` = goedgekeurde versie). Draaiboek met de exacte verwachte uitkomst per stap: `supabase/hardening/prod-14c-draaiboek.md`. Database 165/165 op PG16 en PG17, app t21 29/29 en t22 15/15, t7–t20 per regel gelijk, next build geslaagd. Wacht op review; daarna aparte GO voor push en productie. Zie architecture 13.27.
+
 ## Wat is VOORBEREID maar NIET UITGEVOERD
 - **Migratie 0023** (plan 7b, databaseslot op `closed -> invoiced`): **voorlopig laten vallen** (besluit Dick, 9 okt). De app-blokkade is de enige verdediging. De harnas-cases van 0023 staan sinds 10 okt op eigen stap 99 (`run(99)` alleen zinvol MET 0023). Heropenen kan later met een eigen GO.
 
@@ -33,6 +36,11 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 
 ## Open punten (niet vergeten)
 - B5: factuurnummer per kalenderjaar opnieuw beginnen of niet.
+- Stap 14c: een opgeslagen handtekening is nog niet terug te zien in de app (staat wel bij de goedkeuringsregel in de database: naam, handtekening, tijdstip, medewerker, vingerafdruk). Een scherm om hem achteraf te bekijken is bewust nog niet gebouwd.
+- Stap 14c: een handtekeningbon kan in de app niet worden afgewezen (geen afwijsknop; bewust niet gebouwd). Herstel alleen door de beheerder in de SQL-editor met `set local role service_role` (zie architecture 13.27; in productie nog niet uitgeprobeerd).
+- Stap 14c: na het tekenen kan het bedrijf van de rekening nog worden gewijzigd (geldt al voor alle goedkeuringsmethoden; tijdens het tekenen is de rekening wel vergrendeld).
+- Stap 14c: de PNG-controle (`png_geldig`) controleert begin (PNG-handtekening en IHDR), afmetingen en einde (IEND), maar niet de controlegetallen en beeldgegevens in het midden; een beschadigde PNG met juist begin en eind wordt aangenomen (de handtekening wordt nergens getoond).
+- Bestaand probleem (alle goedkeuringsmethoden, buiten 14c; eigen audit nodig): tijdens een goedkeuring kan via de API nog een extra wachtende goedkeuringsregel worden toegevoegd (de bewaking van 0022 kijkt naar de status van vóór het wachten). Gevolg: vergrendelde bon met een extra wachtende regel; het scherm toont dan "administratie niet volledig".
 - Testharnas: een mislukte voorbereiding (setup) van een case telt nu als "geweigerd". Stap-11-cases zijn gecontroleerd (geen enkele slaagt daardoor); het harnas zelf verbeteren is een apart klein punt.
 - Na stap 13 (in productie 15 okt) blijven de standaardrechten van supabase_admin ruim (niet door ons aan te passen; geldt alleen voor objecten die supabase_admin aanmaakt).
 - Productkeuze (later): dagafsluiting telt omzet uit bonnen van die dag (bondatum), niet uit facturen. Op 13 okt dus €0,00 bij 2 facturen van oudere bonnen; geen fout.
@@ -48,6 +56,7 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - Audit → plan → expliciete GO per stap → bouwen → lokaal testen → productiecontrole → STOP → gezamenlijke review → nieuwe GO.
 - **Rollen:** Dick beslist (GO, push). GPT adviseert en beoordeelt resultaten; schrijft geen werkopdrachten. Claude beslist technisch, voert uit, en zegt het als een advies niet wordt overgenomen — met reden en met een oordeel of de controle in verhouding staat tot het risico.
 - **Proportioneel:** productie bevat alleen testdata; geen extra controlelagen voor kleine risico's.
+- Bij migraties met een controleblok: na elke migratiestap eerst het controleblok uitvoeren en beoordelen, pas daarna de volgende stap (14c: `prod-teken14c-checks.sql` en vanaf 0047 ook `prod-teken14c-functie.sql`).
 - Productieacties als genummerde stappen, EEN stap per bericht, SQL als kopieerblok exact gelijk aan het bestand (met commentaar); na elke stap stoppen.
 - **Kopieerblokken kort houden (≤ ±3.000 tekens):** plakken in de Supabase-editor op de iPhone kapte een blok van 9.300 tekens na ±3.800 tekens af (10 okt). Een afgekapt blok geeft een syntaxfout en voert niets uit. Langere migraties compact schrijven (één DO-blok) of in losse, elk op zichzelf veilige blokken.
 - Push alleen op Dick's expliciete "push"; bericht over pushstatus begint met 🟢 KAN GEPUSHT WORDEN of 🟡 NOG NIET PUSHEN. Commit-stijl: `polder <naam> — v1.0.NN — <d> okt 2026, HH:MM`. Laatste versie op main: v1.0.107 (+ docs).
@@ -63,14 +72,15 @@ Doel van dit bestand: elke nieuwe sessie kan hier verder zonder iets te missen. 
 - `README.md`: "start here" (verwijst naar dit bestand).
 
 **Database (Supabase)**
-- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt). `0031`–`0042`: in productie (0037–0042 sinds 16 okt).
-- `supabase/rollbacks/`: rollbacks per stap (0022–0042).
+- `supabase/migrations/0001…0022`: in productie. `0023`: voorbereid, niet uitgevoerd. `0024` en `0025`: in productie (10 okt). `0026` en `0027`: in productie (10 okt). `0028`–`0030`: in productie (11 okt). `0031`–`0042`: in productie (0037–0042 sinds 16 okt). `0043`–`0048` (14c): lokaal gebouwd, niet gepusht.
+- `supabase/rollbacks/`: rollbacks per stap (0022–0048).
 - `supabase/hardening/`: `staging-seed.sql` (testrestaurants A, B en een leeg C), alleen-lezen productiecontroles (`prod-*.sql`).
 
 **Tests (alles lokaal, nooit op productie)**
 - `supabase/hardening/tests/`: `00_harness.sql` (incl. `inactief_dml`), `generate_cases.py` → `10_cases.sql` (693 cases), `local-build.sh` (`TOT=0022|0024`, `MET_0023=1`; seed met replica), `tenantswitch-tests.sh` (22 checks), `preflight-0023-tests.sh`, `invoice-block-scenarios.json`.
-- `supabase/hardening/tests/app-regression/`: t7 (173 checks; zonder 0023 14 bekende FAIL) t/m t17 (stap 14a, 34 checks); zie de README daar. Paden zijn sandboxpaden: aanpassen in een nieuwe omgeving (host, gebruiker, database, repo-pad).
+- `supabase/hardening/tests/app-regression/`: t7 (173 checks; zonder 0023 14 bekende FAIL) t/m t22 (t21/t22 = stap 14c); zie de README daar. Paden zijn sandboxpaden: aanpassen in een nieuwe omgeving (host, gebruiker, database, repo-pad).
 - `supabase/hardening/tests/pinpogingen-tests.sh`: stap 14a (126 checks, PG16 en PG17).
+- `supabase/hardening/tests/handtekening-tests.sh`: stap 14c (165 checks, PG16 en PG17; basis = database t/m 0042).
 - PostgreSQL 17 lokaal (productie draait 17): `npm install --ignore-scripts @embedded-postgres/linux-x64@17.6.0-beta.15` en de symlinks uit `native/pg-symlinks.json` aanmaken.
 
 **Buiten de repo**

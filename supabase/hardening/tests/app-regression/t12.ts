@@ -167,8 +167,10 @@ const types = (el: any) => { const t: string[] = []; walk(el, (e) => typeof e.ty
      && log.action === "module_uit" && log.m === "approval" && log.restaurant_id === RA && log.admin_user_id === ORPH, JSON.stringify(r) + JSON.stringify(log));
   r = await res(await restaurantsRoute.GET());
   const ra = (r.json.restaurants ?? []).find((x: any) => x.id === RA); const rb = (r.json.restaurants ?? []).find((x: any) => x.id === RB);
-  ok("14c overzicht toont de stand uit de database (A: goedkeuring uit, B: alles aan)", ra?.modules?.find((m: any) => m.key === "approval")?.enabled === false
-     && rb?.modules?.every((m: any) => m.enabled === true) && ra?.modules?.length === 3, JSON.stringify(ra?.modules));
+  // stap 14c: vierde module "signature" (Handtekening), standaard uit; staat alleen in het overzicht als de database hem kent (0043)
+  const n14c = ra?.modules?.some((m: any) => m.key === "signature") ? 4 : 3;
+  ok("14c overzicht toont de stand uit de database (A: goedkeuring uit, B: alles aan behalve de standaard-uit Handtekening)", ra?.modules?.find((m: any) => m.key === "approval")?.enabled === false
+     && rb?.modules?.every((m: any) => m.enabled === (m.key !== "signature")) && ra?.modules?.length === n14c && rb?.modules?.length === n14c, JSON.stringify(ra?.modules));
   await q.query("alter table platform_log add constraint proef_log_faalt check (false) not valid");
   r = await res(await moduleRoute.PATCH(req("PATCH", { feature: "approval", enabled: true }), { params: { id: RA } }));
   ok("14d logregel faalt: 500 met melding, module blijft uit (atomair)", r.status === 500 && /proef_log_faalt/.test(r.json.error ?? "")

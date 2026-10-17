@@ -1098,9 +1098,10 @@ for nr, (key, sql, wat) in enumerate((
     tabel, waar = sql.split(" from ")[1].split(" where ")
     case(f"MC0{nr}a", MO, f"C4 controle: dezelfde testtrigger met module aan wist wel (bewijs dat de opzet werkt)", "service_role", "check",
          f"select hardening_test.daarna($$insert into hardening_test.proef_c4 values (1)$$, $$select not exists (select 1 from {tabel} where {waar})$$)", True, setup=PROEF(sql))
-case("MG01", MO, "bestaande guards ongewijzigd (vingerafdrukken uit 0022)", "postgres", "check",
-     "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname='receipts_guard'),'\\s+',' ','g'))) = 'e2495872050430577d8464962b88d1de' "
-     "and md5(btrim(regexp_replace((select prosrc from pg_proc where proname='approvals_guard'),'\\s+',' ','g'))) = '3320a9525bbc54bdd29516a459fc6a61'", True)
+# 14c (0044/0045) breidt elke guard met precies een voorwaarde uit (handtekening); beide standen zijn toegestaan, verder niets
+case("MG01", MO, "bestaande guards ongewijzigd (vingerafdrukken uit 0022, of de 14c-stand)", "postgres", "check",
+     "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname='receipts_guard'),'\\s+',' ','g'))) in ('e2495872050430577d8464962b88d1de', '7f0f13ecc5c5ddcd9be8258ce3d0abc5') "
+     "and md5(btrim(regexp_replace((select prosrc from pg_proc where proname='approvals_guard'),'\\s+',' ','g'))) in ('3320a9525bbc54bdd29516a459fc6a61', 'fdacf72d51b7e2e11f8aa07470c14f6c')", True)
 
 # ---------------------------------------------------------------- FACTUURWACHT (stap 10, migraties 0031 + 0032)
 # Statusregels gelden voor IEDEREEN (ook service_role): de weigering wordt getoetst op de eigen melding van de wacht,
@@ -1191,7 +1192,7 @@ case("FW73", FW, "3 wachttriggers op de juiste tabellen en bewerkingen", "postgr
 case("FW74", FW, "module_wacht en alle bestaande trigger-functies ongewijzigd (vingerafdruk van 0030)", "postgres", "check",
      "select md5(btrim(regexp_replace((select prosrc from pg_proc where proname = 'module_wacht'), '\\s+', ' ', 'g'))) = '1ae0dbb059cec09d9fde20aad42c9a3f' "
      "and (select md5(string_agg(p.proname || md5(p.prosrc), '|' order by p.proname)) from pg_proc p where p.pronamespace = 'public'::regnamespace "
-     "and p.prorettype = 'trigger'::regtype and p.proname not in ('module_wacht','invoices_guard','invoice_child_guard') and p.proname not like '%pin\\_wacht') = '29c836f2b151411df746182866d2a985'", True)
+     "and p.prorettype = 'trigger'::regtype and p.proname not in ('module_wacht','invoices_guard','invoice_child_guard') and p.proname not like '%pin\\_wacht' and p.proname not in ('teken_wacht','receipts_guard','approvals_guard')) = '8e1717bb6139fef12cd5798fd176a9c1'", True)
 # samen met de modulewacht: beide lagen weigeren elk om hun eigen reden
 case("FW80", FW, "betalingen uit: administratie zet sent -> paid: geweigerd door de module (niet door de factuurwacht)", ADM, "check",
      weiger(upd("status = 'paid'", 501), "staat uit"), True, setup=UIT(PAY))
