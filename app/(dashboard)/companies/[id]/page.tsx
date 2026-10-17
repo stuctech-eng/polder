@@ -32,6 +32,7 @@ export default async function CompanyDetailPage({
   }
 
   const approvalOn = await isFeatureOn("approval");
+  const signatureOn = approvalOn && (await isFeatureOn("signature"));
   const supabase = createSupabaseServerClient();
 
   const { data: company, error } = await supabase
@@ -111,9 +112,10 @@ export default async function CompanyDetailPage({
           companyId={params.id}
           initialEnabled={approvalSettings?.is_required ?? false}
           initialMethod={
-            (approvalSettings?.method as "pin" | "restaurant_confirms" | "email" | "qr" | null) ?? null
+            (approvalSettings?.method as "pin" | "restaurant_confirms" | "email" | "qr" | "signature" | null) ?? null
           }
           initialNotifyEmail={approvalSettings?.notify_email ?? null}
+          signatureOn={signatureOn}
         />}
       </div>
     </>

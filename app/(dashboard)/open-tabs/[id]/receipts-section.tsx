@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { requestResubmit } from "@/lib/approval/resubmit";
 import { needsAutoRefresh, AUTO_REFRESH_MS } from "@/lib/approval/auto-refresh";
+import { SignatureDialog } from "./signature-dialog";
+
+type Method = "pin" | "restaurant_confirms" | "email" | "qr" | "signature";
 
 type ReceiptLine = {
   description: string;
@@ -28,6 +31,8 @@ type Receipt = {
   receipt_lines: { description: string; quantity: number; unit_price: number; line_total: number }[];
   approval_token?: string | null;
   approved_by?: string | null;
+  /** Methode van de goedkeuring (bijv. "signature": dan door de klant getekend). */
+  approved_method?: string | null;
   rejected_by?: string | null;
   rejection_reason?: string | null;
   rejection_blocked?: boolean;
@@ -35,7 +40,9 @@ type Receipt = {
   submission_needed?: boolean;
   notes?: string | null;
   /** Stap 14a: methode van deze bon (wachtende regel, anders bedrijfsinstelling); ontbreekt bij een net aangemaakte bon. */
-  approval_method?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  approval_method?: Method | null;
+  /** Stap 14c: vingerafdruk uit de database van wat de klant ondertekent; null = niet te ondertekenen (pagina vernieuwen). */
+  signature_fingerprint?: string | null;
   /** Tegenstrijdige wachtende regels: niet goedkeurbaar, melding tonen. */
   approval_conflict?: string | null;
   /** Goedgekeurd, maar de goedkeuringsregel kon niet worden bijgewerkt (van de server, of net gemeld door de goedkeurroute). */
@@ -55,14 +62,20 @@ export function ReceiptsSection({
   canAddReceipts = true,
   approvalMethod = null,
   approvalEnabled = true,
+  signatureEnabled = false,
+  companyName = null,
 }: {
   openTabId: string;
   initialReceipts: Receipt[];
   isInvoiced?: boolean;
   canAddReceipts?: boolean;
-  approvalMethod?: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  approvalMethod?: Method | null;
   /** Module Goedkeuring (fase 4). Uit = geen goedkeur- of indienknoppen; wachtende bonnen blijven wachten. */
   approvalEnabled?: boolean;
+  /** Module Handtekening (stap 14c). Uit = een handtekeningbon kan niet worden ondertekend (melding). */
+  signatureEnabled?: boolean;
+  /** Bedrijf van de rekening: de klant ziet voor welk bedrijf hij tekent (de database eist hetzelfde bedrijf als de regel). */
+  companyName?: string | null;
 }) {
   const router = useRouter();
   const [receipts, setReceipts] = useState(initialReceipts);
@@ -196,6 +209,8 @@ export function ReceiptsSection({
             isInvoiced={isInvoiced}
             approvalMethod={approvalMethod}
             approvalEnabled={approvalEnabled}
+            signatureEnabled={signatureEnabled}
+            companyName={companyName}
             onDeleted={() => setReceipts((prev) => prev.filter((x) => x.id !== r.id))}
             onUpdated={(updated) =>
               setReceipts((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
@@ -309,13 +324,17 @@ function ReceiptItem({
   isInvoiced,
   approvalMethod,
   approvalEnabled,
+  signatureEnabled,
+  companyName,
   onDeleted,
   onUpdated,
 }: {
   receipt: Receipt;
   isInvoiced: boolean;
-  approvalMethod: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  approvalMethod: Method | null;
   approvalEnabled: boolean;
+  signatureEnabled: boolean;
+  companyName: string | null;
   onDeleted: () => void;
   onUpdated: (updated: Partial<Receipt> & { id: string }) => void;
 }) {
@@ -417,7 +436,9 @@ function ReceiptItem({
       )}
       {!editing && receipt.status === "locked" && (
         <div className="text-xs font-medium text-green-700 mt-1">
-          ✓ goedgekeurd{receipt.approved_by ? ` door ${receipt.approved_by}` : ""}
+          {receipt.approved_method === "signature"
+            ? `✓ getekend${receipt.approved_by ? ` door ${receipt.approved_by}` : ""}`
+            : `✓ goedgekeurd${receipt.approved_by ? ` door ${receipt.approved_by}` : ""}`}
         </div>
       )}
       {!editing && receipt.rejected_by && receipt.status !== "locked" && receipt.status !== "pending_approval" && (
@@ -474,11 +495,19 @@ function ReceiptItem({
 
       {receipt.status === "pending_approval" && approvalEnabled && !receipt.approval_conflict && (
         <ApprovalBlock
-          receiptId={receipt.id}
+          receipt={receipt}
           method={receipt.approval_method !== undefined ? receipt.approval_method : approvalMethod}
           approvalToken={receipt.approval_token ?? null}
-          onApproved={(status, approvedBy, warning) =>
-            onUpdated({ id: receipt.id, status, approved_by: approvedBy, approval_warning: warning ?? null })
+          signatureEnabled={signatureEnabled}
+          companyName={companyName}
+          onApproved={(status, approvedBy, warning, approvedMethod) =>
+            onUpdated({
+              id: receipt.id,
+              status,
+              approved_by: approvedBy,
+              approved_method: approvedMethod ?? null,
+              approval_warning: warning ?? null,
+            })
           }
         />
       )}
@@ -544,16 +573,23 @@ function ReceiptItem({
  * Approval Service (klant-instructie, sectie 10.7).
  */
 function ApprovalBlock({
-  receiptId,
+  receipt,
   method,
   approvalToken,
+  signatureEnabled,
+  companyName,
   onApproved,
 }: {
-  receiptId: string;
-  method: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  receipt: Receipt;
+  method: Method | null;
   approvalToken: string | null;
-  onApproved: (status: string, approvedBy?: string, warning?: string | null) => void;
+  signatureEnabled: boolean;
+  companyName: string | null;
+  onApproved: (status: string, approvedBy?: string, warning?: string | null, approvedMethod?: string | null) => void;
 }) {
+  const receiptId = receipt.id;
+  const router = useRouter();
+  const [signing, setSigning] = useState(false);
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -586,6 +622,51 @@ function ApprovalBlock({
     }
 
     onApproved(body.status, body.approvedBy, body.warning ?? null);
+  }
+
+  // Stap 14c: de klant tekent op dit toestel; de bediening start het (geen goedkeurrecht nodig).
+  if (method === "signature") {
+    if (!signatureEnabled) {
+      return (
+        <p className="text-xs text-amber-700 mt-2" role="status">
+          Wacht op de handtekening van de klant, maar de module Handtekening staat uit voor dit restaurant. Tekenen kan pas weer
+          als de platformbeheerder de module aanzet. Afwijzen kan in de app niet; neem daarvoor contact op met de beheerder.
+        </p>
+      );
+    }
+    if (!receipt.signature_fingerprint) {
+      return (
+        <p className="text-xs text-red-600 mt-2" role="alert">
+          Deze bon kan nu niet worden ondertekend. Vernieuw de pagina.
+        </p>
+      );
+    }
+    return (
+      <div className="mt-2">
+        <button
+          onClick={() => setSigning(true)}
+          className="min-h-touch px-3 rounded-lg bg-neutral-900 text-white text-xs font-medium"
+        >
+          ✍️ Laten tekenen door de klant
+        </button>
+        {signing && (
+          <SignatureDialog
+            receiptId={receiptId}
+            receiptLabel={receipt.receipt_number || "Bon zonder nummer"}
+            companyName={companyName}
+            total={receipt.total}
+            lines={receipt.receipt_lines}
+            fingerprint={receipt.signature_fingerprint}
+            onClose={() => setSigning(false)}
+            onSigned={(status, signedBy) => {
+              setSigning(false);
+              onApproved(status, signedBy, null, "signature");
+              router.refresh();
+            }}
+          />
+        )}
+      </div>
+    );
   }
 
   if (method === "pin") {

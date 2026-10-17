@@ -63,7 +63,7 @@ export default async function OpenTabDetailPage({
   const approvalForReceipt = (rules: any[]) => {
     const m = methodForReceipt(rules, tab.company_id ?? null, approvalSettings?.method ?? null);
     if (!m.ok) return { approval_method: null, approval_conflict: m.reason };
-    return { approval_method: m.method === "signature" ? null : m.method, approval_conflict: null };
+    return { approval_method: m.method, approval_conflict: null };
   };
   const receipts = receiptsRaw?.map((r: any) => {
     const pendingApproval = r.approvals?.find((a: any) => a.status === "pending");
@@ -74,6 +74,7 @@ export default async function OpenTabDetailPage({
       ...r,
       approval_token: pendingApproval?.verification_code ?? null,
       approved_by: resolved?.status === "approved" ? resolved.approved_by : null,
+      approved_method: resolved?.status === "approved" ? resolved.method ?? null : null,
       rejected_by: resolved?.status === "rejected" ? resolved.approved_by : null,
       rejection_reason: resolved?.status === "rejected" ? resolved.metadata?.reason ?? null : null,
       // Plan 7b: dezelfde definitie als de facturatie-controle en de database (lib/approval/invoice-blocking.ts)
@@ -91,6 +92,17 @@ export default async function OpenTabDetailPage({
   const notSubmittedCount = (receipts ?? []).filter((r: any) => r.submission_needed).length;
 
   const approvalOn = await isFeatureOn("approval");
+  const signatureOn = approvalOn && (await isFeatureOn("signature"));
+
+  // Stap 14c: vingerafdruk van wat de klant gaat ondertekenen (bon, wachtende regel, productregels), uit de database zelf
+  // (bon_vingerafdruk, met RLS). bon_ondertekenen weigert als de bon intussen anders is. Alleen voor bonnen die op een
+  // handtekening wachten; een leesfout = geen vingerafdruk = niet te ondertekenen (de knop meldt dan: pagina vernieuwen).
+  for (const r of receipts ?? []) {
+    if (signatureOn && r.status === "pending_approval" && r.approval_method === "signature" && !r.approval_conflict) {
+      const { data: fp, error: fpError } = await supabase.rpc("bon_vingerafdruk", { p_bon: r.id });
+      r.signature_fingerprint = !fpError && typeof fp === "string" ? fp : null;
+    }
+  }
 
   let invoice = null;
   if (tab.status === "invoiced") {
@@ -146,12 +158,10 @@ export default async function OpenTabDetailPage({
         initialReceipts={receipts ?? []}
         isInvoiced={tab.status === "invoiced"}
         canAddReceipts={tab.status === "open"}
-        approvalMethod={
-          approvalSettings?.enabled && approvalSettings.method !== "signature"
-            ? approvalSettings.method
-            : null
-        }
+        approvalMethod={approvalSettings?.enabled ? approvalSettings.method : null}
         approvalEnabled={approvalOn}
+        signatureEnabled={signatureOn}
+        companyName={tab.companies?.name ?? null}
       />
 
       {tab.status === "open" && (

@@ -8,7 +8,7 @@ import { z } from "zod";
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
-  method: z.enum(["pin", "restaurant_confirms", "email", "qr"]).nullable(),
+  method: z.enum(["pin", "restaurant_confirms", "email", "qr", "signature"]).nullable(),
   autoLock: z.boolean().default(true),
   newPin: z.string().min(4, "PIN moet minimaal 4 cijfers zijn").optional(),
   notifyEmail: z.string().email("Ongeldig e-mailadres").optional(),
@@ -87,6 +87,21 @@ export async function PUT(
       { error: "Validatiefout", details: parsed.error.flatten() },
       { status: 400 }
     );
+  }
+
+  // Stap 14c: handtekening van de klant alleen als de module Handtekening aan staat (na de rolcontrole, zoals overal)
+  if (parsed.data.method === "signature") {
+    try {
+      await requireFeature("signature");
+    } catch (err) {
+      if (err instanceof PermissionError) {
+        return NextResponse.json(
+          { error: "De module Handtekening staat uit voor dit restaurant. Kies een andere methode." },
+          { status: 403 }
+        );
+      }
+      return NextResponse.json({ error: "Onbekende fout" }, { status: 500 });
+    }
   }
 
   if (parsed.data.enabled && parsed.data.method === "pin" && !parsed.data.newPin) {

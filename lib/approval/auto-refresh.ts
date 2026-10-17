@@ -1,12 +1,12 @@
 /**
  * Automatisch verversen van de rekeningpagina (16 okt 2026): alleen zolang er een bon wacht op goedkeuring via de
  * publieke link (QR of e-mail). Die goedkeuring gebeurt op een ander toestel, dus dit scherm merkt het anders niet.
- * PIN en restaurant_confirms gebeuren op dit scherm zelf en hebben geen verversen nodig.
+ * PIN, restaurant_confirms en de handtekening van de klant (14c) gebeuren op dit scherm zelf en hebben geen verversen nodig.
  * Methode per bon: dezelfde keuze als het scherm (approval_method van de bon, anders de bedrijfsinstelling).
  */
 export const AUTO_REFRESH_MS = 5000;
 
-type Method = "pin" | "restaurant_confirms" | "email" | "qr" | null;
+type Method = "pin" | "restaurant_confirms" | "email" | "qr" | "signature" | null;
 
 export interface AutoRefreshReceipt {
   status: string;

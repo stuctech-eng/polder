@@ -7,6 +7,8 @@ export const FEATURES = [
   { key: "daily_closing", label: "Dagafsluiting" },
   { key: "payment_registration", label: "Betalingen registreren" },
   { key: "approval", label: "Goedkeuring (PIN, QR, e-mail)" },
+  // stap 14c (migratie 0043): standaard uit; werkt alleen samen met Goedkeuring
+  { key: "signature", label: "Handtekening klant (bij Goedkeuring)" },
 ] as const;
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

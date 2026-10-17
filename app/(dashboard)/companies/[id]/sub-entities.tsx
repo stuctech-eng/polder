@@ -290,19 +290,24 @@ export function RequiredFieldsSection({
   );
 }
 
+type ApprovalMethodChoice = "pin" | "restaurant_confirms" | "email" | "qr" | "signature";
+
 export function ApprovalSettingsSection({
   companyId,
   initialEnabled,
   initialMethod,
   initialNotifyEmail,
+  signatureOn = false,
 }: {
   companyId: string;
   initialEnabled: boolean;
-  initialMethod: "pin" | "restaurant_confirms" | "email" | "qr" | null;
+  initialMethod: ApprovalMethodChoice | null;
   initialNotifyEmail?: string | null;
+  /** Module Handtekening (stap 14c) staat aan voor dit restaurant: dan is "Handtekening van de klant" te kiezen. */
+  signatureOn?: boolean;
 }) {
   const [enabled, setEnabled] = useState(initialEnabled);
-  const [method, setMethod] = useState<"pin" | "restaurant_confirms" | "email" | "qr">(
+  const [method, setMethod] = useState<ApprovalMethodChoice>(
     initialMethod ?? "restaurant_confirms"
   );
   const [newPin, setNewPin] = useState("");
@@ -357,6 +362,12 @@ export function ApprovalSettingsSection({
             personeel (ingelogd). <strong>E-mail</strong> en <strong>QR</strong> sturen een
             unieke link — handig voor een manager op afstand, geen inloggen nodig.
           </p>
+          {signatureOn && (
+            <p>
+              <strong>Handtekening van de klant</strong>: de bediening opent de bon, de klant vult zijn naam in en
+              tekent op het scherm. Daarna is de bon goedgekeurd en vergrendeld.
+            </p>
+          )}
         </div>
       </details>
 
@@ -377,7 +388,7 @@ export function ApprovalSettingsSection({
             <select
               value={method}
               onChange={(e) =>
-                setMethod(e.target.value as "pin" | "restaurant_confirms" | "email" | "qr")
+                setMethod(e.target.value as ApprovalMethodChoice)
               }
               className="w-full min-h-touch px-3 rounded-lg border border-neutral-300 bg-white text-sm"
             >
@@ -385,7 +396,15 @@ export function ApprovalSettingsSection({
               <option value="pin">PIN (personeel)</option>
               <option value="email">E-mail (link naar manager op afstand)</option>
               <option value="qr">QR-code (scanbare link)</option>
+              {(signatureOn || initialMethod === "signature") && (
+                <option value="signature">Handtekening van de klant (op dit toestel)</option>
+              )}
             </select>
+            {method === "signature" && !signatureOn && (
+              <p className="text-xs text-red-600 mt-1" role="alert">
+                De module Handtekening staat uit voor dit restaurant. Kies een andere methode.
+              </p>
+            )}
           </div>
 
           {method === "pin" && (
